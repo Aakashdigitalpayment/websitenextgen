@@ -1,44 +1,135 @@
+<%
+  const isAdmin = roleLevel(admin.role) >= 3;
+  const val = fl => display.value(fl);
+  const showVal = (fl, v) => { const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); return o ? t(o[1], o[2]) : v; };
+  const multipart = !!attachCol;
+%>
 <div class="content-head">
-  <div><div class="crumbs"><a href="/admin/inbox/<%= m.key %>"><%= title %></a></div><h1><%= row[m.nameCol] %></h1><div class="small muted"><%= row.tracking_id || '#' + row.id %> · <%= bsDate(row.created_at) %></div></div>
+  <div><div class="crumbs"><a href="/admin/inbox/<%= m.key %>"><%= title %></a></div><h1><%= row[m.nameCol] %></h1><div class="small muted"><%= row.tracking_id || '#' + row.id %> · <%= bsDate(row.created_at) %><% if (row.status) { %> · <span class="badge"><%= statusLabel(row.status) %></span><% } %></div></div>
   <div class="flex gap-1 no-print">
-    <button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button>
-    <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('पक्का हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form><% } %>
+    <a class="btn btn-outline btn-sm" href="/admin/inbox/<%= m.key %>/<%= row.id %>/print?autoprint=1" target="_blank" rel="noopener"><%- icon('file') %><%= t('फारम प्रिन्ट', 'Print form') %></a>
+    <a class="btn btn-outline btn-sm" href="/admin/inbox/<%= m.key %>/<%= row.id %>/export.csv"><%- icon('download') %>CSV</a>
+    <% if (isAdmin) { %><form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('पक्का हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form><% } %>
   </div>
 </div>
 <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
   <div class="stack">
-    <% m.sections.forEach(sec => { %>
+    <% m.sections.forEach(sec => { const items = sec.fields.filter(fl => fl.type !== 'heading' && fl.store !== 'none'); %>
+      <%
+        const filled = items.filter(fl => {
+          if (fl.type === 'family') return display.family.length;
+          if (fl.type === 'moneyitems') return (fl.name === 'income_source' ? display.income : display.expense).length;
+          const v = val(fl); return !(v === null || v === undefined || v === '');
+        });
+        if (!filled.length) return;
+      %>
       <div class="card">
         <% if (sec.title) { %><h3><%= t(...sec.title) %></h3><% } %>
         <div class="kv">
-          <% sec.fields.forEach(fl => { let v = row[fl.name]; if (v === null || v === undefined || v === '') return; const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); if (o) v = t(o[1], o[2]); %>
+          <% filled.forEach(fl => { let v = val(fl); %>
+            <% if (fl.type === 'family' || fl.type === 'moneyitems') return; %>
             <div><%= t(fl.label[0], fl.label[1]) %></div>
             <div>
               <% if (fl.type === 'image') { %><a href="<%= mediaUrl(v) %>" target="_blank" rel="noopener"><img src="<%= mediaUrl(v) %>" alt="" style="max-height:160px;border-radius:8px;border:1px solid var(--line)"></a>
               <% } else if (fl.type === 'file') { %><a class="btn btn-soft btn-sm" href="<%= mediaUrl(v) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('फाइल हेर्नुहोस्', 'Open file') %></a>
               <% } else if (fl.type === 'checkbox') { %><%= Number(v) ? '✓' : '—' %>
               <% } else if (fl.type === 'bsdate') { %><%= v %> <% if (fl.adCol && row[fl.adCol]) { %><span class="faint small">(<%= row[fl.adCol] %> AD)</span><% } %>
+              <% } else if (fl.type === 'date') { %><%= bsDate(v) %> <span class="faint small">(<%= String(v).slice(0, 10) %> AD)</span>
               <% } else if (fl.format === 'money') { %>रु. <%= money(v) %>
               <% } else if (fl.type === 'tel') { %><a href="tel:<%= v %>"><%= v %></a>
               <% } else if (fl.type === 'email') { %><a href="mailto:<%= v %>"><%= v %></a>
-              <% } else { %><span style="white-space:pre-wrap"><%= v %></span><% } %>
+              <% } else if (fl.type === 'geo') { const g = String(v).split(',').map(s => s.trim()); %><a href="https://www.openstreetmap.org/?mlat=<%= g[0] %>&mlon=<%= g[1] %>#map=17/<%= g[0] %>/<%= g[1] %>" target="_blank" rel="noopener"><%= v %></a>
+              <% } else { %><span style="white-space:pre-wrap"><%= showVal(fl, v) %></span><% } %>
             </div>
           <% }) %>
         </div>
+        <% if (items.some(fl => fl.type === 'family') && display.family.length) { %>
+          <div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('नाता', 'Relation') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('फोन', 'Phone') %></th></tr></thead>
+            <tbody><% display.family.forEach(f => { const rel = (items.find(x => x.type === 'family').relations || []).find(r => r[0] === f.relation); %><tr><td><%= rel ? t(rel[1], rel[2]) : f.relation %></td><td><%= f.name %></td><td><%= f.phone || '' %></td></tr><% }) %></tbody></table></div>
+        <% } %>
+        <% items.filter(fl => fl.type === 'moneyitems').forEach(fl => { const list = fl.name === 'income_source' ? display.income : display.expense; if (!list.length) return; %>
+          <h4 class="mt-2"><%= t(fl.label[0], fl.label[1]) %></h4>
+          <div class="table-wrap"><table class="table"><tbody><% list.forEach(i => { %><tr><td><%= i.name %></td><td class="text-right">रु. <%= money(i.amount) %></td></tr><% }) %></tbody>
+            <tfoot><tr><th><%= t('जम्मा', 'Total') %></th><th class="text-right">रु. <%= money(fl.name === 'income_source' ? display.aml.income_total : display.aml.expense_total) %></th></tr></tfoot></table></div>
+        <% }) %>
+        <% if (items.some(fl => fl.name === 'expense_source') && display.aml.net_saving_estimate !== undefined) { %><p class="small mt-1"><%= t('मासिक बचत अनुमान', 'Estimated monthly saving') %>: <strong>रु. <%= money(display.aml.net_saving_estimate) %></strong></p><% } %>
       </div>
     <% }) %>
   </div>
   <div class="stack no-print">
+    <% if (m.key === 'membership') { %>
+      <div class="card"><h3><%= t('Member ID दिएर स्वीकृत', 'Approve with a Member ID') %></h3>
+        <% if (row.status === 'approved' && row.assigned_sadasyata) { %>
+          <p class="small"><%= t('Member ID', 'Member ID') %>: <strong><%= row.assigned_sadasyata %></strong><% if (locals.linkedMember) { %> · <a href="/admin/members/<%= linkedMember.id %>"><%= t('सदस्य खाता', 'Member account') %></a><% } %></p>
+        <% } else { %>
+          <form method="post" action="/admin/inbox/membership/<%= row.id %>/approve">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <div class="field mb-2"><label for="sadasyata"><%= t('सदस्यता नम्बर (Member ID)', 'Member ID') %><span class="req">*</span></label><input class="input" id="sadasyata" name="sadasyata" required placeholder="001001002"></div>
+            <div class="field mb-2"><label for="mcomment"><%= t('टिप्पणी', 'Remarks') %></label><textarea class="textarea" id="mcomment" name="comment" rows="2"></textarea></div>
+            <label class="choice"><input type="checkbox" name="notify" value="1" checked> <%= t('आवेदकलाई SMS/इमेल पठाउने', 'Send SMS/email to applicant') %></label>
+            <button class="btn btn-primary mt-2 btn-block"><%= t('स्वीकृत गरी सदस्य बनाउनुहोस्', 'Approve and create member') %></button>
+            <p class="small faint mt-1"><%= t('पासवर्डबिनाको सदस्य stub बन्छ; त्यसपछि आवेदकले अनलाइन केवाइएम भर्न सक्छन्।', 'A member stub without a password is created; the applicant can then fill in the online KYM.') %></p>
+          </form>
+        <% } %>
+      </div>
+    <% } %>
+    <% if (m.key === 'kyc') { %>
+      <div class="card"><h3><%= t('सदस्य खाता', 'Member account') %></h3>
+        <% if (locals.linkedMember) { %>
+          <p class="small"><a href="/admin/members/<%= linkedMember.id %>"><strong><%= linkedMember.name_np || linkedMember.name %></strong></a> · <%= linkedMember.sadasyata_number %><br>
+            <%= t('स्थिति', 'Status') %>: <%= linkedMember.approval_status %> · <%= linkedMember.password_hash ? t('पोर्टल पासवर्ड छ', 'portal password set') : t('पोर्टल पासवर्ड छैन', 'no portal password') %>
+            <% if (Number(linkedMember.kyc_application_id) !== Number(row.id)) { %><br><span class="badge badge-warn"><%= t('यो KYM सँग लिंक छैन', 'not linked to this KYM') %></span><% } %></p>
+        <% } else { %><p class="small muted"><%= t('यो Member ID को सदस्य खाता छैन।', 'No member account for this Member ID yet.') %></p><% } %>
+        <% if (isAdmin) { %><form method="post" action="/admin/inbox/kyc/<%= row.id %>/link-member"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm btn-block"><%- icon('users') %><%= locals.linkedMember ? t('सदस्यसँग लिंक / sync गर्नुहोस्', 'Link / sync member') : t('KYM बाट सदस्य बनाउनुहोस्', 'Create member from KYM') %></button></form><% } %>
+        <div class="kv small mt-2">
+          <div><%= t('जोखिम', 'Risk') %></div><div><span class="badge <%= row.risk_category === 'high' ? 'badge-bad' : row.risk_category === 'low' ? 'badge-ok' : 'badge-warn' %>"><%= (row.risk_category || 'medium').toUpperCase() %></span></div>
+          <% if (row.kyc_verified_at) { %><div><%= t('प्रमाणित', 'Verified') %></div><div><%= bsDate(row.kyc_verified_at) %></div><% } %>
+          <% if (row.risk_review_due_at) { %><div><%= t('पुनरावलोकन', 'Review due') %></div><div><%= bsDate(row.risk_review_due_at) %> <% if (row.risk_review_status === 'due_review') { %><span class="badge badge-bad"><%= t('बाँकी', 'Due') %></span><% } %></div><% } %>
+          <div><%= t('ID कार्ड', 'ID card') %></div><div><%= Number(row.want_id_card) ? t('चाहिन्छ (स्वीकृत हुँदा स्वतः)', 'Requested (issued on approval)') : '—' %></div>
+        </div>
+      </div>
+    <% } %>
     <% if (statuses.length || hasRemarks) { %>
-    <form class="card" method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/status">
+    <form class="card" method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/status<%= multipart ? '?_csrf=' + encodeURIComponent(csrfToken) : '' %>" <%- multipart ? 'enctype="multipart/form-data"' : '' %>>
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <h3><%= t('कारबाही', 'Action') %></h3>
-      <% if (statuses.length) { %><div class="field mb-2"><label><%= t('स्थिति', 'Status') %></label><div class="choices"><% statuses.forEach(s => { %><label class="choice"><input type="radio" name="status" value="<%= s %>" <%= row.status === s ? 'checked' : '' %>> <%= statusLabel(s) %></label><% }) %></div></div><% } %>
+      <% if (statuses.length) { %><div class="field mb-2"><label><%= t('स्थिति', 'Status') %></label><div class="choices"><% statuses.forEach(s => { if (m.key === 'membership' && s === 'approved' && row.status !== 'approved') return; %><label class="choice"><input type="radio" name="status" value="<%= s %>" <%= row.status === s ? 'checked' : '' %>> <%= statusLabel(s) %></label><% }) %></div></div><% } %>
+      <% if (m.key === 'kyc') { %>
+        <div class="field mb-2"><label for="kmid"><%= t('सदस्यता नम्बर (Member ID)', 'Member ID') %><span class="req">*</span></label><input class="input" id="kmid" name="member_id" value="<%= row.member_id || '' %>" required></div>
+        <div class="field mb-2"><label for="krisk"><%= t('जोखिम श्रेणी', 'Risk category') %></label><select class="select" id="krisk" name="risk_category"><% [['low', 'न्यून (३ वर्ष)', 'Low (3 years)'], ['medium', 'मध्यम (२ वर्ष)', 'Medium (2 years)'], ['high', 'उच्च (१ वर्ष)', 'High (1 year)']].forEach(r => { %><option value="<%= r[0] %>" <%= (row.risk_category || 'medium') === r[0] ? 'selected' : '' %>><%= t(r[1], r[2]) %></option><% }) %></select></div>
+      <% } %>
       <% if (m.key === 'welfare') { %><div class="field mb-2"><label><%= t('स्वीकृत रकम', 'Approved amount') %></label><input class="input" name="approved_amount" value="<%= row.approved_amount || '' %>" inputmode="decimal"></div><% } %>
-      <div class="field"><label><%= t('टिप्पणी (आवेदकले देख्छन्)', 'Remarks (visible to applicant)') %></label><textarea class="textarea" name="comment" rows="3"><%= row[m.remarksCol] || '' %></textarea></div>
+      <div class="field"><label for="cmt"><%= t('जवाफ / टिप्पणी (आवेदकले देख्छन्)', 'Reply / remarks (visible to applicant)') %></label><textarea class="textarea" id="cmt" name="comment" rows="3"><%= row[m.remarksCol] || '' %></textarea></div>
+      <% if (noteCol) { %><div class="field mt-2"><label for="anote"><%= t('आन्तरिक टिप्पणी (कर्मचारी मात्र)', 'Internal note (staff only)') %></label><textarea class="textarea" id="anote" name="admin_note" rows="3" style="background:var(--warn-soft)"><%= row[noteCol] || '' %></textarea></div><% } %>
+      <% if (attachCol) { %><div class="field mt-2"><label for="aatt"><%= t('जवाफसँग फाइल संलग्न (आवेदकले डाउनलोड गर्न सक्छन्)', 'Reply attachment (the applicant can download it)') %></label><input class="input" type="file" id="aatt" name="admin_attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"><% if (row[attachCol]) { %><div class="field-hint"><%= t('नयाँ फाइलले पुरानोलाई बदल्छ।', 'A new file replaces the current one.') %></div><% } %></div><% } %>
       <% if (!m.noTracking) { %><label class="choice mt-2"><input type="checkbox" name="notify" value="1" checked> <%= t('आवेदकलाई SMS/इमेल पठाउने', 'Send SMS/email to applicant') %></label><% } %>
       <button class="btn btn-primary mt-2 btn-block"><%= t('अद्यावधिक गर्नुहोस्', 'Update') %></button>
     </form>
+    <% if (attachCol && row[attachCol]) { %>
+      <div class="card"><h3><%= t('कार्यालयको संलग्न फाइल', 'Office reply attachment') %></h3>
+        <div class="flex gap-1 items-center wrap">
+          <a class="btn btn-soft btn-sm" href="<%= mediaUrl(row[attachCol]) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('हेर्नुहोस्', 'Open') %></a>
+          <form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/attachment/remove"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('संलग्न फाइल हटाउने?', 'Remove the attachment?') %>"><%- icon('trash') %><%= t('हटाउनुहोस्', 'Remove') %></button></form>
+        </div></div>
+    <% } %>
+    <% } %>
+    <% if (m.key === 'kyc' && isAdmin) { %>
+      <details class="card" id="profile"><summary style="cursor:pointer;font-weight:600"><%= t('KYM विवरण सच्याउनुहोस् (सदस्यमा sync)', 'Correct KYM details (syncs to member)') %></summary>
+        <form method="post" action="/admin/inbox/kyc/<%= row.id %>/profile" class="mt-2">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <% [['full_name', 'पूरा नाम (नेपाली)', 'Full name (Nepali)'], ['full_name_en', 'पूरा नाम (English)', 'Full name (English)'], ['mobile', 'मोबाइल', 'Mobile'], ['email', 'इमेल', 'Email'],
+              ['permanent_address', 'स्थायी ठेगाना', 'Permanent address'], ['temporary_address', 'अस्थायी ठेगाना', 'Temporary address'], ['dob_bs', 'जन्म मिति (वि.सं.)', 'Date of birth (BS)'], ['nationality', 'राष्ट्रियता', 'Nationality'],
+              ['citizenship_no', 'नागरिकता नं.', 'Citizenship no.'], ['citizenship_issued_date', 'जारी मिति', 'Issued date'], ['citizenship_issued_place', 'जारी जिल्ला', 'Issue district'], ['national_id_number', 'NID नं.', 'National ID'],
+              ['father_name', 'बुबा', 'Father'], ['mother_name', 'आमा', 'Mother'], ['grandfather_name', 'हजुरबुबा', 'Grandfather'], ['spouse_name', 'पति/पत्नी', 'Spouse'],
+              ['occupation', 'पेशा', 'Occupation'], ['organization_name', 'संस्था', 'Organisation'], ['monthly_income', 'मासिक आय', 'Monthly income']].forEach(([k, np, en]) => { %>
+            <div class="field mb-1"><label class="small" for="p_<%= k %>"><%= t(np, en) %></label><input class="input" id="p_<%= k %>" name="<%= k %>" value="<%= row[k] || '' %>" <%- k === 'dob_bs' ? 'data-bsdate' : '' %>></div>
+          <% }) %>
+          <div class="field mb-1"><label class="small" for="p_gender"><%= t('लिङ्ग', 'Gender') %></label><select class="select" id="p_gender" name="gender"><option value=""></option><% [['male', 'पुरुष', 'Male'], ['female', 'महिला', 'Female'], ['other', 'अन्य', 'Other']].forEach(g => { %><option value="<%= g[0] %>" <%= row.gender === g[0] ? 'selected' : '' %>><%= t(g[1], g[2]) %></option><% }) %></select></div>
+          <div class="field mb-1"><label class="small" for="p_marital"><%= t('वैवाहिक स्थिति', 'Marital status') %></label><select class="select" id="p_marital" name="marital_status"><option value=""></option><% [['single', 'अविवाहित', 'Single'], ['married', 'विवाहित', 'Married'], ['divorced', 'सम्बन्धविच्छेद', 'Divorced'], ['widow', 'विधवा/विधुर', 'Widow/Widower']].forEach(g => { %><option value="<%= g[0] %>" <%= row.marital_status === g[0] ? 'selected' : '' %>><%= t(g[1], g[2]) %></option><% }) %></select></div>
+          <% if (locals.hasMonthlySaving && locals.linkedMember) { %><div class="field mb-1"><label class="small" for="p_ms"><%= t('मासिक बचत (सदस्यमा)', 'Monthly saving (on the member)') %></label><select class="select" id="p_ms" name="monthly_saving"><option value="" <%= linkedMember.monthly_saving_regular == null ? 'selected' : '' %>>—</option><option value="1" <%= linkedMember.monthly_saving_regular === 1 ? 'selected' : '' %>><%= t('नियमित', 'Regular') %></option><option value="0" <%= linkedMember.monthly_saving_regular === 0 ? 'selected' : '' %>><%= t('नियमित नभएको', 'Not regular') %></option></select></div><% } %>
+          <button class="btn btn-primary btn-block mt-1"><%= t('सुरक्षित गरी sync गर्नुहोस्', 'Save and sync') %></button>
+        </form>
+      </details>
     <% } %>
     <div class="card"><h3><%= t('इतिहास', 'History') %></h3>
       <% if (!history.length) { %><p class="muted small"><%= t('अहिलेसम्म कुनै परिवर्तन छैन।', 'No changes yet.') %></p><% } %>
@@ -46,3 +137,6 @@
     </div>
   </div>
 </div>
+<link rel="stylesheet" href="/static/css/forms.css">
+<script src="/js/form-data.js" defer></script>
+<script src="/static/js/forms.js" defer></script>

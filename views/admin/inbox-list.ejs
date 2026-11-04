@@ -1,27 +1,62 @@
+<% const qs = new URLSearchParams(query).toString(); const here = '/admin/inbox/' + m.key + (qs ? '?' + qs : ''); %>
 <div class="content-head">
   <h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
-  <a class="btn btn-outline btn-sm" href="/admin/inbox/<%= m.key %>/export.csv?<%= new URLSearchParams(query).toString() %>"><%- icon('download') %>CSV</a>
+  <div class="flex gap-1">
+    <% if (m.key === 'kyc') { %><a class="btn btn-outline btn-sm" href="/admin/kyc-risk-reviews"><%- icon('shield') %><%= t('जोखिम पुनरावलोकन', 'Risk reviews') %></a><% } %>
+    <a class="btn btn-outline btn-sm" href="/admin/inbox/<%= m.key %>/export.csv?<%= qs %>"><%- icon('download') %>CSV</a>
+  </div>
 </div>
 <form class="toolbar" method="get">
   <input class="input" name="q" value="<%= q %>" placeholder="<%= t('नाम, फोन, ट्र्याकिङ…', 'Name, phone, tracking…') %>">
   <% if (statuses.length) { %><select class="select" name="status" data-autosubmit><option value=""><%= t('सबै स्थिति', 'All statuses') %></option><% statuses.forEach(s => { %><option value="<%= s %>" <%= status === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %></select><% } %>
+  <% if (m.key === 'job') { %><select class="select" name="career" data-autosubmit><option value=""><%= t('सबै पद', 'All positions') %></option><% careers.forEach(c => { %><option value="<%= c.id %>" <%= String(query.career) === String(c.id) ? 'selected' : '' %>><%= t(c.title_np || c.title, c.title || c.title_np) %></option><% }) %></select><% } %>
+  <% if (m.key === 'kyc') { %><select class="select" name="risk" data-autosubmit><option value=""><%= t('सबै जोखिम', 'All risk levels') %></option><% [['low', 'न्यून', 'Low'], ['medium', 'मध्यम', 'Medium'], ['high', 'उच्च', 'High']].forEach(r => { %><option value="<%= r[0] %>" <%= query.risk === r[0] ? 'selected' : '' %>><%= t(r[1], r[2]) %></option><% }) %></select><% } %>
+  <% if (hasRead) { %><label class="choice" style="padding:6px 10px"><input type="checkbox" name="unread" value="1" <%= query.unread === '1' ? 'checked' : '' %> data-autosubmit> <%= t('नपढिएका', 'Unread') %></label><% } %>
   <input class="input" type="date" name="from" value="<%= query.from || '' %>" title="From" style="min-width:0">
   <input class="input" type="date" name="to" value="<%= query.to || '' %>" title="To" style="min-width:0">
   <button class="btn btn-outline"><%- icon('search') %></button>
 </form>
 <% if (!rows.length) { %><div class="empty"><%= t('कुनै आवेदन छैन।', 'No submissions.') %></div><% } else { %>
+<form method="post" action="/admin/inbox/<%= m.key %>/bulk" id="bulkForm">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="_back" value="<%= here %>">
+  <div class="flex gap-1 items-center wrap mb-2">
+    <label class="choice" style="padding:6px 10px"><input type="checkbox" data-check-all="ids"> <%= t('सबै', 'All') %></label>
+    <select class="select" name="action" style="max-width:240px" aria-label="<%= t('कारबाही', 'Action') %>">
+      <option value=""><%= t('छानिएकामा कारबाही…', 'With selected…') %></option>
+      <% statuses.forEach(s => { if (m.key === 'membership' && s === 'approved') return; %><option value="status:<%= s %>"><%= t('स्थिति', 'Status') %>: <%= statusLabel(s) %></option><% }) %>
+      <% if (hasRead) { %><option value="read"><%= t('पढेको चिन्ह', 'Mark read') %></option><option value="unread"><%= t('नपढेको चिन्ह', 'Mark unread') %></option><% } %>
+      <% if (canDelete) { %><option value="delete"><%= t('हटाउनुहोस्', 'Delete') %></option><% } %>
+    </select>
+    <button class="btn btn-outline btn-sm" data-confirm="<%= t('छानिएका पङ्क्तिमा लागू गर्ने?', 'Apply to the selected rows?') %>"><%= t('लागू गर्नुहोस्', 'Apply') %></button>
+  </div>
+</form>
 <div class="table-wrap"><table class="table">
-  <thead><tr><% if (!m.noTracking) { %><th><%= t('ट्र्याकिङ', 'Tracking') %></th><% } %><% m.fields.filter(f => f.show).forEach(fl => { %><th><%= t(fl.label[0], fl.label[1]) %></th><% }) %><% if (statuses.length) { %><th><%= t('स्थिति', 'Status') %></th><% } %><th><%= t('मिति', 'Date') %></th></tr></thead>
+  <thead><tr><th style="width:28px"></th><% if (!m.noTracking) { %><th><%= t('ट्र्याकिङ', 'Tracking') %></th><% } %><% m.fields.filter(f => f.show).forEach(fl => { %><th><%= t(fl.label[0], fl.label[1]) %></th><% }) %><% if (statuses.length) { %><th><%= t('स्थिति', 'Status') %></th><% } %><th><%= t('मिति', 'Date') %></th><th></th></tr></thead>
   <tbody><% rows.forEach(row => { %>
     <tr style="<%= hasRead && !row.is_read ? 'font-weight:500' : '' %>">
+      <td><input type="checkbox" name="ids" value="<%= row.id %>" form="bulkForm" aria-label="#<%= row.id %>"></td>
       <% if (!m.noTracking) { %><td><a href="/admin/inbox/<%= m.key %>/<%= row.id %>" class="small" style="font-family:ui-monospace,monospace"><%= row.tracking_id || '#' + row.id %></a></td><% } %>
       <% m.fields.filter(f => f.show).forEach((fl, i) => { let v = row[fl.name]; const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); if (o) v = t(o[1], o[2]); %>
         <td><% if (i === 0 && m.noTracking) { %><a href="/admin/inbox/<%= m.key %>/<%= row.id %>" style="color:var(--text)"><%= v %></a><% } else { %><%= fl.format === 'money' ? money(v) : fl.type === 'date' ? (v ? bsDate(v) : '') : util.excerpt(v, 50) %><% } %></td>
       <% }) %>
-      <% if (statuses.length) { %><td><span class="badge <%= row.status === 'pending' ? 'badge-warn' : /approved|completed|resolved|selected|confirmed|disbursed|accepted/.test(row.status) ? 'badge-ok' : /rejected|cancelled/.test(row.status) ? 'badge-bad' : 'badge-info' %>"><%= statusLabel(row.status) %></span></td><% } %>
+      <% if (statuses.length) { %><td>
+        <form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/status" class="quick-status">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="quick" value="1"><input type="hidden" name="_back" value="<%= here %>">
+          <select class="select select-sm badge-select <%= row.status === 'pending' ? 'badge-warn' : /approved|completed|resolved|selected|confirmed|disbursed|accepted/.test(row.status) ? 'badge-ok' : /rejected|cancelled/.test(row.status) ? 'badge-bad' : 'badge-info' %>" name="status" data-autosubmit aria-label="<%= t('स्थिति', 'Status') %>">
+            <% statuses.forEach(s => { if (m.key === 'membership' && s === 'approved' && row.status !== 'approved') return; %><option value="<%= s %>" <%= row.status === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %>
+          </select>
+          <noscript><button class="btn btn-ghost btn-sm">✓</button></noscript>
+        </form>
+      </td><% } %>
       <td class="small faint"><%= bsDate(row.created_at) %></td>
+      <td><div class="row-actions">
+        <% if (hasRead) { %><form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/read"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="_back" value="<%= here %>"><input type="hidden" name="read" value="<%= row.is_read ? '0' : '1' %>"><button class="btn btn-ghost btn-sm btn-icon" title="<%= row.is_read ? t('नपढेको चिन्ह', 'Mark unread') : t('पढेको चिन्ह', 'Mark read') %>"><%- icon(row.is_read ? 'mail' : 'check') %></button></form><% } %>
+        <a class="btn btn-ghost btn-sm btn-icon" href="/admin/inbox/<%= m.key %>/<%= row.id %>/print" target="_blank" rel="noopener" title="<%= t('प्रिन्ट', 'Print') %>"><%- icon('file') %></a>
+      </div></td>
     </tr>
   <% }) %></tbody>
 </table></div>
 <%- include('../partials/pagination', { pg }) %>
 <% } %>
+<style>.quick-status .badge-select{border:0;border-radius:999px;padding:2px 26px 2px 10px;font-size:.78rem;font-weight:500;min-width:0;width:auto;height:auto}</style>
+<script src="/static/js/admin-inbox.js" defer></script>

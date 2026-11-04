@@ -1,0 +1,27 @@
+<div class="content-head">
+  <div><div class="crumbs"><a href="/admin/inbox/kyc"><%= t('अनलाइन केवाइएम', 'Online KYM') %></a></div><h1><%= title %></h1>
+    <div class="small muted"><%= t('जोखिममा आधारित पुनरावलोकन चक्र: न्यून = ३ वर्ष, मध्यम = २ वर्ष, उच्च = १ वर्ष', 'Risk-based review cycle: low = 3 years, medium = 2 years, high = 1 year') %></div></div>
+</div>
+<div class="flex gap-1 wrap mb-2">
+  <% [['due', 'पुनरावलोकन बाँकी', 'Due for review', counts.due], ['high', 'उच्च जोखिम', 'High risk', counts.high], ['all', 'सबै स्वीकृत', 'All approved', counts.all]].forEach(([k, np, en, n]) => { %>
+    <a class="btn btn-sm <%= filter === k ? 'btn-primary' : 'btn-outline' %>" href="?filter=<%= k %>"><%= t(np, en) %> <span class="badge" style="margin-left:4px"><%= num(n) %></span></a>
+  <% }) %>
+</div>
+<% if (!rows.length) { %><div class="empty"><%= t('कुनै रेकर्ड छैन।', 'No records.') %></div><% } else { %>
+<div class="table-wrap"><table class="table">
+  <thead><tr><th><%= t('सदस्य', 'Member') %></th><th><%= t('सम्पर्क', 'Contact') %></th><th><%= t('जोखिम', 'Risk') %></th><th><%= t('प्रमाणित', 'Verified') %></th><th><%= t('अर्को पुनरावलोकन', 'Next review') %></th><th><%= t('स्थिति', 'Status') %></th><th></th></tr></thead>
+  <tbody><% rows.forEach(r => { const due = r.risk_review_status === 'due_review'; %>
+    <tr>
+      <td><a href="/admin/inbox/kyc/<%= r.id %>" style="font-weight:500;color:var(--text)"><%= r.full_name %></a><div class="small faint" style="font-family:ui-monospace,monospace"><%= r.member_id || '—' %></div></td>
+      <td><%= r.mobile || '—' %><div class="small faint"><%= r.email || '' %></div></td>
+      <td><span class="badge <%= r.risk_category === 'high' ? 'badge-bad' : r.risk_category === 'low' ? 'badge-ok' : 'badge-warn' %>"><%= (r.risk_category || 'medium').toUpperCase() %></span></td>
+      <td class="small"><%= r.kyc_verified_at ? bsDate(r.kyc_verified_at) : '—' %></td>
+      <td class="small"><%= r.risk_review_due_at ? bsDate(r.risk_review_due_at) : '—' %></td>
+      <td><span class="badge <%= due ? 'badge-bad' : 'badge-ok' %>"><%= due ? t('पुनरावलोकन बाँकी', 'Due review') : t('सामान्य', 'Normal') %></span></td>
+      <td><div class="row-actions">
+        <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/kyc-risk-reviews/<%= r.id %>/reviewed"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="filter" value="<%= filter %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('पुनरावलोकन भयो भनी चिन्ह लगाउने?', 'Mark as reviewed?') %>"><%- icon('check') %><%= t('पुनरावलोकन भयो', 'Mark reviewed') %></button></form><% } %>
+      </div></td>
+    </tr>
+  <% }) %></tbody>
+</table></div>
+<% } %>

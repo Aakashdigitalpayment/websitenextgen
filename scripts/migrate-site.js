@@ -20,6 +20,7 @@
  *   --mode=incremental only add rows whose id does not exist yet (re-run after a first migration)
  *   --report=path      where to write the HTML report (default reports/migration-<tenant>-<time>.html)
  *   --cred-key=...     PHP CRED_MASTER_KEY if includes/.cred-master.key is not available
+ *   --pii-key=...      PHP PII_ENC_KEY (64 hex) if database.local.php / includes/.pii-master.key are not available
  *   --yes              do not ask for confirmation
  */
 const fs = require('fs');
@@ -59,6 +60,7 @@ async function confirm(q) {
   const mysqlUrl = a.mysql || src.mysqlUrl || process.env.MYSQL_URL;
   const uploads = a.uploads || src.uploads || null;
   const credKey = a['cred-key'] || src.credKey || process.env.CREDENTIALS_LEGACY_KEY || null;
+  const piiKey = a['pii-key'] || src.piiKey || process.env.PII_LEGACY_KEY || null;
   for (const n of src.notes) console.log('  · ' + n);
   if (!mysqlUrl) throw new Error('No MySQL source: pass --php-root or --mysql');
 
@@ -79,7 +81,7 @@ async function confirm(q) {
   }
 
   const report = tenant
-    ? await mig.migrate({ tenant: a.tenant, mysqlUrl, uploads, credKey, dryRun: !!a['dry-run'], mode: a.mode === 'incremental' ? 'incremental' : 'fresh', log: s => console.log(s) })
+    ? await mig.migrate({ tenant: a.tenant, mysqlUrl, uploads, credKey, piiKey, dryRun: !!a['dry-run'], mode: a.mode === 'incremental' ? 'incremental' : 'fresh', log: s => console.log(s) })
     : { tenant: a.tenant, dry_run: true, steps: [], warnings: ['tenant does not exist yet — run without --dry-run and with --create'], errors: [], tables: [], files: {}, verify: {}, started_at: new Date().toISOString(), finished_at: new Date().toISOString(), mode: 'fresh', source: mig.redact(mysqlUrl) };
 
   const out = a.report || path.join('reports', `migration-${a.tenant}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.html`);

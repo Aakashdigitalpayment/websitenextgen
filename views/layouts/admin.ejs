@@ -23,6 +23,7 @@
       <% Object.values(modules).forEach(m => { %>
         <a class="side-link <%= cur.startsWith('/admin/inbox/' + m.key) ? 'active' : '' %>" href="/admin/inbox/<%= m.key %>"><%- icon(m.icon) %><%= t(...m.title) %><% if (locals.pendingCounts && pendingCounts[m.key]) { %><span class="count"><%= num(pendingCounts[m.key]) %></span><% } %></a>
       <% }) %>
+      <a class="side-link <%= cur.startsWith('/admin/kyc-risk-reviews') ? 'active' : '' %>" href="/admin/kyc-risk-reviews"><%- icon('shield') %><%= t('KYC जोखिम पुनरावलोकन', 'KYC risk reviews') %></a>
     </div>
     <div class="side-group"><div class="side-title"><%= t('सदस्य', 'Members') %></div>
       <a class="side-link <%= cur.startsWith('/admin/members') ? 'active' : '' %>" href="/admin/members"><%- icon('users') %><%= t('सदस्यहरू', 'Members') %></a>

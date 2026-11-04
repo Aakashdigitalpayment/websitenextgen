@@ -1,0 +1,19 @@
+<div class="content-head">
+  <div><div class="crumbs"><a href="/admin/r/honor_programs"><%= t('सम्मान कार्यक्रम', 'Honour programmes') %></a></div><h1><%= t(program.title_np, program.title_en || program.title_np) %></h1>
+    <div class="small muted"><%= t('यो कार्यक्रममा आवेदन दिन मिल्ने विधा छान्नुहोस्। कुनै पनि नछानेमा सबै सक्रिय विधा देखिन्छन्।', 'Choose the categories applicants can pick in this programme. With none chosen, all active categories are offered.') %></div></div>
+</div>
+<form class="card" method="post" action="/admin/honor-programs/<%= program.id %>/categories">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <% if (!cats.length) { %><p class="muted"><%= t('पहिले', 'First add') %> <a href="/admin/r/honor_categories"><%= t('सम्मान विधा', 'honour categories') %></a>.</p><% } %>
+  <div class="choices" style="flex-direction:column;align-items:flex-start">
+    <% cats.forEach(c => { %>
+      <label class="choice"><input type="checkbox" name="category" value="<%= c.id %>" <%= c.on ? 'checked' : '' %>>
+        <%= t(c.name_np, c.name_en || c.name_np) %>
+        <% if (Number(c.requires_nominee)) { %><span class="badge"><%= t('मनोनीत चाहिन्छ', 'nominee') %></span><% } %>
+        <% if (Number(c.requires_document)) { %><span class="badge"><%= t('कागजात चाहिन्छ', 'document') %></span><% } %>
+        <% if (!Number(c.is_active)) { %><span class="badge badge-warn"><%= t('निष्क्रिय', 'inactive') %></span><% } %>
+      </label>
+    <% }) %>
+  </div>
+  <button class="btn btn-primary mt-3"><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button>
+</form>

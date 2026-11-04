@@ -1,20 +1,69 @@
 <%
   const fl = field; const val = values[fl.name] ?? fl.default ?? ''; const err = errors[fl.name];
   const id = 'f_' + fl.name; const label = t(fl.label[0], fl.label[1]);
-  const wide = fl.type === 'textarea' || fl.type === 'radio' || fl.type === 'rating' || fl.type === 'checkbox' || fl.wide;
+  const wide = ['textarea', 'radio', 'rating', 'checkbox', 'address', 'family', 'moneyitems', 'heading'].includes(fl.type) || fl.wide;
   const opts = (locals.options && options[fl.name]) || fl.options || [];
+  const docs = locals.existingDocs || {};
+  const req = fl.required || (fl.newRequired && !docs[fl.name]);
+  const sc = fl.showIf;
+  const showAttrs = sc ? `data-show-field="${sc.field}"${sc.eq !== undefined ? ` data-show-eq="${sc.eq}"` : ''}${sc.ne !== undefined ? ` data-show-ne="${sc.ne}"` : ''}${sc.in ? ` data-show-in="${sc.in.join(',')}"` : ''}${sc.meta ? ` data-show-meta="${sc.meta}"` : ''}` : '';
+  const reqAttrs = fl.requiredIf ? `data-req-field="${fl.requiredIf.field}" data-req-meta="${fl.requiredIf.meta}"` : '';
+  const arr = v => [].concat(v ?? []).map(x => String(x ?? ''));
+  const hint = fl.hint ? (Array.isArray(fl.hint) ? t(fl.hint[0], fl.hint[1]) : fl.hint) : '';
+  const lockedMember = fl.name === 'member_id' && locals.lockMemberId;
 %>
-<div class="field <%= wide ? 'span-2' : '' %> <%= err ? 'has-error' : '' %>">
+<% if (fl.type === 'heading') { %>
+<div class="span-2 form-subhead" <%- showAttrs %>><%= label %></div>
+<% } else { %>
+<div class="field <%= wide ? 'span-2' : '' %> <%= err ? 'has-error' : '' %>" <%- showAttrs %> <%- reqAttrs %>>
   <% if (fl.type === 'checkbox') { %>
-    <label class="choice"><input type="checkbox" name="<%= fl.name %>" value="1" <%= val && val !== '0' ? 'checked' : '' %>> <%= label %></label>
+    <label class="choice"><input type="checkbox" id="<%= id %>" name="<%= fl.name %>" value="1" <%= val && val !== '0' ? 'checked' : '' %>> <%= label %><% if (fl.required) { %><span class="req">*</span><% } %></label>
+  <% } else if (fl.type === 'address') { const p = fl.prefix; %>
+    <label for="<%= id %>_province"><%= label %><% if (req) { %><span class="req">*</span><% } %></label>
+    <div class="addr-grid" data-address="<%= p %>">
+      <% [['province', 'प्रदेश', 'Province'], ['district', 'जिल्ला', 'District'], ['municipality', 'नगर/गाउँपालिका', 'Municipality'], ['ward', 'वडा नं.', 'Ward']].forEach(([k, np, en]) => { const cur = values[p + '_' + k] || ''; %>
+        <div><label class="sub" for="<%= id %>_<%= k %>"><%= t(np, en) %></label>
+          <select class="select" id="<%= id %>_<%= k %>" name="<%= p %>_<%= k %>" data-addr-part="<%= k %>" data-value="<%= cur %>">
+            <option value=""><%= t('छान्नुहोस्', 'Select') %></option><% if (cur) { %><option value="<%= cur %>" selected><%= cur %></option><% } %>
+          </select></div>
+      <% }) %>
+      <div class="span-all"><label class="sub" for="<%= id %>_tole"><%= t('टोल / गाउँ', 'Tole / village') %></label><input class="input" id="<%= id %>_tole" name="<%= p %>_tole" value="<%= values[p + '_tole'] || '' %>"></div>
+    </div>
+    <% if (!values[p + '_province'] && val) { %><div class="field-hint"><%= t('पहिलेको ठेगाना', 'Previous address') %>: <%= val %><input type="hidden" name="<%= fl.name %>" value="<%= val %>"></div><% } %>
+  <% } else if (fl.type === 'family') { const rel = arr(values.family_relation), nm = arr(values.family_member_name), ph = arr(values.family_member_phone); const n = Math.max(3, nm.length + 1); %>
+    <label><%= label %></label>
+    <div class="table-wrap"><table class="table repeat-table" data-repeat="family">
+      <thead><tr><th><%= t('नाता', 'Relation') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('फोन (ऐच्छिक)', 'Phone (optional)') %></th><th></th></tr></thead>
+      <tbody><% for (let i = 0; i < n; i++) { %><tr data-repeat-row>
+        <td><select class="select" name="family_relation" aria-label="<%= t('नाता', 'Relation') %>"><option value=""><%= t('छान्नुहोस्', 'Select') %></option><% (fl.relations || []).forEach(o => { %><option value="<%= o[0] %>" <%= rel[i] === o[0] ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select></td>
+        <td><input class="input" name="family_member_name" value="<%= nm[i] || '' %>" aria-label="<%= t('नाम', 'Name') %>"></td>
+        <td><input class="input" name="family_member_phone" value="<%= ph[i] || '' %>" inputmode="tel" aria-label="<%= t('फोन', 'Phone') %>"></td>
+        <td><button type="button" class="btn btn-ghost btn-sm" data-repeat-remove aria-label="<%= t('हटाउनुहोस्', 'Remove') %>">×</button></td>
+      </tr><% } %></tbody>
+    </table></div>
+    <button type="button" class="btn btn-soft btn-sm mt-1" data-repeat-add="family"><%- icon('plus') %><%= t('सदस्य थप्नुहोस्', 'Add member') %></button>
+    <div class="field-hint"><%= t('बुबा, आमा, हजुरबुबा र पति/पत्नीको नाम यहीँबाट लिइन्छ।', "Father's, mother's, grandfather's and spouse's names are taken from this list.") %></div>
+  <% } else if (fl.type === 'moneyitems') { const nm = arr(values[fl.name + '_name']), am = arr(values[fl.name + '_amount']); const n = Math.max(2, nm.length + 1); %>
+    <label><%= label %></label>
+    <div class="table-wrap"><table class="table repeat-table" data-repeat="<%= fl.name %>" data-sum="<%= fl.name %>">
+      <thead><tr><th><%= t('स्रोत', 'Source') %></th><th style="width:34%"><%= t('मासिक रकम (रु.)', 'Monthly amount (Rs.)') %></th><th></th></tr></thead>
+      <tbody><% for (let i = 0; i < n; i++) { %><tr data-repeat-row>
+        <td><input class="input" name="<%= fl.name %>_name" value="<%= nm[i] || '' %>" aria-label="<%= t('स्रोत', 'Source') %>"></td>
+        <td><input class="input" name="<%= fl.name %>_amount" value="<%= am[i] || '' %>" inputmode="decimal" data-amount aria-label="<%= t('रकम', 'Amount') %>"></td>
+        <td><button type="button" class="btn btn-ghost btn-sm" data-repeat-remove aria-label="<%= t('हटाउनुहोस्', 'Remove') %>">×</button></td>
+      </tr><% } %></tbody>
+      <tfoot><tr><th><%= t('जम्मा', 'Total') %></th><th data-sum-out>—</th><th></th></tr></tfoot>
+    </table></div>
+    <button type="button" class="btn btn-soft btn-sm mt-1" data-repeat-add="<%= fl.name %>"><%- icon('plus') %><%= t('थप्नुहोस्', 'Add row') %></button>
+    <% if (fl.name === 'expense_source') { %><div class="field-hint" data-net-saving><%= t('मासिक बचत (आय − खर्च)', 'Monthly saving (income − expenses)') %>: <strong data-net-out>—</strong></div><% } %>
   <% } else { %>
-    <label for="<%= id %>"><%= label %><% if (fl.required) { %><span class="req">*</span><% } %></label>
+    <label for="<%= id %>"><%= label %><% if (req) { %><span class="req">*</span><% } else if (fl.requiredIf) { %><span class="req" data-req-star hidden>*</span><% } %></label>
     <% if (fl.type === 'textarea' || fl.type === 'richtext') { %>
       <textarea class="textarea" id="<%= id %>" name="<%= fl.name %>" rows="<%= fl.rows || 4 %>" <%= fl.required ? 'required' : '' %>><%= val %></textarea>
     <% } else if (fl.type === 'select') { %>
-      <select class="select" id="<%= id %>" name="<%= fl.name %>" <%= fl.required ? 'required' : '' %>>
+      <select class="select" id="<%= id %>" name="<%= fl.name %>" <%= fl.required ? 'required' : '' %> <%- fl.filterBy ? `data-filter-field="${fl.filterBy.field}" data-filter-meta="${fl.filterBy.meta}"` : '' %>>
         <option value=""><%= t('छान्नुहोस्', 'Select') %></option>
-        <% opts.forEach(o => { %><option value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %>
+        <% opts.forEach(o => { %><option value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'selected' : '' %> <% if (o[3]) { %>data-meta="<%= JSON.stringify(o[3]) %>"<% } %>><%= t(o[1], o[2]) %></option><% }) %>
       </select>
     <% } else if (fl.type === 'radio') { %>
       <div class="choices"><% opts.forEach(o => { %><label class="choice"><input type="radio" name="<%= fl.name %>" value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'checked' : '' %>> <%= t(o[1], o[2]) %></label><% }) %></div>
@@ -22,15 +71,25 @@
       <div class="rating"><% [1,2,3,4,5].forEach(n => { %><label><input type="radio" name="<%= fl.name %>" value="<%= n %>" <%= String(val) === String(n) ? 'checked' : '' %>><%= num(n) %></label><% }) %></div>
       <div class="field-hint"><%= t('१ = असन्तुष्ट, ५ = धेरै सन्तुष्ट', '1 = poor, 5 = excellent') %></div>
     <% } else if (fl.type === 'file' || fl.type === 'image') { %>
-      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" accept="<%= fl.type === 'image' ? 'image/jpeg,image/png,image/webp' : fl.kind === 'doc' ? '.pdf,.doc,.docx' : 'image/*,.pdf,.doc,.docx' %>">
-      <div class="field-hint"><%= fl.type === 'image' ? 'JPG / PNG / WEBP' : 'PDF / DOC / JPG' %>, <%= t('बढीमा ८ MB', 'max 8 MB') %></div>
+      <% if (docs[fl.name]) { %><div class="field-hint" style="color:var(--ok)"><%= t('फाइलमा छ — खाली छाड्दा उही रहन्छ।', 'On file — leave blank to keep it.') %></div><% } %>
+      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" accept="<%= fl.type === 'image' ? 'image/jpeg,image/png,image/webp' : fl.kind === 'doc' ? '.pdf,.doc,.docx' : 'image/*,.pdf,.doc,.docx' %>" <%- fl.capture ? `capture="${fl.capture}"` : '' %> data-preview>
+      <div class="field-hint"><%= fl.type === 'image' ? 'JPG / PNG / WEBP' : 'PDF / DOC / JPG' %>, <%= t('बढीमा ८ MB', 'max 8 MB') %><% if (fl.capture) { %> · <%= t('मोबाइलमा क्यामेरा खुल्छ', 'opens the camera on mobile') %><% } %></div>
+    <% } else if (fl.type === 'geo') { %>
+      <div class="flex gap-1"><input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>" placeholder="27.7172, 85.3240" inputmode="decimal" data-geo>
+        <button type="button" class="btn btn-outline btn-sm" data-geo-btn="<%= id %>" hidden><%- icon('pin') %><%= t('हालको स्थान', 'Use my location') %></button></div>
+      <div class="field-hint" data-geo-msg><%= t('बटन थिच्दा फोनको GPS बाट स्थान लिन्छ।', 'The button reads the location from your phone.') %> <a href="#" data-geo-map hidden target="_blank" rel="noopener"><%= t('नक्सामा हेर्नुहोस्', 'View on map') %></a></div>
+    <% } else if (fl.type === 'date') { %>
+      <input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>" type="date" <%= fl.required ? 'required' : '' %> <%- lang !== 'en' ? 'data-ad-date' : '' %>>
     <% } else { %>
       <input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>"
-        type="<%= fl.type === 'tel' ? 'tel' : fl.type === 'email' ? 'email' : fl.type === 'date' ? 'date' : 'text' %>"
-        <%= fl.type === 'number' ? 'inputmode=decimal' : '' %> <%= fl.type === 'bsdate' ? 'placeholder=YYYY-MM-DD inputmode=numeric' : '' %>
-        <%= fl.type === 'tel' ? 'autocomplete=tel' : fl.type === 'email' ? 'autocomplete=email' : '' %> <%= fl.required ? 'required' : '' %>>
-      <% if (fl.type === 'bsdate') { %><div class="field-hint"><%= t('वि.सं. मिति, जस्तै २०५०-०४-१५', 'Bikram Sambat, e.g. 2050-04-15') %></div><% } %>
+        type="<%= fl.type === 'tel' ? 'tel' : fl.type === 'email' ? 'email' : fl.type === 'url' ? 'url' : 'text' %>"
+        <%= fl.type === 'number' ? 'inputmode=decimal' : '' %> <%- fl.type === 'bsdate' ? 'placeholder=YYYY-MM-DD inputmode=numeric data-bsdate autocomplete=off' : '' %>
+        <%= fl.type === 'tel' ? 'autocomplete=tel' : fl.type === 'email' ? 'autocomplete=email' : '' %> <%= fl.required ? 'required' : '' %> <%= lockedMember ? 'readonly' : '' %> <%- fl.nomineePicker ? 'data-nominee-input list="nominee_family"' : '' %>>
+      <% if (fl.nomineePicker) { %><datalist id="nominee_family"></datalist><% } %>
+      <% if (fl.type === 'bsdate') { %><div class="field-hint" data-bsdate-hint><%= t('वि.सं. मिति, जस्तै २०५०-०४-१५', 'Bikram Sambat, e.g. 2050-04-15') %></div><% } %>
     <% } %>
+    <% if (hint && fl.type !== 'bsdate') { %><div class="field-hint"><%= lockedMember ? t('तपाईंको सदस्यता नम्बरमा लक गरिएको', 'Locked to your Member ID') : hint %></div><% } %>
   <% } %>
   <% if (err) { %><div class="field-error"><%= err %></div><% } %>
 </div>
+<% } %>

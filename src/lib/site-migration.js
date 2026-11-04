@@ -17,7 +17,7 @@ const { resources } = require('../modules/resources');
 /** Read DB credentials, uploads dir and vault key from an old PHP site folder (public_html). */
 function readPhpSite(root) {
   const r = path.resolve(root);
-  const out = { root: r, mysqlUrl: null, uploads: null, credKey: null, siteUrl: null, notes: [] };
+  const out = { root: r, mysqlUrl: null, uploads: null, credKey: null, piiKey: null, siteUrl: null, notes: [] };
   const candidates = ['includes/database.local.php', 'includes/database.php', 'includes/config.local.php'].map(f => path.join(r, f)).filter(f => fs.existsSync(f));
   for (const f of candidates) {
     const src = fs.readFileSync(f, 'utf8');
@@ -27,6 +27,7 @@ function readPhpSite(root) {
       const [h, port] = String(host || 'localhost').split(':');
       out.mysqlUrl = `mysql://${encodeURIComponent(user)}:${encodeURIComponent(pass || '')}@${h || 'localhost'}:${port || 3306}/${encodeURIComponent(name)}`;
       out.siteUrl = get('SITE_URL');
+      if (get('PII_ENC_KEY')) out.piiKey = get('PII_ENC_KEY').trim();
       out.notes.push(`database settings read from ${path.relative(r, f)}`);
       break;
     }
@@ -36,6 +37,10 @@ function readPhpSite(root) {
   if (fs.existsSync(up)) out.uploads = up; else out.notes.push('assets/uploads not found — pass --uploads=');
   const keyFile = path.join(r, 'includes/.cred-master.key');
   if (fs.existsSync(keyFile)) out.credKey = fs.readFileSync(keyFile, 'utf8').trim();
+  // PHP includes/pii-crypto.php: PII_ENC_KEY (64 hex) in database.local.php, else includes/.pii-master.key
+  const piiFile = path.join(r, 'includes/.pii-master.key');
+  if (!out.piiKey && fs.existsSync(piiFile)) out.piiKey = fs.readFileSync(piiFile, 'utf8').trim();
+  if (out.piiKey && !/^[0-9a-f]{64}$/i.test(out.piiKey)) { out.notes.push('PII key found but it is not 64 hex characters — ignored'); out.piiKey = null; }
   return out;
 }
 
@@ -82,7 +87,7 @@ function fileColumns() {
 
 // ---------------------------------------------------------------- main
 /**
- * @param {object} o  { tenant, mysqlUrl, uploads, credKey, dryRun, mode: 'fresh'|'incremental', log }
+ * @param {object} o  { tenant, mysqlUrl, uploads, credKey, piiKey, dryRun, mode: 'fresh'|'incremental', log }
  * @returns report object
  */
 async function migrate(o) {
@@ -257,6 +262,9 @@ async function migrate(o) {
     step('office credentials', bad ? 'warn' : 'ok', `${ok} re-encrypted${bad ? `, ${bad} could not be decrypted` : ''}`);
   });
 
+  // ---- PII (citizenship numbers): PHP pii1:/pii2: → decrypt with the old key → new pii3: format
+  await db.withSchema(tenant.schema_name, () => convertPii(o.piiKey, step, warn));
+
   // ---- verify
   await db.withSchema(tenant.schema_name, async () => {
     for (const t of report.tables.filter(x => x.status === 'copied')) {
@@ -307,4 +315,37 @@ ${Object.keys(r.verify).length ? `<div class="card"><h2>Checks</h2><table>${Obje
 </main></body></html>`;
 }
 
-module.exports = { readPhpSite, migrate, htmlReport, fixValue, redact, fileColumns };
+/**
+ * Re-encrypt PHP-encrypted PII in the current tenant schema. pii1:/pii2: values are decrypted with the
+ * old PII_ENC_KEY and written again with the new key (PII_KEY) — or as plain text with a warning when
+ * PII_KEY is not set, so the data stays readable. Values that do not decrypt are left untouched.
+ */
+async function convertPii(oldKey, step = () => {}, warn = () => {}) {
+  const pii = require('./pii-crypto');
+  const schema = db.currentSchema();
+  let ok = 0, bad = 0, found = 0;
+  for (const [table, cols] of Object.entries(pii.PII_COLUMNS)) {
+    const tcols = await db.columns(table);
+    for (const col of cols) {
+      if (!tcols.has(col)) continue;
+      // prefixed so the transparent decrypt in db.query leaves the raw value alone
+      const rows = await db.many(`SELECT id, 'raw:' || ${db.ident(col)} AS v FROM ${db.ident(table)} WHERE ${db.ident(col)} LIKE 'pii1:%' OR ${db.ident(col)} LIKE 'pii2:%'`);
+      found += rows.length;
+      if (!rows.length || !oldKey) continue;
+      for (const r of rows) {
+        const enc = r.v.slice(4);
+        const plain = pii.decryptLegacy(enc, oldKey);
+        if (plain === enc) { bad++; continue; }
+        await db.query(`UPDATE ${db.ident(table)} SET ${db.ident(col)} = $1 WHERE id = $2`, [pii.encrypt(plain, schema), r.id]);
+        ok++;
+      }
+    }
+  }
+  if (!found) { step('PII (citizenship no.)', 'skip', 'no encrypted values in the old data'); return { ok, bad, found }; }
+  if (!oldKey) { warn(`${found} citizenship numbers are encrypted with the old PHP key — pass --pii-key (PII_ENC_KEY) or --php-root to convert them`); return { ok, bad, found }; }
+  if (!pii.enabled()) warn('PII_KEY is not set: converted citizenship numbers were stored as plain text. Set PII_KEY to encrypt them.');
+  step('PII (citizenship no.)', bad ? 'warn' : 'ok', `${ok} converted${pii.enabled() ? ' to the new encryption' : ' (plain text)'}${bad ? `, ${bad} could not be decrypted with the old key` : ''}`);
+  return { ok, bad, found };
+}
+
+module.exports = { readPhpSite, migrate, htmlReport, fixValue, redact, fileColumns, convertPii };

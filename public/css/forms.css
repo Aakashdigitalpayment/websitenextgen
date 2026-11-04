@@ -1,0 +1,27 @@
+/* Application form extras: address grid, repeat tables, B.S. picker, section index. */
+.maxw-lg { max-width: 980px; }
+.form-toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+.form-toc a { font-size: .82rem; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); }
+.form-toc a:hover { border-color: var(--brand); color: var(--brand); }
+.form-subhead { font-weight: 600; font-size: .92rem; color: var(--muted); padding-top: 6px; border-top: 1px dashed var(--line); }
+.addr-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2, transparent); }
+.addr-grid .span-all { grid-column: 1 / -1; }
+.addr-grid label.sub { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+@media (max-width: 720px) { .addr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.repeat-table td, .repeat-table th { padding: 6px 8px; vertical-align: middle; }
+.repeat-table .input, .repeat-table .select { min-width: 0; width: 100%; }
+.repeat-table tfoot th { font-weight: 600; }
+.file-preview { display: block; max-height: 110px; margin-top: 8px; border-radius: 8px; border: 1px solid var(--line); }
+.field[hidden], .form-subhead[hidden] { display: none !important; }
+.bs-picker { position: absolute; z-index: 50; margin-top: 4px; width: 288px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, .12); }
+.field { position: relative; }
+.bs-head { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.bs-head select { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: .85rem; }
+.bs-head button, .bs-foot button { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 8px; padding: 4px 9px; cursor: pointer; font: inherit; font-size: .85rem; }
+.bs-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
+.bs-grid .bs-w { font-size: .72rem; color: var(--faint); padding: 2px 0; }
+.bs-grid button { border: 0; background: transparent; color: var(--text); border-radius: 8px; padding: 6px 0; cursor: pointer; font: inherit; font-size: .85rem; }
+.bs-grid button:hover { background: var(--brand-soft); color: var(--brand); }
+.bs-grid button.today { outline: 1px solid var(--brand); }
+.bs-grid button.on { background: var(--brand); color: #fff; }
+.bs-foot { display: flex; justify-content: space-between; margin-top: 8px; }
