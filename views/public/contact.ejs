@@ -2,10 +2,12 @@
 <section class="section"><div class="container layout-side" style="grid-template-columns:1fr 380px">
   <form class="form-card" method="post" action="/contact" novalidate>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <% if (errors._form) { %><div class="alert alert-error"><%- icon('alert') %><span><%= errors._form %></span></div><% } %>
     <div class="form-grid">
       <% const fields = [{ name: 'name', label: ['नाम', 'Name'], required: true }, { name: 'phone', label: ['फोन', 'Phone'], type: 'tel' }, { name: 'email', label: ['इमेल', 'Email'], type: 'email', wide: true }, { name: 'subject', label: ['विषय', 'Subject'], required: true, wide: true }, { name: 'message', label: ['सन्देश', 'Message'], type: 'textarea', rows: 6, required: true }]; %>
       <% fields.forEach(fl => { %><%- include('../partials/field', { field: fl, values, errors }) %><% }) %>
     </div>
+    <%- include('../partials/turnstile') %>
     <div class="form-actions"><button class="btn btn-primary btn-lg"><%= t('पठाउनुहोस्', 'Send message') %></button></div>
   </form>
   <aside class="stack">

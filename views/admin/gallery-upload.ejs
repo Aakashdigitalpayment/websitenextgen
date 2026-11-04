@@ -1,0 +1,42 @@
+<div class="content-head">
+  <h1><%= title %></h1>
+  <div class="flex gap-1"><a class="btn btn-outline btn-sm" href="/admin/r/gallery"><%- icon('image') %><%= t('सबै मिडिया', 'All media') %></a><a class="btn btn-outline btn-sm" href="/admin/r/gallery_albums/new"><%- icon('plus') %><%= t('नयाँ एल्बम', 'New album') %></a></div>
+</div>
+<% if (error) { %><div class="alert alert-error"><%- icon('alert') %><span><%= error %></span></div><% } %>
+<% if (!albums.length) { %><div class="alert alert-warn"><%- icon('alert') %><span><%= t('पहिले एल्बम बनाउनुहोस्।', 'Create an album first.') %> <a href="/admin/r/gallery_albums/new"><%= t('एल्बम थप्नुहोस्', 'Add album') %></a></span></div><% } %>
+<% const albumSelect = id => `<select class="select" name="album_id" id="${id}" required><option value="">— ${t('एल्बम छान्नुहोस्', 'choose album')} —</option>${albums.map(a => `<option value="${a.id}">${util.escapeHtml(f(a, 'name'))}</option>`).join('')}</select>`; %>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">
+  <form class="form-card" method="post" action="/admin/gallery/upload?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3><%- icon('image') %> <%= t('धेरै फोटो एकैपटक', 'Upload several photos') %></h3>
+    <div class="stack">
+      <div class="field"><label for="g_album"><%= t('एल्बम', 'Album') %> *</label><%- albumSelect('g_album') %></div>
+      <div class="field"><label for="g_files"><%= t('फोटोहरू (बढीमा ३०, प्रति फोटो १०MB)', 'Photos (up to 30, 10 MB each)') %> *</label><input class="input" type="file" id="g_files" name="images" accept="image/png,image/jpeg,image/webp,image/gif" multiple required></div>
+      <div class="field"><label for="g_tnp"><%= t('शीर्षक (नेपाली, ऐच्छिक)', 'Caption (Nepali, optional)') %></label><input class="input" id="g_tnp" name="title_np" maxlength="200"></div>
+      <div class="field"><label for="g_ten"><%= t('शीर्षक (English, ऐच्छिक)', 'Caption (English, optional)') %></label><input class="input" id="g_ten" name="title" maxlength="200"></div>
+      <label class="choice"><input type="checkbox" name="is_active" value="1" checked> <%= t('सक्रिय', 'Active') %></label>
+      <button class="btn btn-primary"><%- icon('plus') %><%= t('अपलोड गर्नुहोस्', 'Upload') %></button>
+    </div>
+  </form>
+  <form class="form-card" method="post" action="/admin/gallery/video">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3><%- icon('youtube') %> <%= t('YouTube भिडियो', 'YouTube video') %></h3>
+    <div class="stack">
+      <div class="field"><label for="v_album"><%= t('एल्बम', 'Album') %> *</label><%- albumSelect('v_album') %></div>
+      <div class="field"><label for="v_url"><%= t('YouTube लिङ्क', 'YouTube link') %> *</label><input class="input" type="url" id="v_url" name="video_url" required placeholder="https://www.youtube.com/watch?v=…"></div>
+      <div class="field"><label for="v_tnp"><%= t('शीर्षक (नेपाली)', 'Title (Nepali)') %></label><input class="input" id="v_tnp" name="title_np" maxlength="200"></div>
+      <div class="field"><label for="v_ten"><%= t('शीर्षक (English)', 'Title (English)') %></label><input class="input" id="v_ten" name="title" maxlength="200"></div>
+      <label class="choice"><input type="checkbox" name="is_active" value="1" checked> <%= t('सक्रिय', 'Active') %></label>
+      <button class="btn btn-primary"><%- icon('plus') %><%= t('भिडियो थप्नुहोस्', 'Add video') %></button>
+    </div>
+  </form>
+</div>
+<% if (videos.length) { %>
+<h3 class="mt-3"><%= t('भिडियोहरू', 'Videos') %></h3>
+<div class="table-wrap"><table class="table"><tbody><% videos.forEach(v => { %><tr>
+  <td style="width:96px"><% if (v.thumbnail) { %><img class="thumb" style="width:80px" src="<%= v.thumbnail %>" alt=""><% } %></td>
+  <td><div style="font-weight:500"><%= f(v, 'title') || v.video_url %></div><a class="small" href="<%= v.video_url %>" target="_blank" rel="noopener"><%= v.video_url %></a></td>
+  <td><span class="badge <%= v.is_active ? 'badge-ok' : '' %>"><%= v.is_active ? t('सक्रिय', 'Active') : t('निष्क्रिय', 'Hidden') %></span></td>
+  <td><div class="row-actions"><a class="btn btn-ghost btn-sm btn-icon" href="/admin/r/gallery/<%= v.id %>/edit" title="Edit"><%- icon('edit') %></a></div></td>
+</tr><% }) %></tbody></table></div>
+<% } %>

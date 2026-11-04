@@ -1,0 +1,17 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="muted small"><%= t('सदस्य वृद्धि, आवेदन, उपस्थिति र कल्याणको झलक', 'Member growth, applications, attendance and welfare at a glance') %></div></div></div>
+<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+  <% [[t('स्वीकृत सदस्य', 'Approved members'), stats.members], [t('KYC स्वीकृत', 'KYC approved'), stats.kyc], [t('कार्यक्रम उपस्थित', 'Programme attendees'), stats.attend], [t('कल्याण दाबी', 'Welfare claims'), stats.welfare], [t('ऋण आवेदन', 'Loan applications'), stats.loans], [t('खाता आवेदन', 'Account applications'), stats.accounts]].forEach(([l, v]) => { %>
+    <div class="kpi"><div class="l"><%= l %></div><div class="v"><%= num(Number(v).toLocaleString('en-IN')) %></div></div>
+  <% }) %>
+</div>
+<div class="grid analytics-grid">
+  <div class="card"><h3><%= t('नयाँ सदस्य (मासिक, १२ महिना)', 'New members per month (12 months)') %></h3><%- include('../partials/chart', { kind: 'bars', data: growth, label: 'New members' }) %></div>
+  <div class="card"><h3><%= t('कुल सदस्य (संचयी)', 'Total members (cumulative)') %></h3><%- include('../partials/chart', { kind: 'line', data: growth.map(g => ({ label: g.label, value: g.cum })), label: 'Cumulative members' }) %></div>
+  <div class="card"><h3><%= t('मासिक आवेदन (६ महिना)', 'Applications per month (6 months)') %></h3><div class="small faint mb-1">KYC · <%= t('ऋण', 'loan') %> · <%= t('खाता', 'account') %> · <%= t('भेटघाट', 'appointment') %></div><%- include('../partials/chart', { kind: 'bars', data: monthly, label: 'Applications' }) %></div>
+  <div class="card"><h3><%= t('आवेदन प्रकार', 'Applications by type') %></h3><%- include('../partials/chart', { kind: 'hbars', data: appTypes.filter(a => a.value) }) %></div>
+  <div class="card"><h3><%= t('KYC स्थिति', 'KYC status') %></h3><%- include('../partials/chart', { kind: 'hbars', data: kycStatus.map(k => ({ label: statusLabel(k.label), value: k.value })) }) %></div>
+  <div class="card"><h3><%= t('सदस्य स्वीकृति', 'Member approval') %></h3><%- include('../partials/chart', { kind: 'hbars', data: memStatus.map(k => ({ label: statusLabel(k.label), value: k.value })) }) %></div>
+  <div class="card"><h3><%= t('कार्यक्रम उपस्थिति (शीर्ष ८)', 'Programme attendance (top 8)') %></h3><%- include('../partials/chart', { kind: 'hbars', data: attendance }) %></div>
+  <div class="card"><h3><%= t('कल्याण दाबी प्रकार', 'Welfare claims by type') %></h3><%- include('../partials/chart', { kind: 'hbars', data: welfare }) %></div>
+  <div class="card span-2"><h3><%= t('वेबसाइट भ्रमण (३० दिन)', 'Website page views (30 days)') %></h3><%- include('../partials/chart', { kind: 'line', data: visitors, label: 'Page views', height: 140 }) %></div>
+</div>

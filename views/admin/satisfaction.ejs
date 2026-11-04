@@ -1,0 +1,13 @@
+<div class="content-head"><h1><%= title %></h1><a class="btn btn-primary btn-sm" href="/admin/r/satisfaction_links/new"><%- icon('plus') %><%= t('लिङ्क थप्नुहोस्', 'Add link') %></a></div>
+<form class="form-card mb-3" method="post" action="/admin/satisfaction">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <h3><%= t('सार्वजनिक साइटमा तैरने विजेट', 'Floating widget on the public site') %></h3>
+  <p class="muted small"><%= t('सक्रिय गर्दा सबै पृष्ठको कुनामा "सेवा कस्तो लाग्यो?" बटन देखिन्छ, जसमा तलका सक्रिय लिङ्कहरू (जस्तै Google फारम) हुन्छन्।', 'When on, a "How was our service?" button appears in the corner of every page with the active links below (e.g. a Google Form).') %></p>
+  <label class="choice"><input type="checkbox" name="widget_enabled" value="1" <%= enabled ? 'checked' : '' %>> <%= t('विजेट सक्रिय गर्नुहोस्', 'Show the widget') %></label>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button><span class="badge <%= enabled ? 'badge-ok' : '' %>"><%= enabled ? t('अहिले सक्रिय', 'Currently on') : t('अहिले बन्द', 'Currently off') %></span></div>
+</form>
+<% if (!links.length) { %><div class="empty"><%= t('अहिलेसम्म लिङ्क छैन।', 'No links yet.') %> <a href="/admin/r/satisfaction_links/new"><%= t('पहिलो थप्नुहोस्', 'Add the first one') %></a></div><% } else { %>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('शीर्षक', 'Title') %></th><th>URL</th><th></th><th></th></tr></thead><tbody>
+  <% links.forEach(l => { %><tr><td><%= f(l, 'title') %></td><td class="small"><a href="<%= l.url %>" target="_blank" rel="noopener"><%= util.excerpt(l.url, 60) %></a></td><td><span class="badge <%= l.is_active ? 'badge-ok' : '' %>"><%= l.is_active ? t('सक्रिय', 'Active') : t('निष्क्रिय', 'Hidden') %></span></td><td><a class="btn btn-ghost btn-sm btn-icon" href="/admin/r/satisfaction_links/<%= l.id %>/edit"><%- icon('edit') %></a></td></tr><% }) %>
+</tbody></table></div>
+<% } %>

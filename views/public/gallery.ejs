@@ -2,5 +2,8 @@
 <section class="section"><div class="container">
   <% if (albums.length) { %><div class="tabs"><a class="tab <%= !album ? 'active' : '' %>" href="/gallery"><%= t('सबै', 'All') %></a><% albums.forEach(a => { %><a class="tab <%= album === a.id ? 'active' : '' %>" href="?album=<%= a.id %>"><%= f(a, 'name') %></a><% }) %></div><% } %>
   <% if (!images.length) { %><div class="empty"><%= t('फोटो छैन।', 'No photos yet.') %></div><% } %>
-  <div class="gallery"><% images.forEach(g => { %><a href="<%= mediaUrl(g.image) %>" target="_blank" rel="noopener" title="<%= f(g, 'title') %>"><img src="<%= mediaUrl(g.image) %>" alt="<%= f(g, 'title') %>" loading="lazy"></a><% }) %></div>
+  <div class="gallery"><% images.forEach(g => { const isVideo = g.media_type === 'video' && /^https:\/\//i.test(g.video_url || ''); %>
+    <% if (isVideo) { %><a class="video-tile" href="<%= g.video_url %>" target="_blank" rel="noopener" title="<%= f(g, 'title') %>"><% if (g.thumbnail) { %><img src="<%= g.thumbnail %>" alt="<%= f(g, 'title') %>" loading="lazy"><% } %><span class="play" aria-hidden="true">▶</span><span class="sr-only"><%= t('भिडियो', 'Video') %></span></a>
+    <% } else if (g.image) { %><a href="<%= mediaUrl(g.image) %>" target="_blank" rel="noopener" title="<%= f(g, 'title') %>"><img src="<%= mediaUrl(g.image) %>" alt="<%= f(g, 'title') %>" loading="lazy"></a><% } %>
+  <% }) %></div>
 </div></section>

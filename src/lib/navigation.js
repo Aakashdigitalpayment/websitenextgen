@@ -10,9 +10,10 @@ async function build() {
   const hit = cache.get(schema);
   if (hit && Date.now() - hit.at < TTL) return hit.data;
 
-  const [committees, pages] = await Promise.all([
+  const [committees, pages, teamMenus] = await Promise.all([
     db.many('SELECT id, name, name_np FROM committee_types WHERE is_active = 1 AND show_in_navbar = 1 ORDER BY display_order, id'),
     db.many(`SELECT slug, title, title_np, title_en, menu_position FROM pages WHERE is_active = 1 AND show_in_menu = 1 ORDER BY menu_order, id`),
+    require('./team').navCategories().catch(() => []),
   ]);
   const pageLinks = pos => pages.filter(p => (p.menu_position || 'more') === pos)
     .map(p => ({ href: '/page/' + encodeURIComponent(p.slug), label: [p.title_np || p.title, p.title_en || p.title] }));
@@ -25,6 +26,7 @@ async function build() {
       { href: '/message/chairman', label: ['अध्यक्षको सन्देश', "Chairperson's message"] },
       { href: '/message/ceo', label: ['प्रमुख कार्यकारीको सन्देश', "CEO's message"] },
       { href: '/team', label: ['कर्मचारी', 'Our team'] },
+      ...teamMenus.map(m => ({ href: '/team?menu=' + encodeURIComponent(m.slug), label: [m.name_np || m.name_en, m.name_en || m.name_np] })),
       ...committees.map(c => ({ href: '/committees/' + c.id, label: [c.name_np || c.name, c.name || c.name_np] })),
       { href: '/institutional-profile', label: ['संस्थागत विवरण', 'Institutional profile'] },
       { href: '/reports', label: ['प्रतिवेदन', 'Reports'] },

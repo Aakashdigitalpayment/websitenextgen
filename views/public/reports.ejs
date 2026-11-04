@@ -1,9 +1,23 @@
 <%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
 <section class="section"><div class="container">
-  <% if (locked) { %><div class="alert alert-info"><%- icon('info') %><span><%= t(num(locked) + ' प्रतिवेदन सदस्यका लागि मात्र। ', num(locked) + ' reports are for members only. ') %><a href="/member/login?next=/reports"><%= t('लगइन गर्नुहोस्', 'Log in') %></a></span></div><% } %>
+  <% if (locked) { %>
+  <div class="card mb-3">
+    <div class="flex gap-1 items-center wrap" style="justify-content:space-between">
+      <div><b style="font-weight:600"><%- icon('shield') %> <%= t(num(locked) + ' प्रतिवेदन सदस्यका लागि मात्र', num(locked) + ' reports are for members only') %></b>
+        <div class="small muted"><%= t('सदस्य लगइन गर्नुहोस् वा सदस्यता नम्बर राखेर खोल्नुहोस्।', 'Log in as a member or unlock with your membership number.') %></div></div>
+      <a class="btn btn-outline btn-sm" href="/member/login?next=/reports"><%- icon('user') %><%= t('लगइन', 'Log in') %></a>
+    </div>
+    <form class="flex gap-1 wrap mt-2" method="post" action="/reports/unlock">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input class="input" name="membership_no" required maxlength="50" autocomplete="off" placeholder="<%= t('सदस्यता नम्बर', 'Membership number') %>" aria-label="<%= t('सदस्यता नम्बर', 'Membership number') %>" style="max-width:260px">
+      <button class="btn btn-primary"><%= t('खोल्नुहोस्', 'Unlock') %></button>
+    </form>
+    <% if (unlockError) { %><div class="field-error mt-1"><%= unlockError %></div><% } %>
+  </div>
+  <% } %>
   <% if (!items.length) { %><div class="empty"><%= t('प्रतिवेदन छैन।', 'No reports yet.') %></div><% } else { %>
   <div class="grid grid-3"><% items.forEach(r => { %>
-    <div class="card"><span class="icon-tile"><%- icon('chart') %></span><div class="card-meta"><%= [r.report_type, r.report_year && num(r.report_year), r.report_quarter].filter(Boolean).join(' · ') %></div><h3><%= f(r, 'title') %></h3>
-      <% if (r.file_path) { %><a class="btn btn-soft btn-sm mt-1" href="<%= mediaUrl(r.file_path) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('हेर्नुहोस्', 'Open') %></a><% } %></div>
+    <div class="card"><span class="icon-tile"><%- icon('chart') %></span><div class="card-meta"><%= [r.report_type, r.report_year && num(r.report_year), r.report_quarter].filter(Boolean).join(' · ') %><% if (r.access_level === 'member') { %> · <span class="badge"><%= t('सदस्य', 'Members') %></span><% } %></div><h3><%= f(r, 'title') %></h3>
+      <% if (r.file_path) { %><a class="btn btn-soft btn-sm mt-1" href="/reports/<%= r.id %>/file" target="_blank" rel="noopener"><%- icon('download') %><%= t('हेर्नुहोस्', 'Open') %></a><% } %></div>
   <% }) %></div><% } %>
 </div></section>

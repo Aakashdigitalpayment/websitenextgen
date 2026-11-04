@@ -92,6 +92,9 @@ router.use((req, res, next) => {
   return res.status(403).render('admin/denied', { title: 'Change password first' });
 });
 
+// custom roles (per-section matrix) + superadmin menu-group hiding
+router.use(require('../lib/admin-perms').middleware);
+
 // sidebar badge counts (pending items per inbox)
 router.use(ah(async (req, res, next) => {
   if (req.method !== 'GET') return next();
@@ -135,7 +138,8 @@ async function resourceFields(r) {
 async function refOptions(fields) {
   const out = {};
   for (const f of fields) {
-    if (f.options) out[f.name] = f.options;
+    if (f.optionsFn) out[f.name] = await f.optionsFn();
+    else if (f.options) out[f.name] = f.options;
     else if (f.ref) {
       const cols = await db.columns(f.ref.table);
       const label = cols.has(f.ref.label) ? f.ref.label : [...cols.keys()].find(c => /name|title/.test(c)) || 'id';
@@ -249,6 +253,7 @@ async function saveResource(req, res, existing) {
     const clean = await db.pick(r.table, data);
     const row = existing ? await db.update(r.table, existing.id, clean) : await db.insert(r.table, clean);
     if (existing) for (const f of r.fileFields) if (clean[f.name] !== undefined && existing[f.name] && existing[f.name] !== clean[f.name]) remove(req, existing[f.name]);
+    if (r.afterSave) await r.afterSave(row, req);
     await auth.audit(req, existing ? 'update' : 'create', r.table, row.id, `${r.title[1]} #${row.id}`);
     settings.invalidate(); navigation.invalidate();
     flash(req, 'success', res.locals.t('सुरक्षित गरियो।', 'Saved.'));
@@ -262,6 +267,27 @@ async function saveResource(req, res, existing) {
 }
 
 router.post('/r/:resource', getResource, resourceUpload, ah((req, res) => saveResource(req, res, null)));
+// bulk status actions on list pages (resources with bulk: true)
+router.post('/r/:resource/bulk', getResource, ah(async (req, res) => {
+  const r = req.resource;
+  const ids = [].concat(req.body.ids || []).map(x => util.int(x)).filter(x => x > 0).slice(0, 500);
+  const action = String(req.body.action || '');
+  const cols = await db.columns(r.table);
+  if (!r.bulk || !ids.length || !['activate', 'deactivate', 'delete'].includes(action)) {
+    flash(req, 'error', res.locals.t('कुनै रेकर्ड वा कार्य छानिएन।', 'Select records and an action.'));
+    return res.redirect(`/admin/r/${r.key}`);
+  }
+  if (action === 'delete') {
+    if (r.softDelete && cols.has('deleted_at')) await db.query(`UPDATE ${r.table} SET deleted_at = now() WHERE id = ANY($1::int[])`, [ids]);
+    else for (const row of await db.many(`DELETE FROM ${r.table} WHERE id = ANY($1::int[]) RETURNING *`, [ids])) for (const f of r.fileFields) remove(req, row[f.name]);
+  } else if (cols.has('is_active')) {
+    await db.query(`UPDATE ${r.table} SET is_active = $1 WHERE id = ANY($2::int[])`, [action === 'activate' ? 1 : 0, ids]);
+  }
+  await auth.audit(req, 'bulk_' + action, r.table, null, `${r.title[1]}: ${action} ${ids.length} (#${ids.join(', #')})`);
+  navigation.invalidate();
+  flash(req, 'success', res.locals.t(`${ids.length} रेकर्डमा कार्य सम्पन्न भयो।`, `Done for ${ids.length} records.`));
+  res.redirect(`/admin/r/${r.key}`);
+}));
 router.post('/r/:resource/:id', getResource, resourceUpload, ah(async (req, res, next) => {
   const existing = await db.one(`SELECT * FROM ${req.resource.table} WHERE id = $1`, [util.int(req.params.id)]);
   if (!existing) return next();
@@ -428,6 +454,7 @@ router.post('/domains', requireAdmin('superadmin'), ah(async (req, res) => {
   res.redirect('/admin/domains');
 }));
 router.use('/', require('./admin-system'));
+router.use('/', require('./admin-tools'));
 
 // ---------------------------------------------------------------- members
 router.get('/members', requireAdmin('staff'), ah(async (req, res) => {
@@ -584,6 +611,7 @@ const SETTING_GROUPS = {
   general: ['सामान्य', 'General'], contact: ['सम्पर्क', 'Contact'], about: ['परिचय', 'About'],
   social: ['सामाजिक सञ्जाल', 'Social'], apps: ['एप/बैंकिङ', 'Apps'], seo: ['SEO', 'SEO'],
   notify: ['SMS / इमेल', 'SMS / email'], ai: ['AI च्याट', 'AI chat'], oauth: ['Google लगइन', 'Google sign-in'],
+  security: ['स्प्याम सुरक्षा', 'Anti-spam'],
 };
 const SECRET_KEY = /password|api_key|token|secret|private/;
 router.get('/settings', requireAdmin('admin'), ah(async (req, res) => {
@@ -593,7 +621,7 @@ router.get('/settings', requireAdmin('admin'), ah(async (req, res) => {
 
 router.post('/settings', requireAdmin('admin'), (req, res, next) => {
   if (!req.is('multipart/form-data')) return next();
-  const [mw, csrf] = upload('settings', [{ name: 'file_logo', kind: 'image' }, { name: 'file_chairman_photo', kind: 'image' }, { name: 'file_ceo_photo', kind: 'image' }, { name: 'file_history_photo', kind: 'image' }]);
+  const [mw, csrf] = upload('settings', [{ name: 'file_logo', kind: 'image' }, { name: 'file_chairman_photo', kind: 'image' }, { name: 'file_ceo_photo', kind: 'image' }, { name: 'file_history_photo', kind: 'image' }, { name: 'file_seo_og_image', kind: 'image' }]);
   mw(req, res, err => (err ? next(err) : csrf(req, res, next)));
 }, ah(async (req, res) => {
   const rows = await settings.grouped();
@@ -605,6 +633,9 @@ router.post('/settings', requireAdmin('admin'), (req, res, next) => {
     let val = String(v).slice(0, 20000);
     if (SECRET_KEY.test(key) && val === '') continue; // blank = keep existing secret
     if (key === 'primary_color' && !/^#[0-9a-f]{3,8}$/i.test(val)) continue;
+    // accept the whole <meta name="google-site-verification" content="…"> tag or just the code
+    if (key === 'google_site_verification') val = val.replace(/^[\s\S]*content=["']?([^"'\s>]+)[\s\S]*$/i, '$1').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 100);
+    if ((key === 'seo_title' || key === 'seo_title_en') && val.length > 70) val = val.slice(0, 70);
     await settings.set(key, val, known.get(key));
   }
   for (const [field, path] of Object.entries(req.uploaded || {})) {
@@ -644,8 +675,9 @@ router.post('/theme', requireAdmin('admin'), ah(async (req, res) => {
 
 // ---------------------------------------------------------------- admin users (super admin)
 router.get('/users', requireAdmin('superadmin'), ah(async (req, res) => {
-  const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
-  res.render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, errors: {}, values: { role: 'staff' } });
+  const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled, custom_role_id FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
+  const customRoles = await db.many('SELECT id, name FROM admin_roles ORDER BY name');
+  res.render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, customRoles, errors: {}, values: { role: 'staff' } });
 }));
 
 router.post('/users', requireAdmin('superadmin'), ah(async (req, res) => {
@@ -656,10 +688,12 @@ router.post('/users', requireAdmin('superadmin'), ah(async (req, res) => {
   if (!['superadmin', 'admin', 'staff', 'editor'].includes(b.role)) errors.role = 'role';
   if (!Object.keys(errors).length && await db.value('SELECT 1 FROM admin_users WHERE lower(username) = $1', [username])) errors.username = res.locals.t('यो नाम पहिले नै छ', 'Username taken');
   if (Object.keys(errors).length) {
-    const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
-    return res.status(422).render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, errors, values: b });
+    const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled, custom_role_id FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
+    return res.status(422).render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, customRoles: await db.many('SELECT id, name FROM admin_roles ORDER BY name'), errors, values: b });
   }
-  const row = await db.insert('admin_users', { username, password: await auth.hashPassword(b.password), full_name: String(b.full_name || username).slice(0, 100), email: b.email || null, role: b.role, is_active: 1, status: 'active', must_change_password: 1, created_by: req.admin.id });
+  const roleId = b.role !== 'superadmin' ? util.int(b.custom_role_id, 0) : 0;
+  const customRole = roleId ? await db.value('SELECT id FROM admin_roles WHERE id = $1', [roleId]) : null;
+  const row = await db.insert('admin_users', { username, password: await auth.hashPassword(b.password), full_name: String(b.full_name || username).slice(0, 100), email: b.email || null, role: b.role, custom_role_id: customRole || null, is_active: 1, status: 'active', must_change_password: 1, created_by: req.admin.id });
   await auth.audit(req, 'create', 'admin_users', row.id, `Admin user ${username} (${b.role})`);
   flash(req, 'success', res.locals.t('प्रयोगकर्ता थपियो।', 'User added.'));
   res.redirect('/admin/users');
@@ -673,6 +707,10 @@ router.post('/users/:id', requireAdmin('superadmin'), ah(async (req, res) => {
   }
   const action = req.body.action;
   if (action === 'role' && ['superadmin', 'admin', 'staff', 'editor'].includes(req.body.role)) await db.query('UPDATE admin_users SET role = $1 WHERE id = $2', [req.body.role, id]);
+  if (action === 'custom_role') {
+    const rid = util.int(req.body.custom_role_id, 0);
+    await db.query('UPDATE admin_users SET custom_role_id = $1 WHERE id = $2', [rid && (await db.value('SELECT id FROM admin_roles WHERE id = $1', [rid])) ? rid : null, id]);
+  }
   if (action === 'disable') await db.query("UPDATE admin_users SET is_active = 0, status = 'disabled' WHERE id = $1", [id]);
   if (action === 'enable') await db.query("UPDATE admin_users SET is_active = 1, status = 'active' WHERE id = $1", [id]);
   if (action === 'delete') await db.query('UPDATE admin_users SET deleted_at = now(), is_active = 0 WHERE id = $1', [id]);

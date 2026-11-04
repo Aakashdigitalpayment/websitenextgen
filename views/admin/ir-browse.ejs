@@ -1,0 +1,17 @@
+<div class="content-head">
+  <div><h1><%= title %></h1><div class="muted small"><%= t('अधिकार पाएका सदस्यले देख्ने दृश्य। खोलेको कुरा पहुँच लगमा रेकर्ड हुन्छ।', 'What authorised members see. Opening a document is recorded in the access log.') %></div></div>
+  <div class="flex gap-1"><a class="btn btn-outline btn-sm" href="/admin/r/information_room_items"><%- icon('settings') %><%= t('व्यवस्थापन', 'Manage') %></a><a class="btn btn-outline btn-sm" href="/admin/information-room/logs"><%- icon('eye') %><%= t('पहुँच लग', 'Access log') %></a></div>
+</div>
+<% if (cats.length > 1) { %><div class="tabs"><a class="tab <%= !cat ? 'active' : '' %>" href="?"><%= t('सबै', 'All') %></a><% cats.forEach(c => { %><a class="tab <%= cat === c ? 'active' : '' %>" href="?cat=<%= encodeURIComponent(c) %>"><%= c %></a><% }) %></div><% } %>
+<% if (!items.length) { %><div class="empty"><%= t('कुनै सक्रिय कागजात छैन।', 'No active documents.') %></div><% } else { %>
+<div class="grid grid-3"><% items.forEach(it => { %>
+  <div class="card">
+    <span class="badge"><%= it.category %></span>
+    <h3 class="mt-1"><%= f(it, 'title') %></h3>
+    <div class="small faint"><%= [it.meeting_date && bsDate(it.meeting_date), it.reference_no].filter(Boolean).join(' · ') %></div>
+    <% if (it.description_np || it.description) { %><p class="small muted"><%= util.excerpt(f(it, 'description'), 140) %></p><% } %>
+    <div class="flex gap-1 mt-1"><a class="btn btn-soft btn-sm" href="/admin/information-room/view/<%= it.id %>" target="_blank" rel="noopener"><%- icon('eye') %><%= t('हेर्नुहोस्', 'Open') %></a>
+      <span class="badge <%= it.allow_download ? 'badge-ok' : '' %>"><%= it.allow_download ? t('डाउनलोड अनुमति', 'Download allowed') : t('हेर्न मात्र', 'View only') %></span></div>
+  </div>
+<% }) %></div>
+<% } %>

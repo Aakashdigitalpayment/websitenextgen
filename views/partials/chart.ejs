@@ -1,0 +1,34 @@
+<%
+/* Dependency-free chart. kind: 'bars' (vertical SVG columns), 'line' (SVG line + area), 'hbars' (CSS rows).
+   data: [{ label, value }]. Hover: native <title> tooltips; values also in an accessible table. */
+const rows = (locals.data || []).map(d => ({ label: String(d.label), value: Number(d.value) || 0 }));
+const maxV = Math.max(1, ...rows.map(r => r.value));
+const kind = locals.kind || 'bars';
+const W = 600, H = locals.height || 160, PAD = 6;
+const fmt = v => num(Number(v).toLocaleString('en-IN'));
+%>
+<% if (!rows.length || rows.every(r => !r.value)) { %>
+  <div class="muted small" style="padding:24px 0;text-align:center"><%= t('तथ्याङ्क छैन', 'No data yet') %></div>
+<% } else if (kind === 'hbars') { %>
+  <div class="hbars" role="list">
+    <% rows.forEach(r => { %><div class="hbar" role="listitem" title="<%= r.label %>: <%= r.value %>">
+      <span class="hbar-l"><%= r.label %></span>
+      <span class="hbar-track"><span class="hbar-fill" style="width:<%= Math.max(1, Math.round(r.value / maxV * 100)) %>%"></span></span>
+      <span class="hbar-v"><%= fmt(r.value) %></span>
+    </div><% }) %>
+  </div>
+<% } else { const n = rows.length, step = (W - PAD * 2) / n, bw = Math.max(4, step - 4); const y = v => H - 18 - (v / maxV) * (H - 30); %>
+  <svg class="chart-svg" viewBox="0 0 <%= W %> <%= H %>" role="img" aria-label="<%= locals.label || '' %>">
+    <% [0.5, 1].forEach(f => { %><line x1="0" x2="<%= W %>" y1="<%= y(maxV * f) %>" y2="<%= y(maxV * f) %>" class="chart-grid"/><text x="<%= W - 2 %>" y="<%= y(maxV * f) - 3 %>" text-anchor="end" class="chart-axis"><%= fmt(Math.round(maxV * f)) %></text><% }) %>
+    <line x1="0" x2="<%= W %>" y1="<%= H - 18 %>" y2="<%= H - 18 %>" class="chart-base"/>
+    <% if (kind === 'line') { const pts = rows.map((r, i) => [PAD + step * i + step / 2, y(r.value)]); %>
+      <path d="M<%= pts[0][0] %>,<%= H - 18 %> L<%= pts.map(p => p.join(',')).join(' L') %> L<%= pts[pts.length - 1][0] %>,<%= H - 18 %> Z" class="chart-area"/>
+      <polyline points="<%= pts.map(p => p.join(',')).join(' ') %>" class="chart-line"/>
+      <% pts.forEach((p, i) => { %><g class="chart-hit"><rect x="<%= p[0] - step / 2 %>" y="0" width="<%= step %>" height="<%= H - 18 %>" fill="transparent"/><circle cx="<%= p[0] %>" cy="<%= p[1] %>" r="4" class="chart-dot"/><title><%= rows[i].label %>: <%= rows[i].value %></title></g><% }) %>
+    <% } else { %>
+      <% rows.forEach((r, i) => { const x = PAD + step * i + (step - bw) / 2, top = y(r.value); %><g class="chart-hit"><rect x="<%= PAD + step * i %>" y="0" width="<%= step %>" height="<%= H - 18 %>" fill="transparent"/><rect x="<%= x %>" y="<%= top %>" width="<%= bw %>" height="<%= Math.max(1, H - 18 - top) %>" rx="3" class="chart-bar"/><title><%= r.label %>: <%= r.value %></title></g><% }) %>
+    <% } %>
+    <% const every = Math.ceil(n / 8); rows.forEach((r, i) => { if (i % every && i !== n - 1) return; %><text x="<%= PAD + step * i + step / 2 %>" y="<%= H - 4 %>" text-anchor="middle" class="chart-axis"><%= r.label %></text><% }) %>
+  </svg>
+<% } %>
+<% if (rows.length) { %><details class="chart-table small"><summary><%= t('तालिका', 'Table') %></summary><table class="table"><tbody><% rows.forEach(r => { %><tr><td><%= r.label %></td><td class="text-right"><%= fmt(r.value) %></td></tr><% }) %></tbody></table></details><% } %>

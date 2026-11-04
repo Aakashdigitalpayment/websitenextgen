@@ -12,8 +12,32 @@ const exchange = require('../lib/exchange-rate');
 const notify = require('../lib/notify');
 const aiChat = require('../lib/ai-chat');
 const notifyLater = fn => require('../lib/notify').later(fn);
+const seo = require('../lib/seo');
+const antispam = require('../lib/antispam');
+const memberAccess = require('../lib/member-access');
+const teamLib = require('../lib/team');
 
 const router = express.Router();
+router.use(seo.middleware);
+
+// floating widgets in the footer: satisfaction links (when enabled) + useful links flagged is_popup
+const widgetCache = new Map();
+router.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  const schema = db.currentSchema();
+  const hit = widgetCache.get(schema);
+  if (hit && Date.now() - hit.at < 30_000) { res.locals.floatWidgets = hit.data; return next(); }
+  Promise.all([
+    res.locals.settings.satisfaction_widget_enabled === '1' ? db.many('SELECT title, title_en, url FROM satisfaction_links WHERE is_active = 1 ORDER BY display_order, id LIMIT 6') : [],
+    db.many('SELECT title, title_np, url FROM useful_links WHERE is_active = 1 AND is_popup = 1 ORDER BY display_order, id LIMIT 8'),
+  ]).then(([satisfaction, useful]) => {
+    const ok = l => /^(https?:\/\/|\/(?!\/))/i.test(l.url || '');
+    const data = { satisfaction: satisfaction.filter(ok), useful: useful.filter(ok) };
+    widgetCache.set(schema, { at: Date.now(), data });
+    res.locals.floatWidgets = data;
+    next();
+  }).catch(next);
+});
 
 // daily visitor/page-view counter for the admin dashboard (no personal data stored)
 router.use((req, res, next) => {
@@ -73,15 +97,22 @@ router.get('/vision-mission', (req, res) => {
   res.render('public/vision', { title: t('दृष्टिकोण र लक्ष्य', 'Vision & mission'), blocks });
 });
 
+// leadership message: settings first (name / photo / designation / title / message, NP + EN), then the team member flagged is_chairman / is_ceo
 router.get('/message/:who', ah(async (req, res, next) => {
-  const s = res.locals.settings, t = res.locals.t;
+  const s = res.locals.settings, en = req.lang === 'en';
   const who = req.params.who;
   if (who !== 'chairman' && who !== 'ceo') return next();
-  const person = await db.one(`SELECT * FROM team_members WHERE ${ACTIVE} AND category = $1 ORDER BY display_order, id LIMIT 1`, [who === 'chairman' ? 'board' : 'management']);
+  const get = (k, dflt = '') => String(s[k] || '').trim() || dflt;
+  const pick = (np, enKey) => (en ? get(enKey) || get(np) : get(np) || get(enKey));
+  const person = await db.one(`SELECT * FROM team_members WHERE ${ACTIVE} AND ${who === 'chairman' ? 'is_chairman' : 'is_ceo'} = 1 ORDER BY display_order, id LIMIT 1`);
+  const designation = en ? get(`${who}_designation_en`, who === 'chairman' ? 'Chairman' : 'Chief Executive Officer') : get(`${who}_designation_np`, who === 'chairman' ? 'अध्यक्ष' : 'प्रमुख कार्यकारी अधिकृत');
+  const name = pick(`${who}_name`, `${who}_name_en`) || (person ? res.locals.f(person, 'name') : '') || designation;
+  const message = (en ? get(`${who}_message_en`) || get(`${who}_message_np`) || get(`${who}_message`) : get(`${who}_message_np`) || get(`${who}_message`) || get(`${who}_message_en`));
+  const title = pick(`${who}_message_title_np`, `${who}_message_title_en`) || (en ? `${designation}'s message` : `${designation}को सन्देश`);
   res.render('public/message', {
-    title: who === 'chairman' ? t('अध्यक्षको सन्देश', "Chairperson's message") : t('प्रमुख कार्यकारी अधिकृतको सन्देश', "CEO's message"),
-    message: s[`${who}_message_np`] || s[`${who}_message`] || '',
-    photo: s[`${who}_photo`] || person?.photo, name: s[`${who}_name`] || person?.name, role: s[`${who}_designation_np`] || person?.position,
+    title, description: en ? `Message from the ${designation} of our cooperative.` : `हाम्रो सहकारीका ${designation}को सन्देश।`,
+    message, name: name !== designation ? name : '', role: designation, photo: get(`${who}_photo`) || person?.photo || '', ogImage: get(`${who}_photo`) || person?.photo || null,
+    breadcrumbs: [[en ? 'About' : 'हाम्रो बारेमा', '/about']],
   });
 }));
 
@@ -125,13 +156,10 @@ router.get('/partner-facilities', ah(async (req, res) => {
 
 // ---------------------------------------------------------------- people
 router.get('/team', ah(async (req, res) => {
-  const people = await db.many(`SELECT * FROM team_members WHERE ${ACTIVE} ORDER BY CASE category WHEN 'board' THEN 1 WHEN 'management' THEN 2 ELSE 3 END, display_order, id`);
   const t = res.locals.t;
-  const groups = [
-    ['board', t('सञ्चालक समिति', 'Board')], ['management', t('व्यवस्थापन', 'Management')], ['staff', t('कर्मचारी', 'Staff')],
-  ].map(([k, label]) => ({ label, people: people.filter(p => p.category === k) })).filter(g => g.people.length);
-  const officers = people.filter(p => p.is_information_officer || p.is_grievance_officer);
-  res.render('public/team', { title: t('हाम्रो टिम', 'Our team'), groups, officers });
+  const data = await teamLib.load();
+  const { cat, sections, officers } = teamLib.sections(data, typeof req.query.menu === 'string' ? req.query.menu : '');
+  res.render('public/team', { title: cat ? res.locals.f(cat, 'name') : t('हाम्रो टिम', 'Our team'), cat, sections, officers, menus: data.cats.filter(c => Number(c.show_in_nav)), breadcrumbs: [[t('हाम्रो बारेमा', 'About'), '/about']] });
 }));
 
 router.get('/committees', ah(async (req, res) => {
@@ -177,7 +205,9 @@ router.get('/news/:id', ah(async (req, res, next) => {
   const item = await db.one(`SELECT * FROM news WHERE id = $1 AND ${ACTIVE} AND ${NOT_DELETED}`, [util.int(req.params.id)]);
   if (!item) return next();
   const more = await db.many(`SELECT id, title, title_np, image, created_at FROM news WHERE ${ACTIVE} AND ${NOT_DELETED} AND id <> $1 ORDER BY created_at DESC LIMIT 4`, [item.id]);
-  res.render('public/article', { title: res.locals.f(item, 'title'), item, content: res.locals.f(item, 'content'), image: item.image, date: item.created_at, more, base: '/news', crumb: res.locals.t('समाचार', 'News') });
+  const content = res.locals.f(item, 'content');
+  res.locals.jsonLd.push(seo.newsArticle(req, res.locals.settings, { headline: res.locals.f(item, 'title'), desc: util.excerpt(content, 158), url: res.locals.seo.canonical, date: item.created_at, image: item.image }, req.lang === 'en'));
+  res.render('public/article', { title: res.locals.f(item, 'title'), description: util.excerpt(content, 158), ogImage: item.image || null, breadcrumbs: [[res.locals.t('समाचार', 'News'), '/news']], item, content, image: item.image, date: item.created_at, more, base: '/news', crumb: res.locals.t('समाचार', 'News') });
 }));
 
 router.get('/notices', ah(async (req, res) => {
@@ -189,7 +219,9 @@ router.get('/notices/:id', ah(async (req, res, next) => {
   const item = await db.one(`SELECT * FROM notices WHERE id = $1 AND ${ACTIVE} AND ${NOT_DELETED}`, [util.int(req.params.id)]);
   if (!item) return next();
   const more = await db.many(`SELECT id, title, title_np, notice_date AS created_at FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} AND id <> $1 ORDER BY notice_date DESC NULLS LAST LIMIT 5`, [item.id]);
-  res.render('public/article', { title: res.locals.f(item, 'title'), item, content: res.locals.f(item, 'content'), image: item.popup_image, attachment: item.attachment, date: item.notice_date || item.created_at, more, base: '/notices', crumb: res.locals.t('सूचना', 'Notices') });
+  const content = res.locals.f(item, 'content');
+  res.locals.jsonLd.push(seo.newsArticle(req, res.locals.settings, { headline: res.locals.f(item, 'title'), desc: util.excerpt(content, 158), url: res.locals.seo.canonical, date: item.notice_date || item.created_at, image: item.popup_image }, req.lang === 'en'));
+  res.render('public/article', { title: res.locals.f(item, 'title'), description: util.excerpt(content, 158), ogImage: item.popup_image || null, breadcrumbs: [[res.locals.t('सूचना', 'Notices'), '/notices']], item, content, image: item.popup_image, attachment: item.attachment, date: item.notice_date || item.created_at, more, base: '/notices', crumb: res.locals.t('सूचना', 'Notices') });
 }));
 
 // ---------------------------------------------------------------- media & documents
@@ -215,11 +247,46 @@ router.get('/downloads/:id/file', ah(async (req, res, next) => {
   res.redirect(require('../lib/uploads').mediaUrl(item.file_path));
 }));
 
+// reports: files are served only through /reports/:id/file; members-only ones need a member / staff login or a membership-number unlock
 router.get('/reports', ah(async (req, res) => {
-  const memberOk = !!req.member;
-  const items = await db.many(`SELECT * FROM reports WHERE ${ACTIVE} ${memberOk ? '' : "AND access_level = 'none'"} ORDER BY report_year DESC NULLS LAST, display_order, id DESC`);
+  const memberOk = memberAccess.unlocked(req);
+  const items = await db.many(`SELECT * FROM reports WHERE ${ACTIVE} ${memberOk ? '' : "AND COALESCE(access_level, 'none') <> 'member'"} ORDER BY report_year DESC NULLS LAST, display_order, id DESC`);
   const locked = memberOk ? 0 : await db.value(`SELECT count(*) FROM reports WHERE ${ACTIVE} AND access_level = 'member'`);
-  res.render('public/reports', { title: res.locals.t('प्रतिवेदनहरू', 'Reports'), items, locked });
+  res.render('public/reports', { title: res.locals.t('प्रतिवेदनहरू', 'Reports'), items, locked, unlockError: req.session.unlockError || null, breadcrumbs: [[res.locals.t('हाम्रो बारेमा', 'About'), '/about']] });
+  delete req.session.unlockError;
+}));
+
+const unlockLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip),
+  handler: (req, res) => { req.session.unlockError = res.locals.t('धेरै पटक प्रयास भयो। केही समयपछि फेरि प्रयास गर्नुहोस्।', 'Too many attempts. Please try again later.'); res.redirect('/reports'); } });
+router.post('/reports/unlock', unlockLimiter, ah(async (req, res) => {
+  const r = await memberAccess.tryUnlock(req, req.body.membership_no);
+  if (r.ok) flash(req, 'success', res.locals.t('सदस्य प्रतिवेदन खुला भयो।', 'Members-only reports unlocked.'));
+  else req.session.unlockError = res.locals.t(...r.error);
+  res.redirect('/reports');
+}));
+
+router.get('/reports/:id/file', ah(async (req, res, next) => {
+  const item = await db.one('SELECT * FROM reports WHERE id = $1', [util.int(req.params.id)]);
+  if (!item || !item.file_path || (!Number(item.is_active) && !req.admin)) return next();
+  const level = memberAccess.normalizeLevel(item.access_level);
+  if (!memberAccess.canOpen(req, level)) {
+    return res.status(403).render('public/error', { title: res.locals.t('सदस्यका लागि मात्र', 'Members only'), code: 403, message: res.locals.t('यो प्रतिवेदन सदस्यका लागि मात्र हो। लगइन गर्नुहोस् वा सदस्यता नम्बरले खोल्नुहोस्।', 'This report is for members only. Log in or unlock it with your membership number.') });
+  }
+  let stored = item.file_path;
+  // legacy public path of a members-only report: move it into private storage on first access
+  const rel = String(stored).replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+  if (level === 'member' && !rel.startsWith('_private/') && !/^https?:/i.test(rel)) {
+    const fs = require('fs'), path = require('path'), up = require('../lib/uploads');
+    const from = up.resolveStored(req, rel), to = up.resolveStored(req, '_private/' + rel);
+    if (from && to && fs.existsSync(from)) {
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.renameSync(from, to);
+      stored = '_private/' + rel;
+      await db.query('UPDATE reports SET file_path = $1 WHERE id = $2', [stored, item.id]);
+    }
+  }
+  if (/^https?:/i.test(stored)) return level === 'member' ? next() : res.redirect(stored);
+  require('../lib/uploads').sendStored(req, res, next, stored);
 }));
 
 router.get('/institutional-profile', ah(async (req, res) => {
@@ -237,6 +304,8 @@ router.get('/important-links', ah(async (req, res) => {
 
 router.get('/faqs', ah(async (req, res) => {
   const faqs = await db.many(`SELECT * FROM faqs WHERE ${ACTIVE} ORDER BY category, display_order, id`);
+  const ld = seo.faqPage(faqs, req.lang === 'en');
+  if (ld) res.locals.jsonLd.push(ld);
   res.render('public/faqs', { title: res.locals.t('बारम्बार सोधिने प्रश्नहरू', 'Frequently asked questions'), faqs });
 }));
 
@@ -334,7 +403,10 @@ router.get('/contact', ah(async (req, res) => {
 router.post('/contact', submitLimiter, ah(async (req, res) => {
   const mod = modules.contact;
   if (isBot(req)) { flash(req, 'success', res.locals.t('सन्देश पठाइयो।', 'Message sent.')); return res.redirect('/contact'); }
+  const block = await antispam.check(req, res.locals.settings, [req.body.subject, req.body.message, req.body.name]);
+  if (block && block.silent) { flash(req, 'success', res.locals.t('सन्देश पठाइयो।', 'Message sent.')); return res.redirect('/contact'); }
   const { data, errors } = forms.validate(mod, req.body, {}, {}, req.lang);
+  if (block) errors._form = res.locals.t(...block.message);
   if (Object.keys(errors).length) {
     const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
     return res.status(422).render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: req.body, errors });
@@ -375,6 +447,7 @@ router.get('/apply/:key', ah(async (req, res, next) => {
   await renderForm(req, res, mod);
 }));
 
+const SPAM_SCAN = ['grievance', 'feedback', 'appointment', 'survey'];
 router.post('/apply/:key', submitLimiter, (req, res, next) => {
   const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   if (!mod || mod.key === 'contact') return next();
@@ -383,8 +456,12 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
   const step = err => (err ? next(err) : i < chain.length ? chain[i++](req, res, step) : handle());
   const handle = () => (async () => {
     if (isBot(req)) return res.redirect('/');
+    const scan = SPAM_SCAN.includes(mod.key) ? mod.fields.filter(f => f.type === 'textarea' || f.name === 'subject').map(f => req.body[f.name]) : [];
+    const block = await antispam.check(req, res.locals.settings, scan);
+    if (block && block.silent) return res.redirect('/');
     const options = await forms.resolveOptions(mod);
     const { data, errors } = forms.validate(mod, req.body, req.uploaded, options, req.lang);
+    if (block) errors._upload = res.locals.t(...block.message);
     if (req.uploadError) errors._upload = req.uploadError;
     if (Object.keys(errors).length) return renderForm(req, res, mod, req.body, errors, 422);
     const extra = {};
@@ -500,6 +577,11 @@ router.get('/manifest.webmanifest', (req, res) => {
 router.get('/offline', (req, res) => res.render('public/error', { title: res.locals.t('इन्टरनेट छैन', 'You are offline'), code: '', message: res.locals.t('इन्टरनेट जडान जाँच गरेर फेरि प्रयास गर्नुहोस्।', 'Check your connection and try again.') }));
 
 // ---------------------------------------------------------------- SEO
+// landscape share card (1200×630) used as og:image when no seo_og_image is uploaded
+router.get('/share-og.svg', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600').set('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'")
+    .type('image/svg+xml').send(seo.shareCardSvg(req, res.locals.settings, res.locals.siteName, res.locals.brandColor));
+});
 router.get('/robots.txt', (req, res) => {
   res.type('text').send(`User-agent: *\nDisallow: /admin\nDisallow: /member\nSitemap: ${req.protocol}://${req.get('host')}/sitemap.xml\n`);
 });

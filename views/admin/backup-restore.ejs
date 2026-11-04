@@ -1,0 +1,19 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<div class="alert alert-warn"><%- icon('alert') %><span><%= t('पुनर्स्थापनाले तलका तालिकाको हालको सबै डाटा मेटाएर ब्याकअपको डाटा राख्छ। प्रशासक खाता, भूमिका, अडिट लग, पासवर्ड भण्डार र गोप्य सेटिङ परिवर्तन हुँदैनन्। पहिले हालको ब्याकअप डाउनलोड गर्नुहोस्।', 'Restoring replaces ALL current data in the tables below with the backup. Admin accounts, roles, the audit log, the credentials vault and secret settings are kept. Download a fresh backup first.') %></span></div>
+<div class="card mb-3">
+  <h3><%= file.name %></h3>
+  <div class="small muted mb-1"><%= t('निर्यात मिति', 'Exported') %>: <%= check.exportedAt || '—' %> · <%= num(check.plan.length) %> <%= t('तालिका', 'tables') %> · <%= num(check.plan.reduce((a, p) => a + p.rows, 0)) %> <%= t('रेकर्ड', 'rows') %></div>
+  <details><summary class="small"><%= t('तालिका अनुसार', 'Per table') %></summary>
+    <table class="table"><tbody><% check.plan.forEach(p => { %><tr><td><code><%= p.table %></code></td><td class="text-right"><%= num(p.rows) %></td></tr><% }) %>
+    <% check.skipped.forEach(s => { %><tr><td><code><%= s.table %></code> <span class="badge"><%= t('छोडिन्छ', 'kept as is') %></span></td><td class="text-right faint"><%= num(s.rows) %></td></tr><% }) %></tbody></table>
+  </details>
+</div>
+<form class="form-card maxw-md" method="post" action="/admin/backup/restore/confirm">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <h3><%= t('पुष्टि गर्नुहोस्', 'Confirm') %></h3>
+  <div class="stack">
+    <div class="field"><label for="rs_slug"><%= t('पुष्टि गर्न सहकारी कोड लेख्नुहोस्:', 'Type the cooperative code to confirm:') %> <code><%= tenant.slug %></code></label><input class="input" id="rs_slug" name="confirm_slug" autocomplete="off" required></div>
+    <div class="field"><label for="rs_pw"><%= t('तपाईंको पासवर्ड', 'Your password') %></label><input class="input" id="rs_pw" type="password" name="password" autocomplete="current-password" required></div>
+    <div class="flex gap-1"><button class="btn btn-danger" name="action" value="restore" data-confirm="<%= t('हालको डाटा मेटिनेछ। पक्का?', 'Current data will be replaced. Are you sure?') %>"><%= t('पुनर्स्थापना गर्नुहोस्', 'Restore now') %></button><button class="btn btn-ghost" name="action" value="cancel" formnovalidate><%= t('रद्द', 'Cancel') %></button></div>
+  </div>
+</form>
