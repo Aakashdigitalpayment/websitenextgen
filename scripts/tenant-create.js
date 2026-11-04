@@ -4,7 +4,7 @@
  * Create a tenant from the command line.
  *   npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --name-en="Aakash Cooperative" \
  *       --domain=aakash.localhost --domain=www.aakashsaccos.com.np --admin=admin --password=Secret@123 \
- *       [--design=saving_credit|multipurpose|agriculture|women|microfinance] [--empty=1]
+ *       [--design=saving_credit|multipurpose|agriculture|women|microfinance] [--empty=1] [--plan=lite|basic|advance|extra]
  */
 const db = require('../src/db');
 const tenants = require('../src/lib/tenants');
@@ -26,7 +26,7 @@ function args() {
   const t = await tenants.createTenant({
     slug: a.slug, name: a.name, nameEn: a['name-en'], domains: a.domain,
     adminUsername: a.admin || process.env.ADMIN_USERNAME || 'admin', adminPassword: password, contactEmail: a.email,
-    design: a.design || 'saving_credit', starterContent: a.empty !== '1' && a.empty !== 'true',
+    design: a.design || 'saving_credit', starterContent: a.empty !== '1' && a.empty !== 'true', plan: a.plan || 'extra',
   });
   console.log(`✓ tenant "${t.slug}" created in schema ${t.schema_name}`);
   console.log(`  admin login: /admin  user: ${a.admin || process.env.ADMIN_USERNAME || 'admin'}`);

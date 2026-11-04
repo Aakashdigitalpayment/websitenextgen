@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS platform.tenants (
   name         VARCHAR(200) NOT NULL,
   schema_name  VARCHAR(63)  NOT NULL UNIQUE,
   status       VARCHAR(20)  NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
-  plan         VARCHAR(40)  NOT NULL DEFAULT 'standard',
+  plan         VARCHAR(40)  NOT NULL DEFAULT 'extra',
   contact_email VARCHAR(200),
   created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -78,3 +78,11 @@ DO $$ BEGIN
   ALTER TABLE platform.tenant_domains ADD CONSTRAINT tenant_domains_status_chk CHECK (status IN ('pending','active','failed'));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS tenant_domains_one_primary ON platform.tenant_domains (tenant_id) WHERE is_primary;
+
+-- subscription plan per tenant (lite / basic / advance / extra); existing tenants keep every feature
+ALTER TABLE platform.tenants ADD COLUMN IF NOT EXISTS plan VARCHAR(40) NOT NULL DEFAULT 'extra';
+ALTER TABLE platform.tenants ALTER COLUMN plan SET DEFAULT 'extra';
+UPDATE platform.tenants SET plan = 'extra' WHERE plan NOT IN ('lite', 'basic', 'advance', 'extra');
+DO $$ BEGIN
+  ALTER TABLE platform.tenants ADD CONSTRAINT tenants_plan_chk CHECK (plan IN ('lite', 'basic', 'advance', 'extra'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

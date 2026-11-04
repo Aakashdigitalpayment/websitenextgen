@@ -43,6 +43,7 @@
       <% if (lvl >= 3) { %><a class="side-link <%= cur.startsWith('/admin/settings') ? 'active' : '' %>" href="/admin/settings"><%- icon('settings') %><%= t('सेटिङ', 'Settings') %></a>
       <a class="side-link <%= cur.startsWith('/admin/theme') ? 'active' : '' %>" href="/admin/theme"><%- icon('sun') %><%= t('रूप / थिम', 'Theme') %></a>
       <a class="side-link <%= cur.startsWith('/admin/notifications') ? 'active' : '' %>" href="/admin/notifications"><%- icon('bell') %><%= t('SMS/इमेल/Push', 'SMS / email / push') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/plan') ? 'active' : '' %>" href="/admin/plan"><%- icon('layers') %><%= t('सेवा प्लान', 'Service plan') %></a>
       <a class="side-link <%= cur.startsWith('/admin/license') ? 'active' : '' %>" href="/admin/license"><%- icon('award') %><%= t('सेवा नवीकरण', 'Licence') %></a>
       <a class="side-link <%= cur.startsWith('/admin/audit') ? 'active' : '' %>" href="/admin/audit"><%- icon('eye') %><%= t('अडिट लग', 'Audit log') %></a><% } %>
       <% if (lvl >= 4) { %><a class="side-link <%= cur.startsWith('/admin/users') ? 'active' : '' %>" href="/admin/users"><%- icon('shield') %><%= t('प्रशासक', 'Admin users') %></a>

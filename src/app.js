@@ -18,6 +18,7 @@ const nd = require('./lib/nepali-date');
 const { icon } = require('./lib/icons');
 const themes = require('./lib/themes');
 const layouts = require('./lib/layouts');
+const plans = require('./lib/plans');
 const { mediaUrl, tenantDir } = require('./lib/uploads');
 const { statusLabel } = require('./lib/forms');
 const navigation = require('./lib/navigation');
@@ -76,6 +77,9 @@ function createApp() {
       if (!layout || !fs.existsSync(path.join(config.rootDir, 'views', 'layouts', layout + '.ejs'))) return render(view, opts, cb);
       app.render(view, { ...res.locals, ...opts }, (err, body) => {
         if (err) return next(err);
+        if (layout === 'admin' && !cb && res.locals.plan && res.locals.plan.key !== 'extra') {
+          return render('layouts/' + layout, { ...opts, body }, (e, html) => (e ? next(e) : res.send(plans.stripLinks(html, res.locals.plan.key))));
+        }
         render('layouts/' + layout, { ...opts, body }, cb);
       });
     };
@@ -150,7 +154,9 @@ function createApp() {
     } catch (e) { next(e); }
   });
 
-  // integration API (API keys, no cookies/CSRF) — before sessions
+  // integration API (API keys, no cookies/CSRF) — before sessions; Extra Advance plan only
+  app.use('/api/v1', (req, res, next) => (plans.has(req.tenant.plan, 'api') ? next()
+    : res.status(403).json({ error: { code: 'plan_required', message: 'The CBS/DMS API is part of the Extra Advance plan.' } })));
   app.use('/api/v1', require('./routes/api-v1'));
 
   // tenant-isolated uploaded files
@@ -192,6 +198,17 @@ function createApp() {
   app.use(require('./lib/license').guard);
   app.use(security.csrf);
 
+  // subscription plan: block features outside the tenant's plan
+  app.use((req, res, next) => {
+    const plan = plans.normalize(req.tenant.plan);
+    res.locals.plan = { key: plan, info: plans.info(plan), has: k => plans.has(plan, k), allows: p => plans.allows(plan, p) };
+    const f = plans.featureFor(req.path);
+    if (!f || plans.has(plan, f.key)) return next();
+    if (req.path.startsWith('/admin')) return next(); // the admin router shows an upgrade page (after login + its locals)
+    if (req.path.startsWith('/api/') || req.xhr || (req.get('accept') || '').includes('application/json')) return res.status(403).json({ error: 'plan_required' });
+    res.status(404).render('public/error', { title: 'Not found', code: 404, message: res.locals.t('तपाईंले खोजेको पृष्ठ भेटिएन।', 'The page you are looking for was not found.') });
+  });
+
   // personal theme (when the cooperative allows it): cookie for everyone, saved on the account when signed in
   app.post('/theme', async (req, res, next) => {
     try {
@@ -230,7 +247,12 @@ function createApp() {
 
   app.use('/admin', require('./routes/admin'));
   app.use('/member', require('./routes/member'));
-  app.use('/', navigation.middleware, require('./routes/public'));
+  const navByPlan = (req, res, next) => {
+    const ok = item => res.locals.plan.allows(item.href || '/');
+    res.locals.nav = (res.locals.nav || []).filter(ok).map(i => (i.children ? { ...i, children: i.children.filter(ok) } : i)).filter(i => !i.children || i.children.length || !i.href || i.href !== '#');
+    next();
+  };
+  app.use('/', navigation.middleware, navByPlan, require('./routes/public'));
 
   // 404
   app.use((req, res) => {

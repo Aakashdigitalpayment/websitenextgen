@@ -141,7 +141,7 @@ const DEFAULT_SETTINGS = [
  * @param {string|null} [o.design='saving_credit'] starter design key (src/lib/starter.js); null = leave the defaults untouched
  * @param {boolean} [o.starterContent=true] also create starter content (services, rates, FAQs, committees, slides…)
  */
-async function createTenant({ slug, name, nameEn = '', domains: domainList = [], adminUsername = 'admin', adminPassword, contactEmail = null, design = 'saving_credit', starterContent = true }) {
+async function createTenant({ slug, name, nameEn = '', domains: domainList = [], adminUsername = 'admin', adminPassword, contactEmail = null, design = 'saving_credit', starterContent = true, plan = 'extra' }) {
   slug = String(slug || '').toLowerCase().trim();
   if (!SLUG_RE.test(slug)) throw new Error('Slug must be 2–40 chars: lowercase letters, digits, underscore; start with a letter');
   if (!name) throw new Error('Name is required');
@@ -152,8 +152,8 @@ async function createTenant({ slug, name, nameEn = '', domains: domainList = [],
   if (exists) throw new Error(`Tenant "${slug}" already exists`);
 
   const tenant = await db.one(
-    `INSERT INTO platform.tenants (slug, name, schema_name, contact_email, cname_target) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [slug, name, schemaName, contactEmail, domainsLib.generateTarget(slug)]);
+    `INSERT INTO platform.tenants (slug, name, schema_name, contact_email, cname_target, plan) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [slug, name, schemaName, contactEmail, domainsLib.generateTarget(slug), require('./plans').isPlan(plan) ? plan : 'extra']);
   try {
     for (const d of domainList.map(normalizeHost).filter(Boolean)) await addDomain(tenant.id, d, { verifyNow: false });
     if (domainList.length) await refreshPrimary(tenant.id);

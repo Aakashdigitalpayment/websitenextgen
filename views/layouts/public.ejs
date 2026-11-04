@@ -61,7 +61,8 @@
           </div>
         <% }) %>
         <div class="header-actions">
-          <% if (locals.member) { %>
+          <% if (locals.plan && !plan.has('member_portal')) { %>
+          <% } else if (locals.member) { %>
             <a class="btn btn-primary btn-sm" href="/member"><%- icon('user') %><span class="btn-text"><%= t('मेरो खाता', 'My account') %></span></a>
           <% } else { %>
             <a class="btn btn-outline btn-sm" href="/member/login"><%- icon('user') %><span class="btn-text"><%= t('सदस्य लगइन', 'Member login') %></span></a>
@@ -97,11 +98,11 @@
         <div>
           <h4><%= t('सेवाहरू', 'Services') %></h4>
           <ul>
-            <li><a href="/apply/account"><%= t('खाता खोल्नुहोस्', 'Open account') %></a></li>
-            <li><a href="/apply/loan"><%= t('ऋण आवेदन', 'Apply for loan') %></a></li>
+            <li <%- locals.plan && !plan.allows("/apply/account") ? "hidden" : "" %>><a href="/apply/account"><%= t('खाता खोल्नुहोस्', 'Open account') %></a></li>
+            <li <%- locals.plan && !plan.allows("/apply/loan") ? "hidden" : "" %>><a href="/apply/loan"><%= t('ऋण आवेदन', 'Apply for loan') %></a></li>
             <li><a href="/interest-rates"><%= t('ब्याजदर', 'Interest rates') %></a></li>
             <li><a href="/emi-calculator"><%= t('EMI क्याल्कुलेटर', 'EMI calculator') %></a></li>
-            <li><a href="/track"><%= t('आवेदनको स्थिति', 'Track application') %></a></li>
+            <li <%- locals.plan && !plan.allows("/track") ? "hidden" : "" %>><a href="/track"><%= t('आवेदनको स्थिति', 'Track application') %></a></li>
           </ul>
         </div>
         <div>
@@ -111,7 +112,7 @@
             <li><a href="/downloads"><%= t('डाउनलोड', 'Downloads') %></a></li>
             <li><a href="/reports"><%= t('प्रतिवेदन', 'Reports') %></a></li>
             <li><a href="/careers"><%= t('रोजगारी', 'Careers') %></a></li>
-            <li><a href="/apply/grievance"><%= t('गुनासो', 'Grievance') %></a></li>
+            <li <%- locals.plan && !plan.allows("/apply/grievance") ? "hidden" : "" %>><a href="/apply/grievance"><%= t('गुनासो', 'Grievance') %></a></li>
             <li><a href="/important-links"><%= t('उपयोगी लिङ्क', 'Useful links') %></a></li>
           </ul>
         </div>
@@ -130,7 +131,7 @@
       </div>
     </div>
   </footer>
-  <% if (settings.ai_enabled === '1' || settings.chat_widget === '1') { %>
+  <% if ((settings.ai_enabled === '1' || settings.chat_widget === '1') && (!locals.plan || plan.has('ai_chat'))) { %>
   <div class="chat" data-chat data-csrf="<%= csrfToken %>" data-lang="<%= lang %>">
     <button class="chat-fab btn btn-primary" data-chat-toggle aria-label="<%= t('सहयोग', 'Help') %>"><%- icon('message', 'icon-lg') %></button>
     <div class="chat-panel" hidden role="dialog" aria-label="<%= t('सहयोगी', 'Assistant') %>">

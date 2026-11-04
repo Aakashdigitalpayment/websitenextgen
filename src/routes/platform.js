@@ -124,6 +124,11 @@ async function domainAction(tenantId, b) {
   const owns = async () => !!(await db.value('SELECT 1 FROM platform.tenant_domains WHERE id = $1 AND tenant_id = $2', [did, tenantId]));
   switch (b.action) {
     case 'add': {
+      const plan = await db.value('SELECT plan FROM platform.tenants WHERE id = $1', [tenantId]);
+      const v = require('../lib/domains').validate(b.domain);
+      if (v.domain && !require('../lib/domains').inOwnZone(v.domain) && !require('../lib/plans').has(plan, 'custom_domain')) {
+        throw new Error('Own domains are part of the Basic plan or higher.');
+      }
       const row = await tenants.addDomain(tenantId, b.domain);
       return row.status === 'active' ? `${row.domain} is active.` : `${row.domain} added — waiting for DNS. ${row.check && row.check.reason ? '(' + row.check.reason + ')' : ''}`;
     }
@@ -157,24 +162,39 @@ router.get('/', ah(async (req, res) => {
     })).catch(() => ({ members: '?', pending: '?', notices: [] }));
     t.license = require('../lib/license').status(t);
   }
-  render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions, designs: require('../lib/starter').list() });
+  render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions, designs: require('../lib/starter').list(), PLANS: require('../lib/plans').PLANS });
 }));
 
 router.post('/tenants', ah(async (req, res) => {
   const b = req.body;
   const domains = String(b.domains || '').split(/[\s,]+/).filter(Boolean);
   if (!domains.length && b.slug) domains.push(`${String(b.slug).toLowerCase()}.${config.baseDomain}`);
+  // own (client) domains are a Basic+ feature; Lite tenants get their platform subdomain + generated target
+  if (!require('../lib/plans').has(b.plan || 'advance', 'custom_domain')) {
+    const dl = require('../lib/domains');
+    for (let i = domains.length - 1; i >= 0; i--) if (!dl.inOwnZone(String(domains[i]).toLowerCase())) domains.splice(i, 1);
+    if (!domains.length && b.slug) domains.push(`${String(b.slug).toLowerCase()}.${config.baseDomain}`);
+  }
   const password = b.admin_password || crypto.randomBytes(9).toString('base64url');
   try {
     const starter = require('../lib/starter');
     const t = await tenants.createTenant({ slug: b.slug, name: b.name, nameEn: b.name_en, domains, adminUsername: b.admin_username || 'admin', adminPassword: password, contactEmail: b.contact_email || null,
-      design: starter.DESIGNS[b.design] ? b.design : 'saving_credit', starterContent: b.starter_content !== '0' });
+      design: starter.DESIGNS[b.design] ? b.design : 'saving_credit', starterContent: b.starter_content !== '0', plan: b.plan });
     flash(req, 'success', `Tenant "${t.slug}" created. Admin login: ${b.admin_username || 'admin'} / ${password} — share it securely; they must change it.`);
     res.redirect('/platform');
   } catch (e) {
     const list = await tenants.list();
-    render(res.status(422), 'tenants', { title: 'Tenants', list, errors: { _: e.message }, values: b, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions, designs: require('../lib/starter').list() });
+    render(res.status(422), 'tenants', { title: 'Tenants', list, errors: { _: e.message }, values: b, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions, designs: require('../lib/starter').list(), PLANS: require('../lib/plans').PLANS });
   }
+}));
+
+router.post('/tenants/:id/plan', ah(async (req, res) => {
+  const P = require('../lib/plans');
+  if (!P.isPlan(req.body.plan)) { flash(req, 'error', 'Unknown plan'); return res.redirect('/platform'); }
+  await db.query('UPDATE platform.tenants SET plan = $1 WHERE id = $2', [req.body.plan, Number(req.params.id)]);
+  tenants.clearCache();
+  flash(req, 'success', 'Plan changed to ' + P.info(req.body.plan).en + '.');
+  res.redirect('/platform#tenant-' + Number(req.params.id));
 }));
 
 router.post('/tenants/:id/status', ah(async (req, res) => {

@@ -1,0 +1,14 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('हालको प्लान', 'Current plan') %>: <span class="badge badge-brand"><%= t(plan.info.np, plan.info.en) %></span>
+  · <%= t('कर्मचारी प्रयोगकर्ता', 'Staff users') %> <%= num(staffCount) %> / <%= plan.info.staff === Infinity ? '∞' : num(plan.info.staff) %></div></div></div>
+<div class="table-wrap card" style="padding:0"><table class="table plan-table">
+  <thead><tr><th><%= t('सुविधा', 'Feature') %></th><% PLANS.forEach(p => { %><th class="<%= p.key === plan.key ? 'is-current' : '' %>" style="text-align:center"><%= t(p.np, p.en) %><div class="small faint" style="font-weight:400"><%= t(...p.blurb) %></div></th><% }) %></tr></thead>
+  <tbody>
+    <tr><td><%= t('पूर्ण वेबसाइट (सूचना, समाचार, डाउनलोड, ग्यालरी, समिति, ब्याजदर, EMI, सम्पर्क), थिम र डिजाइन', 'Complete website (notices, news, downloads, gallery, committees, rates, EMI, contact), theme & design') %></td><% PLANS.forEach(p => { %><td style="text-align:center" class="<%= p.key === plan.key ? 'is-current' : '' %>"><span class="ok">✓</span></td><% }) %></tr>
+    <% FEATURES.forEach(f => { %>
+      <tr><td><%= t(f.np, f.en) %></td><% PLANS.forEach(p => { const on = RANK[p.key] >= RANK[f.plan]; %><td style="text-align:center" class="<%= p.key === plan.key ? 'is-current' : '' %>"><% if (on) { %><span class="ok">✓</span><% } else { %><span class="faint">—</span><% } %></td><% }) %></tr>
+    <% }) %>
+    <tr><td><%= t('कर्मचारी प्रयोगकर्ता (बढीमा)', 'Staff users (max)') %></td><% PLANS.forEach(p => { %><td style="text-align:center" class="<%= p.key === plan.key ? 'is-current' : '' %>"><%= p.staff === Infinity ? '∞' : num(p.staff) %></td><% }) %></tr>
+  </tbody>
+</table></div>
+<p class="small muted mt-2"><%= t('प्लान परिवर्तनका लागि सेवा प्रदायकलाई सम्पर्क गर्नुहोस्। "सेवा नवीकरण" पृष्ठबाट भुक्तानी सूचना पठाउन सकिन्छ।', 'To change plan, contact your service provider. You can send a payment notice from the Licence page.') %></p>
+<style>.plan-table .is-current{background:var(--brand-soft)} .plan-table .ok{color:var(--ok);font-weight:600}</style>

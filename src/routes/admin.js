@@ -106,6 +106,14 @@ router.use(ah(async (req, res, next) => {
   next();
 }));
 
+// subscription plan: sections outside the tenant's plan show an upgrade page
+router.use((req, res, next) => {
+  const P = require('../lib/plans');
+  const f = P.featureFor('/admin' + req.path);
+  if (!f || res.locals.plan.has(f.key)) return next();
+  res.status(403).render('admin/locked', { title: res.locals.t('यो सुविधा तपाईंको प्लानमा छैन', 'Not in your plan'), feature: f, need: P.info(f.plan) });
+});
+
 // ---------------------------------------------------------------- dashboard
 router.get('/', ah(async (req, res) => {
   const recent = [];
@@ -660,6 +668,13 @@ router.post('/theme', requireAdmin('admin'), ah(async (req, res) => {
   res.redirect('/admin/theme');
 }));
 
+// ---------------------------------------------------------------- subscription plan (read-only for the tenant)
+router.get('/plan', ah(async (req, res) => {
+  const P = require('../lib/plans');
+  res.render('admin/plan', { title: res.locals.t('सेवा प्लान', 'Service plan'), PLANS: P.PLANS, FEATURES: P.FEATURES, RANK: P.RANK,
+    staffCount: Number(await db.value('SELECT count(*) FROM admin_users WHERE deleted_at IS NULL AND is_active = 1')) || 0 });
+}));
+
 // ---------------------------------------------------------------- admin users (super admin)
 router.get('/users', requireAdmin('superadmin'), ah(async (req, res) => {
   const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
@@ -668,6 +683,11 @@ router.get('/users', requireAdmin('superadmin'), ah(async (req, res) => {
 
 router.post('/users', requireAdmin('superadmin'), ah(async (req, res) => {
   const b = req.body, errors = {};
+  const maxStaff = res.locals.plan.info.staff;
+  if (Number(await db.value('SELECT count(*) FROM admin_users WHERE deleted_at IS NULL AND is_active = 1')) >= maxStaff) {
+    flash(req, 'error', res.locals.t(`तपाईंको प्लानमा बढीमा ${maxStaff} कर्मचारी प्रयोगकर्ता मात्र राख्न मिल्छ।`, `Your plan allows up to ${maxStaff} staff users.`));
+    return res.redirect('/admin/users');
+  }
   const username = String(b.username || '').trim().toLowerCase();
   if (!/^[a-z0-9_.-]{3,50}$/.test(username)) errors.username = '3–50: a-z 0-9 _ . -';
   if (String(b.password || '').length < 10) errors.password = 'min 10 characters';

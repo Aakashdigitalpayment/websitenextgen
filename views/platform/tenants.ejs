@@ -8,6 +8,8 @@
           <div><h3 class="mb-0"><%= tn.name %> <span class="badge <%= tn.status === 'active' ? 'badge-ok' : 'badge-bad' %>"><%= tn.status %></span></h3>
             <div class="small faint"><code><%= tn.slug %></code> · schema <code><%= tn.schema_name %></code> · <%= tn.stats.members %> members · <%= tn.stats.pending %> pending loans</div></div>
           <div class="flex gap-1">
+            <form method="post" action="/platform/tenants/<%= tn.id %>/plan" class="flex gap-1 items-center"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <select class="select" name="plan" data-autosubmit style="padding:4px 8px;width:auto"><% (locals.PLANS || []).forEach(p => { %><option value="<%= p.key %>" <%= (tn.plan || 'extra') === p.key ? 'selected' : '' %>><%= p.en %></option><% }) %></select></form>
             <form method="post" action="/platform/tenants/<%= tn.id %>/migrate"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm">Migrate</button></form>
             <form method="post" action="/platform/tenants/<%= tn.id %>/status"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="status" value="<%= tn.status === 'active' ? 'suspended' : 'active' %>"><button class="btn btn-sm <%= tn.status === 'active' ? 'btn-ghost' : 'btn-soft' %>" data-confirm="<%= tn.status === 'active' ? 'Suspend' : 'Activate' %> <%= tn.slug %>?"><%= tn.status === 'active' ? 'Suspend' : 'Activate' %></button></form>
           </div>
@@ -45,6 +47,8 @@
       <div class="field"><label>Contact email</label><input class="input" name="contact_email" type="email" value="<%= values.contact_email || '' %>"></div>
       <div class="field"><label>First admin username</label><input class="input" name="admin_username" value="<%= values.admin_username || 'admin' %>"></div>
       <div class="field"><label>Admin password (blank = generate)</label><input class="input" name="admin_password" type="text" autocomplete="off"></div>
+      <div class="field"><label>Plan</label>
+        <select class="select" name="plan"><% (locals.PLANS || []).forEach(p => { %><option value="<%= p.key %>" <%= (values.plan || 'advance') === p.key ? 'selected' : '' %>><%= p.en %> — <%= p.blurb[1] %></option><% }) %></select></div>
       <div class="field span-2"><label>Design</label>
         <div class="palette-grid">
           <% (locals.designs || []).forEach((d, i) => { %>

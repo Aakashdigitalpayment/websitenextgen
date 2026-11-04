@@ -5,7 +5,7 @@
         <div class="eyebrow"><%= settings.established_year ? t('स्थापना ' + num(settings.established_year), 'Since ' + settings.established_year) : t('सहकारी संस्था', 'Cooperative') %></div>
         <h1><%= siteName %></h1>
         <p class="lead"><%= settings.about_short ? util.excerpt(settings.about_short, 220) : t('बचत, ऋण र डिजिटल सेवा — सदस्यको हितमा, समुदायको साथमा।', 'Savings, loans and digital services — for our members and community.') %></p>
-        <div class="hero-actions">
+        <div class="hero-actions" <%- locals.plan && !plan.has('applications') ? 'hidden' : '' %>>
           <a class="btn btn-primary btn-lg" href="/apply/account"><%= t('खाता खोल्नुहोस्', 'Open an account') %><%- icon('right') %></a>
           <a class="btn btn-outline btn-lg" href="/apply/loan"><%= t('ऋण आवेदन', 'Apply for a loan') %></a>
         </div>
@@ -51,7 +51,7 @@
         ['/interest-rates', 'percent', t('ब्याजदर', 'Interest rates')],
         ['/apply/appointment', 'calendar', t('भेटघाट', 'Appointment')],
         ['/track', 'search', t('आवेदन ट्र्याक', 'Track')],
-      ].forEach(q => { %>
+      ].filter(q => !locals.plan || plan.allows(q[0])).forEach(q => { %>
         <a class="quick-link" href="<%= q[0] %>"><span class="icon-tile"><%- icon(q[1]) %></span><%= q[2] %></a>
       <% }) %>
     </div>
@@ -162,7 +162,7 @@
   <div class="container">
     <div class="card" style="display:flex;gap:24px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--brand);color:var(--brand-ink);border:0">
       <div><h2 style="color:inherit;margin-bottom:4px"><%= t('सदस्य बन्नुहोस्', 'Become a member') %></h2><p style="margin:0;opacity:.85"><%= t('अनलाइन आवेदन दिनुहोस्, हामी तपाईंलाई सम्पर्क गर्नेछौं।', 'Apply online and we will get in touch.') %></p></div>
-      <a class="btn btn-lg" style="background:var(--brand-ink);color:var(--brand)" href="/apply/membership"><%= t('आवेदन दिनुहोस्', 'Apply now') %></a>
+      <a class="btn btn-lg" style="background:var(--brand-ink);color:var(--brand)" href="/apply/membership" <%- locals.plan && !plan.has('applications') ? 'hidden' : '' %>><%= t('आवेदन दिनुहोस्', 'Apply now') %></a>
     </div>
   </div>
 </section>
