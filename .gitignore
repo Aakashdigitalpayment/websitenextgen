@@ -5,3 +5,4 @@ uploads/*
 backups/
 reports/
 .claude/worktrees/
+deploy/yeti/remote.env
