@@ -1,0 +1,19 @@
+<div class="maxw-sm">
+  <div class="card tracking-box">
+    <span class="icon-tile" style="margin:0 auto 12px"><%- icon('qr', 'icon-lg') %></span>
+    <% if (!found) { %>
+      <h2><%= t('उपस्थिति', 'Check-in') %></h2><div class="alert alert-error"><%= reason %></div><a class="btn btn-outline" href="/member/programs"><%= t('कार्यक्रम हेर्नुहोस्', 'See programmes') %></a>
+    <% } else { const p = found.program; %>
+      <h2 class="mb-1"><%= p.title %></h2>
+      <p class="muted"><%= p.event_date ? bsDate(p.event_date) : '' %><%= found.occurrence ? ' · ' + found.occurrence.location_name : (p.location ? ' · ' + p.location : '') %></p>
+      <% if (already) { %><div class="alert alert-success"><%- icon('check') %><span><%= t('तपाईंको उपस्थिति दर्ता भइसकेको छ', 'You are checked in') %> — <%= bsDate(already.attended_at) %> <%= new Date(already.attended_at).toTimeString().slice(0,5) %></span></div>
+      <% } else if (locals.pendingReq) { %><div class="alert alert-info"><%= t('तपाईंको अनुरोध स्वीकृतिको प्रतीक्षामा छ।', 'Your request is waiting for approval.') %></div>
+      <% } else if (reason) { %><div class="alert alert-warn"><%= reason %></div>
+      <% } else { %>
+        <form method="post" action="/member/attend"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="t" value="<%= token %>">
+          <button class="btn btn-primary btn-lg btn-block"><%- icon('check') %><%= Number(p.instant_attendance) ? t('उपस्थिति पक्का गर्नुहोस्', 'Confirm attendance') : t('उपस्थिति अनुरोध पठाउनुहोस्', 'Request check-in') %></button></form>
+        <p class="small faint mt-2"><%= member.name_np || member.name %> · <%= member.sadasyata_number || member.phone %></p>
+      <% } %>
+    <% } %>
+  </div>
+</div>

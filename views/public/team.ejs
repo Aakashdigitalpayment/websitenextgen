@@ -1,0 +1,21 @@
+<%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
+<section class="section"><div class="container">
+  <% if (!groups.length) { %><div class="empty"><%= t('टिम विवरण चाँडै।', 'Team details coming soon.') %></div><% } %>
+  <% groups.forEach(g => { %>
+    <h2 class="mt-3"><%= g.label %></h2>
+    <div class="grid grid-4 mt-2"><% g.people.forEach(p => { %>
+      <div class="card person">
+        <div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>" alt="<%= p.name %>" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
+        <div class="person-name"><%= f(p, 'name') %></div>
+        <div class="person-role"><%= f(p, 'position') %></div>
+        <% if (p.phone) { %><div class="small mt-1"><a href="tel:<%= p.phone %>"><%= p.phone %></a></div><% } %>
+      </div>
+    <% }) %></div>
+  <% }) %>
+  <% if (officers.length) { %>
+    <h2 class="mt-4"><%= t('सूचना तथा गुनासो अधिकारी', 'Information & grievance officers') %></h2>
+    <div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('जिम्मेवारी', 'Role') %></th><th><%= t('सम्पर्क', 'Contact') %></th></tr></thead><tbody>
+      <% officers.forEach(o => { %><tr><td><%= f(o, 'name') %></td><td><%= [o.is_information_officer ? t('सूचना अधिकारी', 'Information officer') : '', o.is_grievance_officer ? t('गुनासो सुन्ने अधिकारी', 'Grievance officer') : ''].filter(Boolean).join(', ') %></td><td><%= o.phone || '' %> <%= o.email || '' %></td></tr><% }) %>
+    </tbody></table></div>
+  <% } %>
+</div></section>

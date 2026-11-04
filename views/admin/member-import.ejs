@@ -1,0 +1,24 @@
+<div class="content-head"><div><div class="crumbs"><a href="/admin/members"><%= t('सदस्यहरू', 'Members') %></a></div><h1><%= title %></h1></div><a class="btn btn-outline btn-sm" href="/admin/members/import/sample.csv"><%- icon('download') %><%= t('नमूना CSV', 'Sample CSV') %></a></div>
+<% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+<div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px">
+  <form class="form-card" method="post" action="/admin/members/import?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="stack">
+      <div class="field"><label><%= t('CSV फाइल (UTF-8)', 'CSV file (UTF-8)') %></label><input class="input" type="file" name="csv" accept=".csv,text/csv" required></div>
+      <div class="field"><label><%= t('पहिले नै भएका सदस्य', 'Existing members') %></label>
+        <div class="choices"><label class="choice"><input type="radio" name="mode" value="update" checked> <%= t('अद्यावधिक गर्ने', 'Update them') %></label><label class="choice"><input type="radio" name="mode" value="skip"> <%= t('छोड्ने', 'Skip them') %></label></div></div>
+      <button class="btn btn-primary"><%- icon('check') %><%= t('जाँच गर्नुहोस् (अझै सेभ हुँदैन)', 'Check file (nothing is saved yet)') %></button>
+    </div>
+  </form>
+  <div class="card">
+    <h3><%= t('Column हरू', 'Columns') %></h3>
+    <p class="small muted"><%= t('पहिलो row मा header चाहिन्छ। नाम र (सदस्यता नं. वा मोबाइल) अनिवार्य।', 'First row is the header. A name and (member no. or mobile) are required.') %></p>
+    <p class="small"><code>sadasyata_number</code> (member_no) · <code>full_name</code> (name) · <code>name_np</code> · <code>mobile</code> (phone) · <code>email</code> · <code>address</code> · <code>dob_bs</code> / <code>dob_ad</code> (YYYY-MM-DD) · <code>gender</code> · <code>branch</code> · <code>password</code></p>
+    <p class="small faint mb-0"><%= t('पासवर्ड नदिएमा सदस्यले "पासवर्ड बिर्सनुभयो" बाट अनुरोध गर्न सक्छन्।', 'Without a password, members can use "Forgot password".') %></p>
+  </div>
+</div>
+<% if (jobs.length) { %>
+<h2 class="mt-4"><%= t('पछिल्ला आयात', 'Recent imports') %></h2>
+<div class="table-wrap mt-2"><table class="table"><thead><tr><th>#</th><th><%= t('फाइल', 'File') %></th><th><%= t('स्थिति', 'Status') %></th><th class="num"><%= t('जम्मा', 'Rows') %></th><th class="num"><%= t('सफल', 'Saved') %></th><th class="num"><%= t('छोडियो', 'Skipped') %></th><th class="num"><%= t('असफल', 'Failed') %></th><th><%= t('मिति', 'Date') %></th></tr></thead><tbody>
+  <% jobs.forEach(j => { %><tr><td><a href="/admin/members/import/<%= j.id %>">#<%= j.id %></a></td><td class="small"><%= j.filename %></td><td><span class="badge <%= j.status === 'done' ? 'badge-ok' : 'badge-warn' %>"><%= j.status %></span></td><td class="num"><%= j.total_rows %></td><td class="num"><%= j.ok_count %></td><td class="num"><%= j.skip_count %></td><td class="num"><%= j.fail_count %></td><td class="small faint"><%= bsDate(j.created_at) %></td></tr><% }) %>
+</tbody></table></div><% } %>

@@ -1,0 +1,8 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container">
+  <% if (cats.length) { %><div class="tabs"><a class="tab <%= !cat ? 'active' : '' %>" href="/downloads"><%= t('सबै', 'All') %></a><% cats.forEach(c => { %><a class="tab <%= cat === c ? 'active' : '' %>" href="?category=<%= encodeURIComponent(c) %>"><%= c %></a><% }) %></div><% } %>
+  <% if (!items.length) { %><div class="empty"><%= t('फाइल छैन।', 'No files yet.') %></div><% } else { %>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('शीर्षक', 'Title') %></th><th><%= t('प्रकार', 'Type') %></th><th></th></tr></thead><tbody>
+    <% items.forEach(d => { %><tr><td><div class="flex gap-1 items-center"><%- icon('file') %><span style="font-weight:500"><%= f(d, 'title') %></span></div><div class="small faint"><%= bsDate(d.created_at) %></div></td><td><span class="badge"><%= (d.file_type || String(d.file_path || '').split('.').pop() || '').toUpperCase() %></span></td><td class="text-right"><a class="btn btn-soft btn-sm" href="/downloads/<%= d.id %>/file" target="_blank" rel="noopener"><%- icon('download') %><%= t('डाउनलोड', 'Download') %></a></td></tr><% }) %>
+  </tbody></table></div><% } %>
+</div></section>

@@ -1,0 +1,7 @@
+<section class="page-head">
+  <div class="container">
+    <div class="crumbs"><a href="/"><%= t('गृहपृष्ठ', 'Home') %></a><% (locals.crumbs || []).forEach(c => { %><span>/</span><a href="<%= c[0] %>"><%= c[1] %></a><% }) %></div>
+    <h1><%= title %></h1>
+    <% if (locals.lead) { %><p><%= lead %></p><% } %>
+  </div>
+</section>

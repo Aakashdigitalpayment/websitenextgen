@@ -1,0 +1,7 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container">
+  <% if (!cycles.length) { %><div class="empty"><%= t('निर्वाचन सम्बन्धी जानकारी छैन।', 'No election information.') %></div><% } %>
+  <div class="grid grid-2"><% cycles.forEach(c => { %>
+    <a class="card card-link" href="/elections/<%= c.id %>"><span class="icon-tile"><%- icon('vote') %></span><h3><%= f(c, 'title') %></h3><div class="small muted"><%= c.period_label || [c.date_from && bsDate(c.date_from), c.date_to && bsDate(c.date_to)].filter(Boolean).join(' – ') %></div></a>
+  <% }) %></div>
+</div></section>

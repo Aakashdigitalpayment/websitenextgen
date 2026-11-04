@@ -1,0 +1,18 @@
+<%- include('../partials/page-head', { lead: t('घरमै बसेर सेवा लिनुहोस्।', 'Bank from wherever you are.') }) %>
+<section class="section"><div class="container">
+  <div class="grid grid-4">
+    <% (types.length ? types : []).forEach(ty => { %>
+      <a class="card card-link" href="/apply/digital?type=<%= encodeURIComponent(ty.slug) %>"><span class="icon-tile"><%- icon('phone') %></span><h3><%= f(ty, 'name') %></h3><p class="small muted"><%= t('अनुरोध गर्नुहोस्', 'Request') %> →</p></a>
+    <% }) %>
+  </div>
+  <% if (!types.length) { %><div class="empty"><a class="btn btn-primary" href="/apply/digital"><%= t('डिजिटल सेवा अनुरोध', 'Request a digital service') %></a></div><% } %>
+  <% if (features.length) { %>
+    <h2 class="mt-4"><%= t('मोबाइल एपका सुविधा', 'Mobile app features') %></h2>
+    <div class="grid grid-3 mt-2"><% features.forEach(fe => { %><div class="card card-flat"><h3><%= f(fe, 'title') %> <% if (fe.is_new) { %><span class="badge badge-brand"><%= t('नयाँ', 'New') %></span><% } %></h3><p class="muted small"><%= f(fe, 'description') %></p></div><% }) %></div>
+  <% } %>
+  <div class="flex gap-1 wrap mt-3">
+    <% if (settings.play_store_url) { %><a class="btn btn-outline" href="<%= settings.play_store_url %>" target="_blank" rel="noopener">Google Play</a><% } %>
+    <% if (settings.app_store_url) { %><a class="btn btn-outline" href="<%= settings.app_store_url %>" target="_blank" rel="noopener">App Store</a><% } %>
+    <% if (settings.internet_banking_url) { %><a class="btn btn-outline" href="<%= settings.internet_banking_url %>" target="_blank" rel="noopener"><%= t('इन्टरनेट बैंकिङ', 'Internet banking') %></a><% } %>
+  </div>
+</div></section>

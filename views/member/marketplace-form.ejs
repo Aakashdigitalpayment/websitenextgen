@@ -1,0 +1,22 @@
+<div class="content-head"><div><div class="crumbs"><a href="/member/marketplace"><%= t('मेरो बजार', 'My marketplace') %></a></div><h1><%= title %></h1></div></div>
+<% if (Object.keys(errors).length) { %><div class="alert alert-error"><%= errors.image || t('रातो चिन्ह लागेका विवरण सच्याउनुहोस्।', 'Please fix the highlighted fields.') %></div><% } %>
+<form class="form-card maxw-md" method="post" action="/member/marketplace<%= item ? '/' + item.id : '' %>?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="form-grid">
+    <%- include('../partials/field', { field: { name: 'listing_type', label: ['प्रकार', 'Type'], type: 'radio', options: [['product', 'उत्पादन बिक्री', 'Product for sale'], ['skill', 'सीप/सेवा', 'Skill / service']] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'category', label: ['समूह', 'Category'], type: 'select', options: CATEGORIES }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'title', label: ['शीर्षक', 'Title'], required: true }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'description', label: ['विवरण', 'Description'], type: 'textarea', rows: 4, required: true }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'price', label: ['मूल्य (रु.)', 'Price (Rs.)'], type: 'number' }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'unit', label: ['एकाइ (प्रति केजी, प्रति घण्टा…)', 'Unit (per kg, per hour…)'] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'quantity', label: ['उपलब्ध परिमाण', 'Quantity available'] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'experience_years', label: ['अनुभव (वर्ष, सीपका लागि)', 'Experience (years, skills)'], type: 'number' }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'location', label: ['स्थान', 'Location'] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'price_note', label: ['मूल्य टिप्पणी', 'Price note'] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'contact_name', label: ['सम्पर्क व्यक्ति', 'Contact name'] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'contact_phone', label: ['सम्पर्क फोन', 'Contact phone'], type: 'tel' }, values, errors }) %>
+    <div class="field span-2"><label><%= t('फोटो', 'Photo') %></label><% if (item && item.image) { %><img class="thumb mb-1" src="<%= mediaUrl(item.image) %>" alt=""><% } %><input class="input" type="file" name="image" accept="image/jpeg,image/png,image/webp"></div>
+  </div>
+  <p class="small faint mt-2"><%= t('सम्पादन गरेपछि सूची फेरि स्वीकृतिका लागि जान्छ।', 'Edited listings are reviewed again before going live.') %></p>
+  <div class="form-actions"><button class="btn btn-primary"><%= t('पेश गर्नुहोस्', 'Submit') %></button></div>
+</form>

@@ -1,0 +1,20 @@
+<div class="content-head"><h1><%= title %></h1><% if (tab === 'notify') { %><a class="btn btn-outline btn-sm" href="/admin/notifications"><%- icon('mail') %><%= t('परीक्षण र लग', 'Test & log') %></a><% } %></div>
+<div class="tabs"><% Object.entries(groups).forEach(([g, label]) => { %><a class="tab <%= tab === g ? 'active' : '' %>" href="?tab=<%= g %>"><%= t(...label) %></a><% }) %></div>
+<form class="form-card" method="post" action="/admin/settings?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="_tab" value="<%= tab %>">
+  <div class="form-grid">
+    <% rows.filter(r => (r.setting_group || 'general') === tab).forEach(r => { const id = 's_' + r.setting_key; %>
+      <div class="field <%= r.setting_type === 'textarea' ? 'span-2' : '' %>">
+        <label for="<%= id %>"><%= r.setting_label || r.setting_key %></label>
+        <% if (r.setting_type === 'image') { %>
+          <% if (r.setting_value) { %><div class="file-current"><img class="thumb" src="<%= mediaUrl(r.setting_value) %>" alt=""></div><% } %>
+          <input class="input" type="file" name="file_<%= r.setting_key %>" accept="image/*">
+        <% } else if (r.setting_type === 'textarea') { %><textarea class="textarea" id="<%= id %>" name="<%= id %>" rows="5"><%= r.setting_value || '' %></textarea>
+        <% } else if (/password|api_key|token|secret|private/.test(r.setting_key)) { %><input class="input" id="<%= id %>" name="<%= id %>" type="password" value="" autocomplete="new-password" placeholder="<%= r.setting_value ? '•••••••• ' + t('(सुरक्षित — खाली छोड्दा परिवर्तन हुँदैन)', '(saved — leave blank to keep)') : '' %>">
+        <% } else { %><input class="input" id="<%= id %>" name="<%= id %>" type="<%= r.setting_type === 'color' ? 'color' : r.setting_type === 'url' ? 'url' : 'text' %>" value="<%= r.setting_value || '' %>"><% } %>
+        <div class="field-hint"><code><%= r.setting_key %></code></div>
+      </div>
+    <% }) %>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save settings') %></button></div>
+</form>

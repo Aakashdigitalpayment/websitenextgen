@@ -1,0 +1,13 @@
+<form class="form-card" method="post" action="/member/login<%= query.next ? '?next=' + encodeURIComponent(query.next) : '' %>">
+  <h1 style="font-size:1.35rem"><%= t('सदस्य लगइन', 'Member sign in') %></h1>
+  <p class="muted small"><%= t('मोबाइल नम्बर, सदस्यता नम्बर वा इमेल प्रयोग गर्नुहोस्।', 'Use your mobile number, membership number or email.') %></p>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="stack">
+    <div class="field"><label for="i"><%= t('मोबाइल / सदस्यता नं. / इमेल', 'Mobile / member no. / email') %></label><input class="input" id="i" name="identifier" value="<%= identifier %>" autocomplete="username" required autofocus></div>
+    <div class="field"><label for="p"><%= t('पासवर्ड', 'Password') %></label><input class="input" id="p" name="password" type="password" autocomplete="current-password" required></div>
+    <button class="btn btn-primary btn-block btn-lg"><%= t('लगइन', 'Sign in') %></button>
+  </div>
+  <div class="flex justify-between small mt-2"><a href="/member/forgot"><%= t('पासवर्ड बिर्सनुभयो?', 'Forgot password?') %></a><a href="/apply/membership"><%= t('सदस्य बन्नुहोस्', 'Become a member') %></a></div>
+</form>
+<p class="text-center small mt-2"><a href="/"><%= t('← वेबसाइटमा फर्कनुहोस्', '← Back to website') %></a></p>

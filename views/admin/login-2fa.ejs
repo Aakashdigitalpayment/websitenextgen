@@ -1,0 +1,11 @@
+<form class="form-card" method="post" action="/admin/login/2fa<%= query.next ? '?next=' + encodeURIComponent(query.next) : '' %>">
+  <h1 style="font-size:1.35rem"><%= t('दुई-चरण प्रमाणीकरण', 'Two-step verification') %></h1>
+  <p class="muted small"><%= t('Authenticator एपमा देखिएको ६ अंकको कोड, वा एउटा backup कोड राख्नुहोस्।', 'Enter the 6-digit code from your authenticator app, or a backup code.') %></p>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="stack">
+    <div class="field"><label for="c"><%= t('कोड', 'Code') %></label><input class="input" id="c" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus style="font-size:1.3rem;letter-spacing:.2em;text-align:center"></div>
+    <button class="btn btn-primary btn-block btn-lg"><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button>
+  </div>
+</form>
+<p class="text-center small mt-2"><a href="/admin/login"><%= t('← फेरि लगइन', '← Start over') %></a></p>

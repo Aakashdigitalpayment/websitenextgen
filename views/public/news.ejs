@@ -1,0 +1,11 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container">
+  <% if (!items.length) { %><div class="empty"><%= t('समाचार छैन।', 'No news yet.') %></div><% } %>
+  <div class="grid grid-3"><% items.forEach(n => { %>
+    <a class="card card-link" href="/news/<%= n.id %>">
+      <% if (n.image) { %><div class="card-media"><img src="<%= mediaUrl(n.image) %>" alt="" loading="lazy"></div><% } %>
+      <div class="card-meta"><%= bsDate(n.created_at) %></div><h3><%= f(n, 'title') %></h3><p class="muted small"><%= util.excerpt(f(n, 'content'), 120) %></p>
+    </a>
+  <% }) %></div>
+  <%- include('../partials/pagination', { pg }) %>
+</div></section>

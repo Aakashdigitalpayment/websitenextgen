@@ -1,0 +1,19 @@
+<div class="content-head no-print"><h1><%= title %></h1><% if (card) { %><button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button><% } %></div>
+<% if (!card) { %><div class="empty"><%= t('तपाईंको परिचयपत्र जारी भएको छैन। कार्यालयमा सम्पर्क गर्नुहोस्।', 'No ID card issued yet. Please contact the office.') %></div><% } else { %>
+<div style="max-width:420px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-lg)">
+  <div style="background:var(--brand);color:var(--brand-ink);padding:16px 20px;display:flex;gap:12px;align-items:center">
+    <span class="brand-mark" style="background:var(--brand-ink);color:var(--brand)"><%= (siteName || 'C').trim().charAt(0) %></span>
+    <div><div style="font-weight:600"><%= siteName %></div><div class="small" style="opacity:.85"><%= t('सदस्य परिचयपत्र', 'Member ID card') %></div></div>
+  </div>
+  <div style="padding:20px;display:flex;gap:16px">
+    <div class="person-photo" style="width:88px;height:104px;border-radius:10px;margin:0"><% if (member.avatar_url) { %><img src="<%= mediaUrl(member.avatar_url) %>" alt=""><% } else { %><%- icon('user', 'icon-lg') %><% } %></div>
+    <div class="grow">
+      <div style="font-weight:600;font-size:1.1rem"><%= member.name_np || member.name %></div>
+      <div class="small muted"><%= member.name %></div>
+      <div class="kv mt-1 small" style="grid-template-columns:90px 1fr"><div><%= t('सदस्यता', 'Member') %></div><div><%= member.sadasyata_number || '—' %></div><div><%= t('कार्ड', 'Card') %></div><div><%= card.card_no %></div><div><%= t('म्याद', 'Valid to') %></div><div><%= card.expiry_date ? bsDate(card.expiry_date) : '—' %></div></div>
+    </div>
+  </div>
+  <div style="padding:12px 20px;border-top:1px dashed var(--line-strong);display:flex;justify-content:space-between;font-family:ui-monospace,monospace;font-size:.9rem"><span><%= card.verification_code %></span><span>CVV <%= card.cvv %></span></div>
+</div>
+<p class="small faint mt-2 no-print"><%= t('कोड र CVV बाट जो कोहीले ', 'Anyone can verify this card at ') %><a href="/verify">/verify</a><%= t(' मा प्रमाणित गर्न सक्छ।', ' using the code and CVV.') %></p>
+<% } %>

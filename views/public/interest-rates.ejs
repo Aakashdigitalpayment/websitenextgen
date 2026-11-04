@@ -1,0 +1,18 @@
+<%- include('../partials/page-head', { lead: updated ? t('अन्तिम अद्यावधिक: ', 'Last updated: ') + bsDate(updated) : '' }) %>
+<section class="section"><div class="container">
+  <div class="grid grid-2" style="gap:24px">
+    <% [[t('बचत ब्याजदर', 'Savings'), saving, 'badge-ok'], [t('ऋण ब्याजदर', 'Loans'), loan, 'badge-warn']].forEach(([label, rows, cls]) => { %>
+      <div>
+        <h2><%= label %></h2>
+        <div class="table-wrap mt-2"><table class="table">
+          <thead><tr><th><%= t('योजना', 'Scheme') %></th><th class="num"><%= t('ब्याजदर (वार्षिक)', 'Rate (p.a.)') %></th></tr></thead>
+          <tbody>
+            <% if (!rows.length) { %><tr><td colspan="2" class="muted"><%= t('विवरण छैन', 'No data') %></td></tr><% } %>
+            <% rows.forEach(r => { %><tr><td><div style="font-weight:500"><%= f(r, 'name') %></div><% if (f(r, 'description')) { %><div class="small muted"><%= f(r, 'description') %></div><% } %></td><td class="num"><span class="badge <%= cls %>" style="font-size:.9rem"><%= num(Number(r.rate).toFixed(2)) %>%</span></td></tr><% }) %>
+          </tbody>
+        </table></div>
+      </div>
+    <% }) %>
+  </div>
+  <p class="small faint mt-3"><%= t('ब्याजदर नियामक निकायको निर्देशन अनुसार परिवर्तन हुन सक्छ।', 'Rates may change as per regulatory guidance.') %></p>
+</div></section>

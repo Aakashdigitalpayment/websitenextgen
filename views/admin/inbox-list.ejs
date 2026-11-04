@@ -1,0 +1,27 @@
+<div class="content-head">
+  <h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
+  <a class="btn btn-outline btn-sm" href="/admin/inbox/<%= m.key %>/export.csv?<%= new URLSearchParams(query).toString() %>"><%- icon('download') %>CSV</a>
+</div>
+<form class="toolbar" method="get">
+  <input class="input" name="q" value="<%= q %>" placeholder="<%= t('नाम, फोन, ट्र्याकिङ…', 'Name, phone, tracking…') %>">
+  <% if (statuses.length) { %><select class="select" name="status" data-autosubmit><option value=""><%= t('सबै स्थिति', 'All statuses') %></option><% statuses.forEach(s => { %><option value="<%= s %>" <%= status === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %></select><% } %>
+  <input class="input" type="date" name="from" value="<%= query.from || '' %>" title="From" style="min-width:0">
+  <input class="input" type="date" name="to" value="<%= query.to || '' %>" title="To" style="min-width:0">
+  <button class="btn btn-outline"><%- icon('search') %></button>
+</form>
+<% if (!rows.length) { %><div class="empty"><%= t('कुनै आवेदन छैन।', 'No submissions.') %></div><% } else { %>
+<div class="table-wrap"><table class="table">
+  <thead><tr><% if (!m.noTracking) { %><th><%= t('ट्र्याकिङ', 'Tracking') %></th><% } %><% m.fields.filter(f => f.show).forEach(fl => { %><th><%= t(fl.label[0], fl.label[1]) %></th><% }) %><% if (statuses.length) { %><th><%= t('स्थिति', 'Status') %></th><% } %><th><%= t('मिति', 'Date') %></th></tr></thead>
+  <tbody><% rows.forEach(row => { %>
+    <tr style="<%= hasRead && !row.is_read ? 'font-weight:500' : '' %>">
+      <% if (!m.noTracking) { %><td><a href="/admin/inbox/<%= m.key %>/<%= row.id %>" class="small" style="font-family:ui-monospace,monospace"><%= row.tracking_id || '#' + row.id %></a></td><% } %>
+      <% m.fields.filter(f => f.show).forEach((fl, i) => { let v = row[fl.name]; const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); if (o) v = t(o[1], o[2]); %>
+        <td><% if (i === 0 && m.noTracking) { %><a href="/admin/inbox/<%= m.key %>/<%= row.id %>" style="color:var(--text)"><%= v %></a><% } else { %><%= fl.format === 'money' ? money(v) : fl.type === 'date' ? (v ? bsDate(v) : '') : util.excerpt(v, 50) %><% } %></td>
+      <% }) %>
+      <% if (statuses.length) { %><td><span class="badge <%= row.status === 'pending' ? 'badge-warn' : /approved|completed|resolved|selected|confirmed|disbursed|accepted/.test(row.status) ? 'badge-ok' : /rejected|cancelled/.test(row.status) ? 'badge-bad' : 'badge-info' %>"><%= statusLabel(row.status) %></span></td><% } %>
+      <td class="small faint"><%= bsDate(row.created_at) %></td>
+    </tr>
+  <% }) %></tbody>
+</table></div>
+<%- include('../partials/pagination', { pg }) %>
+<% } %>

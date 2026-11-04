@@ -1,0 +1,36 @@
+<%
+  const fl = field; const val = values[fl.name] ?? fl.default ?? ''; const err = errors[fl.name];
+  const id = 'f_' + fl.name; const label = t(fl.label[0], fl.label[1]);
+  const wide = fl.type === 'textarea' || fl.type === 'radio' || fl.type === 'rating' || fl.type === 'checkbox' || fl.wide;
+  const opts = (locals.options && options[fl.name]) || fl.options || [];
+%>
+<div class="field <%= wide ? 'span-2' : '' %> <%= err ? 'has-error' : '' %>">
+  <% if (fl.type === 'checkbox') { %>
+    <label class="choice"><input type="checkbox" name="<%= fl.name %>" value="1" <%= val && val !== '0' ? 'checked' : '' %>> <%= label %></label>
+  <% } else { %>
+    <label for="<%= id %>"><%= label %><% if (fl.required) { %><span class="req">*</span><% } %></label>
+    <% if (fl.type === 'textarea' || fl.type === 'richtext') { %>
+      <textarea class="textarea" id="<%= id %>" name="<%= fl.name %>" rows="<%= fl.rows || 4 %>" <%= fl.required ? 'required' : '' %>><%= val %></textarea>
+    <% } else if (fl.type === 'select') { %>
+      <select class="select" id="<%= id %>" name="<%= fl.name %>" <%= fl.required ? 'required' : '' %>>
+        <option value=""><%= t('छान्नुहोस्', 'Select') %></option>
+        <% opts.forEach(o => { %><option value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %>
+      </select>
+    <% } else if (fl.type === 'radio') { %>
+      <div class="choices"><% opts.forEach(o => { %><label class="choice"><input type="radio" name="<%= fl.name %>" value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'checked' : '' %>> <%= t(o[1], o[2]) %></label><% }) %></div>
+    <% } else if (fl.type === 'rating') { %>
+      <div class="rating"><% [1,2,3,4,5].forEach(n => { %><label><input type="radio" name="<%= fl.name %>" value="<%= n %>" <%= String(val) === String(n) ? 'checked' : '' %>><%= num(n) %></label><% }) %></div>
+      <div class="field-hint"><%= t('१ = असन्तुष्ट, ५ = धेरै सन्तुष्ट', '1 = poor, 5 = excellent') %></div>
+    <% } else if (fl.type === 'file' || fl.type === 'image') { %>
+      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" accept="<%= fl.type === 'image' ? 'image/jpeg,image/png,image/webp' : fl.kind === 'doc' ? '.pdf,.doc,.docx' : 'image/*,.pdf,.doc,.docx' %>">
+      <div class="field-hint"><%= fl.type === 'image' ? 'JPG / PNG / WEBP' : 'PDF / DOC / JPG' %>, <%= t('बढीमा ८ MB', 'max 8 MB') %></div>
+    <% } else { %>
+      <input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>"
+        type="<%= fl.type === 'tel' ? 'tel' : fl.type === 'email' ? 'email' : fl.type === 'date' ? 'date' : 'text' %>"
+        <%= fl.type === 'number' ? 'inputmode=decimal' : '' %> <%= fl.type === 'bsdate' ? 'placeholder=YYYY-MM-DD inputmode=numeric' : '' %>
+        <%= fl.type === 'tel' ? 'autocomplete=tel' : fl.type === 'email' ? 'autocomplete=email' : '' %> <%= fl.required ? 'required' : '' %>>
+      <% if (fl.type === 'bsdate') { %><div class="field-hint"><%= t('वि.सं. मिति, जस्तै २०५०-०४-१५', 'Bikram Sambat, e.g. 2050-04-15') %></div><% } %>
+    <% } %>
+  <% } %>
+  <% if (err) { %><div class="field-error"><%= err %></div><% } %>
+</div>

@@ -1,0 +1,16 @@
+<section class="section"><div class="container maxw-sm">
+  <div class="card tracking-box">
+    <span class="icon-tile" style="margin:0 auto 12px;background:var(--ok-soft);color:var(--ok)"><%- icon('check', 'icon-lg') %></span>
+    <h1 style="font-size:1.6rem"><%= t('आवेदन प्राप्त भयो', 'Application received') %></h1>
+    <p class="muted"><%= t(...mod.title) %></p>
+    <% if (tracking) { %>
+      <div class="small muted"><%= t('तपाईंको ट्र्याकिङ नम्बर', 'Your tracking number') %></div>
+      <div class="tracking-id"><%= tracking %></div>
+      <p class="small muted"><%= t('यो नम्बर सुरक्षित राख्नुहोस्। स्थिति हेर्न आवेदनमा दिएको फोन नम्बर पनि चाहिन्छ।', 'Keep this number. You will also need the phone number you used to check the status.') %></p>
+    <% } %>
+    <div class="flex gap-1 wrap" style="justify-content:center">
+      <% if (tracking) { %><a class="btn btn-primary" href="/track?id=<%= encodeURIComponent(tracking) %>"><%= t('स्थिति हेर्नुहोस्', 'Check status') %></a><% } %>
+      <a class="btn btn-outline" href="/"><%= t('गृहपृष्ठ', 'Home') %></a>
+    </div>
+  </div>
+</div></section>

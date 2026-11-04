@@ -1,0 +1,6 @@
+<div class="content-head"><h1><%= title %></h1><a class="btn btn-primary" href="/admin/r/upcoming_programs/new"><%- icon('plus') %><%= t('नयाँ कार्यक्रम', 'New programme') %></a></div>
+<% if (!rows.length) { %><div class="empty"><%= t('कार्यक्रम छैन।', 'No programmes yet.') %></div><% } else { %>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('मिति', 'Date') %></th><th>QR</th><th class="num"><%= t('दर्ता', 'Registered') %></th><th class="num"><%= t('उपस्थित', 'Attended') %></th><th class="num"><%= t('अनुरोध', 'Requests') %></th></tr></thead><tbody>
+  <% rows.forEach(p => { %><tr><td><a href="/admin/programs/<%= p.id %>" style="font-weight:500;color:var(--text)"><%= p.title %></a><div class="small faint"><%= p.program_type %> · <%= p.location || '' %></div></td><td class="small"><%= p.event_date ? bsDate(p.event_date) : '' %></td>
+    <td><span class="badge <%= Number(p.qr_enabled) && p.qr_token ? 'badge-ok' : '' %>"><%= Number(p.qr_enabled) && p.qr_token ? t('खुला', 'On') : t('बन्द', 'Off') %></span></td><td class="num"><%= num(p.registered) %></td><td class="num"><%= num(p.attended) %></td><td class="num"><% if (p.pending) { %><span class="badge badge-warn"><%= num(p.pending) %></span><% } else { %>0<% } %></td></tr><% }) %>
+</tbody></table></div><% } %>

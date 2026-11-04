@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="<%= lang === 'en' ? 'en' : 'ne' %>">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= locals.title ? title + ' · ' : '' %><%= siteName %></title>
+  <meta name="description" content="<%= locals.description || settings.meta_description || settings.about_short || siteName %>">
+  <meta property="og:title" content="<%= locals.title || siteName %>">
+  <meta property="og:site_name" content="<%= siteName %>">
+  <% if (locals.ogImage) { %><meta property="og:image" content="<%= ogImage %>"><% } %>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <% if (settings.logo) { %><link rel="icon" href="<%= mediaUrl(settings.logo) %>"><% } %>
+  <style>:root{--brand:<%= brandColor %>}</style>
+</head>
+<body>
+  <a class="sr-only" href="#main">Skip to content</a>
+  <div class="topbar">
+    <div class="container">
+      <div class="tb-left">
+        <% if (settings.phone) { %><a class="tb-item" href="tel:<%= settings.phone %>"><%- icon('phone') %><%= settings.phone %></a><% } %>
+        <% if (settings.email) { %><a class="tb-item" href="mailto:<%= settings.email %>"><%- icon('mail') %><%= settings.email %></a><% } %>
+        <% if (settings.working_hours) { %><span class="tb-item"><%- icon('clock') %><%= settings.working_hours %></span><% } %>
+      </div>
+      <div class="tb-right">
+        <span class="tb-item faint"><%= nd.formatBs(nd.todayBs(), lang) %></span>
+        <span class="lang-switch" role="group" aria-label="Language">
+          <a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">नेपाली</a>
+          <a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="/">
+        <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt="<%= siteName %>">
+        <% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
+        <span>
+          <span class="brand-name"><%= siteName %></span>
+          <% if (settings.site_tagline) { %><span class="brand-sub" style="display:block"><%= settings.site_tagline %></span><% } %>
+        </span>
+      </a>
+      <button class="btn btn-ghost btn-icon nav-toggle" aria-label="Menu" aria-expanded="false" data-nav-toggle><%- icon('menu') %></button>
+      <nav class="nav" data-nav aria-label="Main">
+        <% (locals.nav || []).forEach(item => { %>
+          <div class="nav-item">
+            <% if (item.children && item.children.length) { %>
+              <button class="nav-link <%= isActive(item.href) && item.href !== '/' ? 'active' : '' %>" aria-haspopup="true"><%= t(...item.label) %><%- icon('chevron') %></button>
+              <div class="dropdown">
+                <% item.children.forEach(c => { %><a href="<%= c.href %>"><%= t(...c.label) %></a><% }) %>
+              </div>
+            <% } else { %>
+              <a class="nav-link <%= isActive(item.href) ? 'active' : '' %>" href="<%= item.href %>"><%= t(...item.label) %></a>
+            <% } %>
+          </div>
+        <% }) %>
+        <div class="header-actions">
+          <% if (locals.member) { %>
+            <a class="btn btn-primary btn-sm" href="/member"><%- icon('user') %><span class="btn-text"><%= t('मेरो खाता', 'My account') %></span></a>
+          <% } else { %>
+            <a class="btn btn-outline btn-sm" href="/member/login"><%- icon('user') %><span class="btn-text"><%= t('सदस्य लगइन', 'Member login') %></span></a>
+          <% } %>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <% if (locals.flash && flash.length) { %>
+      <div class="container mt-2"><% flash.forEach(m => { %><div class="alert alert-<%= m.type %>"><%= m.message %></div><% }) %></div>
+    <% } %>
+    <%- body %>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a class="brand" href="/">
+            <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
+            <span class="brand-name"><%= siteName %></span>
+          </a>
+          <p class="mt-2"><%= util.excerpt(settings.about_short, 200) %></p>
+          <div class="socials">
+            <% [['facebook_url','facebook'],['youtube_url','youtube'],['instagram_url','instagram']].forEach(([k, ic]) => { if (settings[k]) { %>
+              <a href="<%= settings[k] %>" target="_blank" rel="noopener" aria-label="<%= ic %>"><%- icon(ic) %></a>
+            <% } }) %>
+            <% if (settings.whatsapp_number) { %><a href="https://wa.me/<%= String(settings.whatsapp_number).replace(/\D/g,'') %>" target="_blank" rel="noopener" aria-label="WhatsApp"><%- icon('whatsapp') %></a><% } %>
+          </div>
+        </div>
+        <div>
+          <h4><%= t('सेवाहरू', 'Services') %></h4>
+          <ul>
+            <li><a href="/apply/account"><%= t('खाता खोल्नुहोस्', 'Open account') %></a></li>
+            <li><a href="/apply/loan"><%= t('ऋण आवेदन', 'Apply for loan') %></a></li>
+            <li><a href="/interest-rates"><%= t('ब्याजदर', 'Interest rates') %></a></li>
+            <li><a href="/emi-calculator"><%= t('EMI क्याल्कुलेटर', 'EMI calculator') %></a></li>
+            <li><a href="/track"><%= t('आवेदनको स्थिति', 'Track application') %></a></li>
+          </ul>
+        </div>
+        <div>
+          <h4><%= t('जानकारी', 'Information') %></h4>
+          <ul>
+            <li><a href="/notices"><%= t('सूचना', 'Notices') %></a></li>
+            <li><a href="/downloads"><%= t('डाउनलोड', 'Downloads') %></a></li>
+            <li><a href="/reports"><%= t('प्रतिवेदन', 'Reports') %></a></li>
+            <li><a href="/careers"><%= t('रोजगारी', 'Careers') %></a></li>
+            <li><a href="/apply/grievance"><%= t('गुनासो', 'Grievance') %></a></li>
+            <li><a href="/important-links"><%= t('उपयोगी लिङ्क', 'Useful links') %></a></li>
+          </ul>
+        </div>
+        <div>
+          <h4><%= t('सम्पर्क', 'Contact') %></h4>
+          <ul>
+            <% if (settings.address) { %><li class="flex gap-1"><%- icon('pin') %><span><%= settings.address %></span></li><% } %>
+            <% if (settings.phone) { %><li class="flex gap-1"><%- icon('phone') %><a href="tel:<%= settings.phone %>"><%= settings.phone %></a></li><% } %>
+            <% if (settings.email) { %><li class="flex gap-1"><%- icon('mail') %><a href="mailto:<%= settings.email %>"><%= settings.email %></a></li><% } %>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <%= num(new Date().getFullYear()) %> <%= siteName %>. <%= t('सर्वाधिकार सुरक्षित।', 'All rights reserved.') %></span>
+        <span><a href="/sitemap.xml">Sitemap</a> · <a href="/admin">Admin</a></span>
+      </div>
+    </div>
+  </footer>
+  <script src="/static/js/app.js" defer></script>
+</body>
+</html>

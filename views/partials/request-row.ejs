@@ -1,0 +1,6 @@
+<tr>
+  <td><span class="badge"><%= t(...mod.title) %></span></td>
+  <td><div style="font-weight:500"><%= row.tracking_id || '#' + row.id %></div><div class="small faint"><%= bsDate(row.created_at) %></div></td>
+  <td><% if (row.status) { %><span class="badge <%= row.status === 'pending' ? 'badge-warn' : /approved|completed|resolved|selected|confirmed|disbursed|accepted/.test(row.status) ? 'badge-ok' : /rejected|cancelled/.test(row.status) ? 'badge-bad' : 'badge-info' %>"><%= statusLabel(row.status) %></span><% } %></td>
+  <td class="small muted"><%= util.excerpt(row[mod.remarksCol], 80) %></td>
+</tr>

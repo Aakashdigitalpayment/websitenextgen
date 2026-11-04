@@ -1,0 +1,21 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<form class="form-card maxw-md" method="post" action="/member/profile">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="kv mb-3">
+    <div><%= t('नाम', 'Name') %></div><div><%= member.name_np || member.name %></div>
+    <div><%= t('सदस्यता नं.', 'Membership no.') %></div><div><%= member.sadasyata_number || '—' %></div>
+    <div><%= t('मोबाइल', 'Mobile') %></div><div><%= member.phone || '—' %></div>
+  </div>
+  <p class="small faint"><%= t('नाम वा मोबाइल परिवर्तन गर्न कार्यालयमा सम्पर्क गर्नुहोस्।', 'To change your name or mobile, please contact the office.') %></p>
+  <div class="form-grid">
+    <% [{ name: 'email', label: ['इमेल', 'Email'], type: 'email', wide: true }, { name: 'address', label: ['ठेगाना', 'Address'], type: 'textarea', rows: 2 }].forEach(fl => { %><%- include('../partials/field', { field: fl, values, errors }) %><% }) %>
+  </div>
+  <div class="form-section"><div class="form-section-title"><%= t('पासवर्ड परिवर्तन (ऐच्छिक)', 'Change password (optional)') %></div>
+    <div class="form-grid">
+      <% [['current', t('हालको पासवर्ड', 'Current password')], ['password', t('नयाँ पासवर्ड', 'New password')], ['confirm', t('फेरि नयाँ पासवर्ड', 'Confirm')]].forEach(([n, l]) => { %>
+        <div class="field <%= errors[n] ? 'has-error' : '' %>"><label><%= l %></label><input class="input" type="password" name="<%= n %>" autocomplete="<%= n === 'current' ? 'current-password' : 'new-password' %>"><% if (errors[n]) { %><div class="field-error"><%= errors[n] %></div><% } %></div>
+      <% }) %>
+    </div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary"><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+</form>

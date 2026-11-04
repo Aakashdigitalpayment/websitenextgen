@@ -1,0 +1,43 @@
+{
+  "name": "aakash-cooperative-node",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aakash Cooperative web platform — Node.js + PostgreSQL rewrite (public site, admin panel, member portal)",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:import-mysql": "node scripts/import-from-mysql.js",
+    "schema:convert": "node scripts/convert-mysql-schema.js db/legacy/install.sql > db/schema.sql",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "tenant:create": "node scripts/tenant-create.js",
+    "tenant:admin": "node scripts/tenant-admin.js",
+    "demo:seed": "node scripts/demo-seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "compression": "^1.8.2",
+    "connect-pg-simple": "^10.0.0",
+    "dotenv": "^18.0.9",
+    "ejs": "^7.0.2",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.3",
+    "express-session": "^1.19.0",
+    "helmet": "^8.3.0",
+    "multer": "^2.5.0",
+    "nodemailer": "^10.3.1",
+    "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
+    "web-push": "^3.6.7"
+  },
+  "optionalDependencies": {
+    "mysql2": "^3.24.6"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
+  }
+}

@@ -1,0 +1,27 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('प्रयोगकर्ता', 'User') %></th><th><%= t('भूमिका', 'Role') %></th><th><%= t('अन्तिम लगइन', 'Last login') %></th><th></th></tr></thead><tbody>
+    <% rows.forEach(u => { %><tr>
+      <td><div style="font-weight:500"><%= u.full_name || u.username %></div><div class="small faint"><% if (u.twofa_enabled) { %><span class="badge badge-ok">2FA</span> <% } %><%= u.username %> <%= u.email ? '· ' + u.email : '' %></div><% if (!u.is_active) { %><span class="badge badge-bad"><%= t('निष्क्रिय', 'Disabled') %></span><% } %></td>
+      <td><form method="post" action="/admin/users/<%= u.id %>" class="flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="role"><select class="select" name="role" data-autosubmit style="padding:5px 8px;width:auto"><% ['superadmin','admin','staff','editor'].forEach(r => { %><option <%= (u.role === r || (u.role === 'super_admin' && r === 'superadmin')) ? 'selected' : '' %>><%= r %></option><% }) %></select></form></td>
+      <td class="small faint"><%= u.last_login ? bsDate(u.last_login) : '—' %></td>
+      <td><div class="row-actions">
+        <% [['reset', 'key', t('पासवर्ड रिसेट', 'Reset password')], ['reset2fa', 'shield', t('2FA रिसेट', 'Reset 2FA')], [u.is_active ? 'disable' : 'enable', u.is_active ? 'close' : 'check', u.is_active ? t('निष्क्रिय', 'Disable') : t('सक्रिय', 'Enable')], ['delete', 'trash', t('हटाउने', 'Delete')]].forEach(([a, ic, lbl]) => { %>
+          <form method="post" action="/admin/users/<%= u.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button class="btn btn-ghost btn-sm" title="<%= lbl %>" data-confirm="<%= lbl %>?"><%= lbl %></button></form>
+        <% }) %>
+      </div></td>
+    </tr><% }) %>
+  </tbody></table></div>
+  <form class="form-card" method="post" action="/admin/users">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3><%= t('नयाँ प्रयोगकर्ता', 'Add user') %></h3>
+    <div class="stack">
+      <% [['username', t('प्रयोगकर्ता नाम', 'Username'), 'text'], ['full_name', t('पूरा नाम', 'Full name'), 'text'], ['email', t('इमेल', 'Email'), 'email'], ['password', t('पासवर्ड (कम्तीमा १०)', 'Password (min 10)'), 'password']].forEach(([n, l, ty]) => { %>
+        <div class="field <%= errors[n] ? 'has-error' : '' %>"><label><%= l %></label><input class="input" name="<%= n %>" type="<%= ty %>" value="<%= ty === 'password' ? '' : (values[n] || '') %>" autocomplete="off"><% if (errors[n]) { %><div class="field-error"><%= errors[n] %></div><% } %></div>
+      <% }) %>
+      <div class="field"><label><%= t('भूमिका', 'Role') %></label><select class="select" name="role"><% [['editor', t('सम्पादक — सामग्री मात्र', 'Editor — content only')], ['staff', t('कर्मचारी — आवेदन र सदस्य', 'Staff — applications & members')], ['admin', t('प्रशासक — सेटिङ सहित', 'Admin — incl. settings')], ['superadmin', t('सुपर प्रशासक', 'Super admin')]].forEach(([r, l]) => { %><option value="<%= r %>" <%= values.role === r ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+      <button class="btn btn-primary"><%- icon('plus') %><%= t('थप्नुहोस्', 'Add user') %></button>
+      <p class="small faint mb-0"><%= t('पहिलो लगइनमा पासवर्ड परिवर्तन गर्नुपर्नेछ।', 'They must change the password at first login.') %></p>
+    </div>
+  </form>
+</div>

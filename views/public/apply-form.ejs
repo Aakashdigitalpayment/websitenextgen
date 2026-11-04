@@ -1,0 +1,18 @@
+<%- include('../partials/page-head', { crumbs: [['/apply', t('अनलाइन सेवा', 'Online services')]], lead: mod.intro ? t(...mod.intro) : '' }) %>
+<section class="section"><div class="container maxw-md" style="margin-left:0">
+  <% if (Object.keys(errors).length) { %><div class="alert alert-error"><%- icon('alert') %><span><%= errors._upload || t('कृपया रातो चिन्ह लागेका विवरण सच्याउनुहोस्।', 'Please correct the highlighted fields.') %></span></div><% } %>
+  <% if (member) { %><div class="alert alert-info"><%- icon('user') %><span><%= t('तपाईंको सदस्य विवरण पहिले नै भरिएको छ।', 'Your member details have been pre-filled.') %></span></div><% } %>
+  <form class="form-card" method="post" action="/apply/<%= mod.key %><%= mod.fileFields.length ? "?_csrf=" + encodeURIComponent(csrfToken) : "" %>" enctype="<%= mod.fileFields.length ? 'multipart/form-data' : 'application/x-www-form-urlencoded' %>" novalidate>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <% mod.sections.forEach(sec => { %>
+      <div class="form-section">
+        <% if (sec.title) { %><div class="form-section-title"><%= t(...sec.title) %></div><% } %>
+        <div class="form-grid"><% sec.fields.forEach(fl => { %><%- include('../partials/field', { field: fl, values: Object.assign({}, values, query.type && fl.name === 'service_type' && !values.service_type ? { service_type: query.type } : {}), errors, options }) %><% }) %></div>
+      </div>
+    <% }) %>
+    <div class="form-actions">
+      <button class="btn btn-primary btn-lg"><%= t('आवेदन पेश गर्नुहोस्', 'Submit') %></button>
+      <span class="small faint"><%= t('* चिन्ह भएका विवरण अनिवार्य छन्।', 'Fields marked * are required.') %></span>
+    </div>
+  </form>
+</div></section>

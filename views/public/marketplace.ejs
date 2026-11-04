@@ -1,0 +1,21 @@
+<%- include('../partials/page-head', { lead: t('हाम्रा सदस्यका उत्पादन र सीप — सिधै सम्पर्क गर्नुहोस्।', 'Products and skills from our members — contact them directly.') }) %>
+<section class="section"><div class="container">
+  <form class="toolbar" method="get">
+    <div class="tabs mb-0"><a class="tab <%= !type ? 'active' : '' %>" href="/marketplace"><%= t('सबै', 'All') %></a><a class="tab <%= type === 'product' ? 'active' : '' %>" href="?type=product"><%= t('उत्पादन', 'Products') %></a><a class="tab <%= type === 'skill' ? 'active' : '' %>" href="?type=skill"><%= t('सीप/सेवा', 'Skills') %></a></div>
+    <% if (type) { %><input type="hidden" name="type" value="<%= type %>"><% } %>
+    <select class="select" name="category" data-autosubmit style="width:auto"><option value=""><%= t('सबै समूह', 'All categories') %></option><% CATEGORIES.forEach(c => { %><option value="<%= c[0] %>" <%= cat === c[0] ? 'selected' : '' %>><%= t(c[1], c[2]) %></option><% }) %></select>
+    <input class="input" name="q" value="<%= q %>" placeholder="<%= t('खोज्नुहोस्…', 'Search…') %>" style="width:auto"><button class="btn btn-outline"><%- icon('search') %></button>
+  </form>
+  <% if (!rows.length) { %><div class="empty"><%= t('अहिले कुनै सूची छैन।', 'Nothing listed yet.') %> <a href="/member/marketplace/new"><%= t('आफ्नो सूची राख्नुहोस्', 'Add your listing') %></a></div><% } %>
+  <div class="grid grid-3"><% rows.forEach(l => { %>
+    <a class="card card-link" href="/marketplace/<%= l.id %>">
+      <% if (l.image) { %><div class="card-media"><img src="<%= mediaUrl(l.image) %>" alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon(l.listing_type === 'skill' ? 'briefcase' : 'store') %></span><% } %>
+      <div class="card-meta"><span class="badge"><%= catLabel(l.category) %></span><%= l.location || '' %></div>
+      <h3><%= l.title %></h3>
+      <p class="small muted"><%= util.excerpt(l.description, 100) %></p>
+      <% if (l.price) { %><div style="font-weight:500">रु. <%= money(l.price) %><%= l.unit ? ' / ' + l.unit : '' %></div><% } %>
+    </a>
+  <% }) %></div>
+  <%- include('../partials/pagination', { pg }) %>
+  <div class="card mt-4 flex justify-between items-center wrap gap-2"><div><h3 class="mb-0"><%= t('तपाईं पनि सदस्य हुनुहुन्छ?', 'Are you a member?') %></h3><p class="muted mb-0"><%= t('आफ्नो उत्पादन वा सीप निःशुल्क राख्नुहोस्।', 'List your product or skill for free.') %></p></div><a class="btn btn-primary" href="/member/marketplace/new"><%= t('सूची राख्नुहोस्', 'Add a listing') %></a></div>
+</div></section>

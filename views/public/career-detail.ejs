@@ -1,0 +1,14 @@
+<%- include('../partials/page-head', { crumbs: [['/careers', t('रोजगारी', 'Careers')]] }) %>
+<section class="section"><div class="container layout-side">
+  <div>
+    <div class="prose"><%- util.richText(f(job, 'description')) %></div>
+    <% if (job.requirements) { %><h3 class="mt-3"><%= t('योग्यता', 'Requirements') %></h3><div class="prose"><%- util.richText(job.requirements) %></div><% } %>
+    <% if (job.attachment) { %><a class="btn btn-outline mt-2" href="<%= mediaUrl(job.attachment) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('विज्ञापन', 'Advertisement') %></a><% } %>
+  </div>
+  <aside class="card">
+    <div class="kv" style="grid-template-columns:1fr 1fr">
+      <% [[t('विभाग','Department'), job.department], [t('स्थान','Location'), job.location], [t('पद संख्या','Vacancies'), job.vacancies && num(job.vacancies)], [t('न्यूनतम योग्यता','Qualification'), job.min_qualification], [t('अनुभव','Experience'), job.experience_required], [t('तलब','Salary'), job.salary_range], [t('अन्तिम मिति','Deadline'), job.deadline && bsDate(job.deadline)]].filter(x => x[1]).forEach(x => { %><div><%= x[0] %></div><div><%= x[1] %></div><% }) %>
+    </div>
+    <% if (open && job.allow_online_apply !== 0) { %><a class="btn btn-primary btn-block mt-2" href="/apply/job?career=<%= job.id %>"><%= t('अनलाइन आवेदन', 'Apply online') %></a><% } else if (!open) { %><div class="alert alert-warn mt-2"><%= t('आवेदनको म्याद सकियो।', 'Applications are closed.') %></div><% } %>
+  </aside>
+</div></section>

@@ -1,0 +1,19 @@
+<div class="content-head"><div><h1><%= t('नमस्ते', 'Namaste') %>, <%= member.name_np || member.name %></h1><div class="muted small"><%= nd.formatBs(nd.todayBs(), lang) %></div></div></div>
+<div class="alert alert-info" data-push-box hidden><%- icon('bell') %><span class="grow"><%= t('नयाँ सूचना फोन/कम्प्युटरमा पाउन चाहनुहुन्छ?', 'Get notifications on this device?') %></span><button class="btn btn-primary btn-sm" data-push-enable data-csrf="<%= csrfToken %>"><%= t('सक्रिय गर्नुहोस्', 'Enable') %></button></div>
+<% elections.forEach(e => { %><div class="alert alert-info"><%- icon('vote') %><span><%= f(e, 'title') %> — <a href="/member/elections/<%= e.id %>"><%= t('अनलाइन मतदान गर्नुहोस्', 'Vote online') %></a></span></div><% }) %>
+<div class="kpis">
+  <div class="kpi"><div class="l"><%= t('सदस्यता नं.', 'Membership no.') %></div><div class="v" style="font-size:1.2rem"><%= member.sadasyata_number || '—' %></div></div>
+  <div class="kpi"><div class="l"><%= t('आवेदन', 'Applications') %></div><div class="v"><%= num(requests.length) %></div></div>
+  <div class="kpi"><div class="l"><%= t('नपढिएका सूचना', 'Unread') %></div><div class="v"><%= num(unread) %></div></div>
+  <a class="kpi card-link" href="/member/id-card"><div class="l"><%= t('परिचयपत्र', 'ID card') %></div><div class="v" style="font-size:1.2rem"><%= card ? t('सक्रिय', 'Active') : t('छैन', 'None') %></div></a>
+</div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+  <div class="card" style="padding:0"><div class="flex justify-between items-center" style="padding:16px 20px;border-bottom:1px solid var(--line)"><h3 class="mb-0"><%= t('पछिल्ला आवेदन', 'Recent applications') %></h3><a class="small" href="/member/requests"><%= t('सबै', 'All') %></a></div>
+    <% if (!requests.length) { %><div class="muted" style="padding:20px"><%= t('अहिलेसम्म आवेदन छैन।', 'No applications yet.') %> <a href="/apply"><%= t('आवेदन दिनुहोस्', 'Apply now') %></a></div><% } %>
+    <table class="table"><tbody><% requests.forEach(r => { %><%- include('../partials/request-row', r) %><% }) %></tbody></table>
+  </div>
+  <div class="card"><h3><%= t('सूचनाहरू', 'Notifications') %></h3>
+    <% if (!notes.length) { %><p class="muted small"><%= t('कुनै सूचना छैन।', 'Nothing new.') %></p><% } %>
+    <ul class="list"><% notes.forEach(n => { %><li class="list-item" style="flex-direction:column;gap:2px"><div style="font-weight:<%= n.is_read ? 400 : 500 %>"><%= n.title %></div><% if (n.message) { %><div class="small muted"><%= n.message %></div><% } %><div class="small faint"><%= bsDate(n.created_at) %></div></li><% }) %></ul>
+  </div>
+</div>

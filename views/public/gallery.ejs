@@ -1,0 +1,6 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container">
+  <% if (albums.length) { %><div class="tabs"><a class="tab <%= !album ? 'active' : '' %>" href="/gallery"><%= t('सबै', 'All') %></a><% albums.forEach(a => { %><a class="tab <%= album === a.id ? 'active' : '' %>" href="?album=<%= a.id %>"><%= f(a, 'name') %></a><% }) %></div><% } %>
+  <% if (!images.length) { %><div class="empty"><%= t('फोटो छैन।', 'No photos yet.') %></div><% } %>
+  <div class="gallery"><% images.forEach(g => { %><a href="<%= mediaUrl(g.image) %>" target="_blank" rel="noopener" title="<%= f(g, 'title') %>"><img src="<%= mediaUrl(g.image) %>" alt="<%= f(g, 'title') %>" loading="lazy"></a><% }) %></div>
+</div></section>

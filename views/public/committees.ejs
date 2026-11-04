@@ -1,0 +1,4 @@
+<%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
+<section class="section"><div class="container"><div class="grid grid-3">
+  <% types.forEach(c => { %><a class="card card-link" href="/committees/<%= c.id %>"><span class="icon-tile"><%- icon('users') %></span><h3><%= f(c, 'name') %></h3><p class="muted small"><%= c.description || '' %></p></a><% }) %>
+</div><% if (!types.length) { %><div class="empty"><%= t('समिति विवरण चाँडै।', 'Committees coming soon.') %></div><% } %></div></section>

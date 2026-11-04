@@ -1,0 +1,5 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= locals.suspended ? 'Site suspended' : 'Site not found' %></title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body><section class="section"><div class="container text-center maxw-sm">
+<h1><%= locals.suspended ? 'This site is temporarily unavailable' : 'No cooperative is configured for this address' %></h1>
+<p class="muted"><%= host %></p></div></section></body></html>

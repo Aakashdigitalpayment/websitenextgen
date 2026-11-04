@@ -1,0 +1,16 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container">
+  <% if (!centers.length) { %><div class="empty"><%= t('शाखा विवरण चाँडै राखिनेछ।', 'Branch details coming soon.') %></div><% } %>
+  <div class="grid grid-3"><% centers.forEach(c => { %>
+    <div class="card">
+      <div class="flex justify-between items-center"><h3 class="mb-0"><%= f(c, 'name') %></h3><% if (c.is_main_branch) { %><span class="badge badge-brand"><%= t('मुख्य कार्यालय', 'Head office') %></span><% } %></div>
+      <ul class="list mt-1 small">
+        <% if (c.address) { %><li class="flex gap-1" style="padding:6px 0"><%- icon('pin') %><%= c.address %></li><% } %>
+        <% if (c.phone) { %><li class="flex gap-1" style="padding:6px 0"><%- icon('phone') %><a href="tel:<%= c.phone %>"><%= c.phone %></a></li><% } %>
+        <% if (c.email) { %><li class="flex gap-1" style="padding:6px 0"><%- icon('mail') %><a href="mailto:<%= c.email %>"><%= c.email %></a></li><% } %>
+        <% if (c.opening_hours) { %><li class="flex gap-1" style="padding:6px 0"><%- icon('clock') %><%= c.opening_hours %></li><% } %>
+      </ul>
+      <% if (c.map_url) { %><a class="btn btn-soft btn-sm mt-1" href="<%= c.map_url %>" target="_blank" rel="noopener"><%= t('नक्सा हेर्नुहोस्', 'View map') %></a><% } %>
+    </div>
+  <% }) %></div>
+</div></section>

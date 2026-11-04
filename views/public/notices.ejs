@@ -1,0 +1,14 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container maxw-md" style="margin-left:0">
+  <% if (!items.length) { %><div class="empty"><%= t('सूचना छैन।', 'No notices yet.') %></div><% } %>
+  <div class="card" style="padding:4px 22px"><ul class="list">
+  <% items.forEach(n => { const bs = nd.adToBs(n.notice_date || String(n.created_at).slice(0, 10)) || ''; const p = bs.split('-'); %>
+    <li class="list-item">
+      <div class="date-chip"><b><%= num(Number(p[2] || 0)) %></b><span><%= p[1] ? (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[Number(p[1]) - 1] : '' %> <%= num(p[0] || '') %></span></div>
+      <div class="grow"><a href="/notices/<%= n.id %>" style="color:var(--text);font-weight:500"><%= f(n, 'title') %></a>
+        <div class="small muted"><%= util.excerpt(f(n, 'content'), 120) %></div></div>
+      <% if (n.attachment) { %><a class="btn btn-ghost btn-icon" href="<%= mediaUrl(n.attachment) %>" target="_blank" rel="noopener" aria-label="Download"><%- icon('download') %></a><% } %>
+    </li>
+  <% }) %></ul></div>
+  <%- include('../partials/pagination', { pg }) %>
+</div></section>

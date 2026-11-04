@@ -1,0 +1,20 @@
+<%- include('../partials/page-head', { crumbs: [['/services', t('सेवाहरू', 'Services')]] }) %>
+<section class="section"><div class="container layout-side">
+  <div>
+    <% if (service.image) { %><img src="<%= mediaUrl(service.image) %>" alt="" style="border-radius:var(--radius);margin-bottom:24px;width:100%"><% } %>
+    <div class="prose"><%- util.richText(f(service, 'description')) %></div>
+    <% if (products.length) { %>
+      <h2 class="mt-4"><%= t('उपलब्ध योजनाहरू', 'Products') %></h2>
+      <div class="grid grid-2 mt-2"><% products.forEach(p => { %><div class="card card-flat"><h3><%= f(p, 'title') %></h3><div class="muted small"><%- util.richText(f(p, 'description')) %></div></div><% }) %></div>
+    <% } %>
+  </div>
+  <aside class="card">
+    <h3><%= t('सेवा लिन चाहनुहुन्छ?', 'Interested?') %></h3>
+    <p class="muted small"><%= t('अनलाइन आवेदन दिनुहोस् वा नजिकको शाखामा आउनुहोस्।', 'Apply online or visit your nearest branch.') %></p>
+    <div class="stack">
+      <a class="btn btn-primary btn-block" href="/apply/account"><%= t('खाता खोल्नुहोस्', 'Open account') %></a>
+      <a class="btn btn-outline btn-block" href="/apply/loan"><%= t('ऋण आवेदन', 'Apply for loan') %></a>
+      <a class="btn btn-ghost btn-block" href="/apply/appointment"><%= t('भेटघाट समय', 'Book a visit') %></a>
+    </div>
+  </aside>
+</div></section>

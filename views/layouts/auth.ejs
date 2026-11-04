@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="<%= lang === 'en' ? 'en' : 'ne' %>">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= locals.title ? title + ' · ' : '' %><%= siteName %></title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/admin.css">
+  <style>:root{--brand:<%= brandColor %>}</style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <a class="brand" href="/" style="justify-content:center;margin-bottom:24px">
+        <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'A').trim().charAt(0) %></span><% } %>
+        <span class="brand-name"><%= siteName %></span>
+      </a>
+      <%- body %>
+    </div>
+  </div>
+</body>
+</html>

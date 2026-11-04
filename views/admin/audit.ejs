@@ -1,0 +1,5 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('समय', 'When') %></th><th><%= t('को', 'Who') %></th><th><%= t('कार्य', 'Action') %></th><th><%= t('विवरण', 'Details') %></th><th>IP</th></tr></thead><tbody>
+  <% rows.forEach(a => { %><tr><td class="small"><%= bsDate(a.created_at) %> <span class="faint"><%= new Date(a.created_at).toTimeString().slice(0, 5) %></span></td><td><%= a.actor_name || '' %> <span class="faint small"><%= a.actor_type %></span></td><td><span class="badge"><%= a.action %></span></td><td class="small"><%= a.entity_type || '' %> <%= a.summary || '' %></td><td class="small faint"><%= a.ip_address || '' %></td></tr><% }) %>
+</tbody></table></div>
+<%- include('../partials/pagination', { pg }) %>

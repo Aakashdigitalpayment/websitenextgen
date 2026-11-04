@@ -1,0 +1,25 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<% if (codes) { %>
+  <div class="alert alert-success"><%= t('2FA सक्रिय भयो। तलका backup कोड सुरक्षित ठाउँमा राख्नुहोस् — प्रत्येक एक पटक मात्र चल्छ र फेरि देखिँदैन।', '2FA is on. Save these backup codes somewhere safe — each works once and they will not be shown again.') %></div>
+  <div class="card maxw-sm"><div class="grid grid-2" style="font-family:ui-monospace,monospace;font-size:1.05rem"><% codes.forEach(c => { %><div><%= c %></div><% }) %></div>
+  <button class="btn btn-outline btn-sm mt-2" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button></div>
+<% } else if (user.twofa_enabled) { %>
+  <div class="card maxw-md">
+    <div class="flex gap-2 items-center mb-2"><span class="icon-tile" style="margin:0;background:var(--ok-soft);color:var(--ok)"><%- icon('shield') %></span><div><h3 class="mb-0"><%= t('2FA सक्रिय छ', '2FA is on') %></h3><div class="small muted"><%= user.twofa_enabled_at ? bsDate(user.twofa_enabled_at) : '' %> · <%= num(remaining) %> <%= t('backup कोड बाँकी', 'backup codes left') %></div></div></div>
+    <form method="post" action="/admin/2fa/disable" class="form-grid">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="field"><label><%= t('पासवर्ड', 'Password') %></label><input class="input" type="password" name="password" required autocomplete="current-password"></div>
+      <div class="field"><label><%= t('एपको कोड', 'App code') %></label><input class="input" name="code" inputmode="numeric" required></div>
+      <div class="span-2"><button class="btn btn-danger btn-sm" data-confirm="<%= t('2FA बन्द गर्ने?', 'Turn off 2FA?') %>"><%= t('2FA बन्द गर्नुहोस्', 'Turn off 2FA') %></button></div>
+    </form>
+  </div>
+<% } else { %>
+  <div class="card maxw-md">
+    <p class="muted"><%= t('Google Authenticator, Microsoft Authenticator वा Authy एपले QR स्क्यान गर्नुहोस्, अनि देखिएको ६ अंकको कोड राख्नुहोस्।', 'Scan the QR code with Google Authenticator, Microsoft Authenticator or Authy, then enter the 6-digit code.') %></p>
+    <div class="flex gap-2 wrap items-center">
+      <img src="<%= qr %>" alt="QR code" width="220" height="220" style="border-radius:12px;border:1px solid var(--line);background:#fff">
+      <div class="grow"><div class="small muted"><%= t('QR स्क्यान नभए यो key हाल्नुहोस्:', "Can't scan? Enter this key:") %></div><code style="word-break:break-all;font-size:1rem"><%= secret.replace(/(.{4})/g, '$1 ').trim() %></code>
+        <form method="post" action="/admin/2fa/enable" class="mt-2 flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="code" inputmode="numeric" placeholder="123456" required style="max-width:160px"><button class="btn btn-primary"><%= t('सक्रिय गर्नुहोस्', 'Turn on') %></button></form></div>
+    </div>
+  </div>
+<% } %>

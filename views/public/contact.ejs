@@ -1,0 +1,26 @@
+<%- include('../partials/page-head', { lead: t('प्रश्न, सुझाव वा सहयोगका लागि हामीलाई लेख्नुहोस्।', 'Write to us with questions, feedback or for help.') }) %>
+<section class="section"><div class="container layout-side" style="grid-template-columns:1fr 380px">
+  <form class="form-card" method="post" action="/contact" novalidate>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="form-grid">
+      <% const fields = [{ name: 'name', label: ['नाम', 'Name'], required: true }, { name: 'phone', label: ['फोन', 'Phone'], type: 'tel' }, { name: 'email', label: ['इमेल', 'Email'], type: 'email', wide: true }, { name: 'subject', label: ['विषय', 'Subject'], required: true, wide: true }, { name: 'message', label: ['सन्देश', 'Message'], type: 'textarea', rows: 6, required: true }]; %>
+      <% fields.forEach(fl => { %><%- include('../partials/field', { field: fl, values, errors }) %><% }) %>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary btn-lg"><%= t('पठाउनुहोस्', 'Send message') %></button></div>
+  </form>
+  <aside class="stack">
+    <div class="card">
+      <h3><%= t('मुख्य कार्यालय', 'Head office') %></h3>
+      <ul class="list small">
+        <% if (settings.address) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('pin') %><%= settings.address %></li><% } %>
+        <% if (settings.phone) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('phone') %><a href="tel:<%= settings.phone %>"><%= settings.phone %></a></li><% } %>
+        <% if (settings.email) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('mail') %><a href="mailto:<%= settings.email %>"><%= settings.email %></a></li><% } %>
+        <% if (settings.working_hours) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('clock') %><%= settings.working_hours %></li><% } %>
+      </ul>
+    </div>
+    <% if (settings.map_embed_url && /^https:\/\/(www\.)?google\.com\/maps\/embed/.test(settings.map_embed_url)) { %>
+      <iframe src="<%= settings.map_embed_url %>" style="width:100%;height:240px;border:0;border-radius:var(--radius)" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map"></iframe>
+    <% } %>
+    <% if (centers.length > 1) { %><a class="btn btn-outline btn-block" href="/service-centers"><%= t('सबै शाखा हेर्नुहोस्', 'See all branches') %></a><% } %>
+  </aside>
+</div></section>

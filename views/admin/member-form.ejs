@@ -1,0 +1,29 @@
+<div class="content-head"><div><div class="crumbs"><a href="/admin/members"><%= t('सदस्यहरू', 'Members') %></a></div><h1><%= item ? (item.name_np || item.name) : t('नयाँ सदस्य', 'New member') %></h1></div>
+  <% if (item) { %><div class="flex gap-1">
+    <form method="post" action="/admin/members/<%= item.id %>/card"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('नयाँ परिचयपत्र जारी गर्ने? पुरानो रद्द हुनेछ।', 'Issue a new ID card? The old one will be revoked.') %>"><%- icon('id') %><%= t('परिचयपत्र जारी', 'Issue ID card') %></button></form>
+    <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('सदस्य हटाउने?', 'Remove member?') %>"><%- icon('trash') %></button></form><% } %>
+  </div><% } %>
+</div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+<form class="form-card" method="post" action="/admin/members<%= item ? '/' + item.id : '' %>" novalidate>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="form-grid">
+    <% const v = values; const fld = (name, np, en, type = 'text') => ({ name, label: [np, en], type }); %>
+    <% [fld('name', 'नाम (English)', 'Name (English)'), fld('name_np', 'नाम (नेपाली)', 'Name (Nepali)'), fld('sadasyata_number', 'सदस्यता नं.', 'Membership no.'), fld('member_card_no', 'कार्ड नं.', 'Card no.'), fld('phone', 'मोबाइल', 'Mobile'), fld('email', 'इमेल', 'Email'), fld('dob', 'जन्म मिति (AD)', 'Date of birth', 'date')].forEach(fl => { %>
+      <%- include('../partials/admin-field', { field: fl, values: v, errors, options: {} }) %>
+    <% }) %>
+    <%- include('../partials/admin-field', { field: { name: 'gender', label: ['लिङ्ग', 'Gender'], type: 'select' }, values: v, errors, options: { gender: [['male','पुरुष','Male'],['female','महिला','Female'],['other','अन्य','Other']] } }) %>
+    <%- include('../partials/admin-field', { field: { name: 'address', label: ['ठेगाना', 'Address'], type: 'textarea' }, values: v, errors, options: {} }) %>
+    <%- include('../partials/admin-field', { field: { name: 'approval_status', label: ['स्वीकृति', 'Approval'], type: 'select' }, values: v, errors, options: { approval_status: [['pending','बाँकी','Pending'],['approved','स्वीकृत','Approved'],['rejected','अस्वीकृत','Rejected']] } }) %>
+    <div class="field <%= errors.password ? 'has-error' : '' %>"><label><%= item ? t('नयाँ पासवर्ड (खाली = परिवर्तन नगर्ने)', 'New password (blank = keep)') : t('पासवर्ड', 'Password') %></label><input class="input" type="password" name="password" autocomplete="new-password"><% if (errors.password) { %><div class="field-error"><%= errors.password %></div><% } %></div>
+    <%- include('../partials/admin-field', { field: { name: 'is_active', label: ['सक्रिय', 'Active'], type: 'bool' }, values: v, errors, options: {} }) %>
+    <%- include('../partials/admin-field', { field: { name: 'information_room_enabled', label: ['सूचना कक्ष पहुँच', 'Information room access'], type: 'bool' }, values: v, errors, options: {} }) %>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+</form>
+<% if (item) { %><div class="card"><h3><%= t('परिचयपत्र', 'ID cards') %></h3>
+  <% if (!locals.cards || !cards.length) { %><p class="muted small"><%= t('परिचयपत्र जारी भएको छैन।', 'No card issued yet.') %></p><% } else { %>
+  <ul class="list"><% cards.forEach(c => { %><li class="list-item" style="flex-direction:column;gap:2px"><div><strong style="font-weight:500"><%= c.card_no %></strong> <span class="badge <%= c.status === 'active' ? 'badge-ok' : '' %>"><%= c.status %></span></div><div class="small muted"><%= t('कोड', 'Code') %>: <code><%= c.verification_code %></code> · CVV <code><%= c.cvv %></code></div><div class="small faint"><%= bsDate(c.issued_date) %> → <%= c.expiry_date ? bsDate(c.expiry_date) : '' %> · <%= t('प्रमाणीकरण', 'verified') %> <%= num(c.verify_count || 0) %>×</div></li><% }) %></ul><% } %>
+  <div class="small faint mt-2"><%= t('अन्तिम लगइन: ', 'Last login: ') %><%= item.last_login ? bsDate(item.last_login) : '—' %></div>
+</div><% } %>
+</div>

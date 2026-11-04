@@ -1,0 +1,19 @@
+<%- include('../partials/page-head', { lead: t('परिचयपत्रमा भएको प्रमाणीकरण कोड र ४ अंकको CVV राख्नुहोस्।', 'Enter the verification code and 4-digit CVV printed on the card.') }) %>
+<section class="section"><div class="container maxw-sm" style="margin-left:0">
+  <form class="form-card" method="post" action="/verify">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="form-grid">
+      <div class="field"><label for="code"><%= t('प्रमाणीकरण कोड', 'Verification code') %></label><input class="input" id="code" name="code" value="<%= code %>" placeholder="AKS-9F7K-2X4M" required></div>
+      <div class="field"><label for="cvv">CVV</label><input class="input" id="cvv" name="cvv" inputmode="numeric" maxlength="4" required></div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button></div>
+  </form>
+  <% if (result === false) { %><div class="alert alert-error mt-3"><%= t('परिचयपत्र प्रमाणित हुन सकेन।', 'Card could not be verified.') %></div><% } %>
+  <% if (result) { const c = result.card, m = result.member; %>
+    <div class="card mt-3"><div class="flex gap-2 items-center">
+      <span class="icon-tile" style="margin:0;background:<%= c.status === 'active' ? 'var(--ok-soft)' : 'var(--bad-soft)' %>;color:<%= c.status === 'active' ? 'var(--ok)' : 'var(--bad)' %>"><%- icon(c.status === 'active' ? 'check' : 'alert') %></span>
+      <div><h3 class="mb-0"><%= m ? (m.name_np || m.name) : c.member_id %></h3><div class="small muted"><%= t('कार्ड नं. ', 'Card no. ') %><%= c.card_no %> · <%= c.status === 'active' ? t('मान्य', 'Valid') : c.status %></div></div></div>
+      <div class="kv mt-2"><div><%= t('जारी मिति', 'Issued') %></div><div><%= bsDate(c.issued_date) %></div><% if (c.expiry_date) { %><div><%= t('म्याद', 'Expires') %></div><div><%= bsDate(c.expiry_date) %></div><% } %></div>
+    </div>
+  <% } %>
+</div></section>

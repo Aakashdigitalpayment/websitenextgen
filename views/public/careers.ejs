@@ -1,0 +1,10 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container">
+  <% if (!jobs.length) { %><div class="empty"><%= t('हाल कुनै रिक्त पद छैन।', 'No openings right now.') %></div><% } %>
+  <div class="stack"><% jobs.forEach(j => { const open = !j.deadline || j.deadline >= new Date().toISOString().slice(0,10); %>
+    <a class="card card-link flex justify-between items-center gap-2 wrap" href="/careers/<%= j.id %>">
+      <div><h3 class="mb-0"><%= f(j, 'title') %></h3><div class="small muted"><%= [j.department, j.location, j.job_type, j.vacancies ? num(j.vacancies) + ' ' + t('पद', 'posts') : ''].filter(Boolean).join(' · ') %></div></div>
+      <span class="badge <%= open ? 'badge-ok' : '' %>"><%= open ? (j.deadline ? t('अन्तिम मिति ', 'Apply by ') + bsDate(j.deadline) : t('खुला', 'Open')) : t('म्याद सकियो', 'Closed') %></span>
+    </a>
+  <% }) %></div>
+</div></section>

@@ -1,0 +1,8 @@
+<%- include('../partials/page-head', { lead: data.date ? t('नेपाल राष्ट्र बैंक, मिति ', 'Nepal Rastra Bank, ') + data.date : t('नेपाल राष्ट्र बैंक', 'Nepal Rastra Bank') }) %>
+<section class="section"><div class="container">
+  <% if (!data.rates.length) { %><div class="empty"><%= t('दर अहिले उपलब्ध छैन। केही समयपछि हेर्नुहोस्।', 'Rates are unavailable right now. Please check later.') %></div><% } else { %>
+  <% if (data.source === 'cached') { %><div class="alert alert-warn"><%= t('पछिल्लो सुरक्षित दर देखाइएको छ।', 'Showing the last saved rates.') %></div><% } %>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('मुद्रा', 'Currency') %></th><th class="num"><%= t('एकाइ', 'Unit') %></th><th class="num"><%= t('खरिद', 'Buy') %></th><th class="num"><%= t('बिक्री', 'Sell') %></th></tr></thead><tbody>
+    <% data.rates.forEach(r => { %><tr><td><strong style="font-weight:500"><%= r.iso %></strong> <span class="muted small"><%= r.name %></span></td><td class="num"><%= r.unit %></td><td class="num"><%= r.buy.toFixed(2) %></td><td class="num"><%= r.sell.toFixed(2) %></td></tr><% }) %>
+  </tbody></table></div><% } %>
+</div></section>

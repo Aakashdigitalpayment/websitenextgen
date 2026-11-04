@@ -1,0 +1,15 @@
+<%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]], lead: latest ? t('आर्थिक वर्ष ', 'Fiscal year ') + num(latest.fiscal_year) : '' }) %>
+<section class="section"><div class="container">
+  <% if (!latest) { %><div class="empty"><%= t('विवरण चाँडै।', 'Coming soon.') %></div><% } else { %>
+  <div class="grid grid-4">
+    <% [['total_members', t('कुल सदस्य', 'Members'), false], ['share_capital', t('शेयर पुँजी', 'Share capital'), true], ['deposit', t('कुल बचत', 'Deposits'), true], ['loan', t('कुल ऋण', 'Loans'), true], ['total_assets', t('कुल सम्पत्ति', 'Total assets'), true], ['other_fund', t('अन्य कोष', 'Other funds'), true], ['npa_percent', t('निष्क्रिय कर्जा', 'NPA'), false], ['profit_loss', t('नाफा/नोक्सान', 'Profit / loss'), true]].forEach(([k, label, isMoney]) => { if (latest[k] !== null && latest[k] !== undefined && latest[k] !== 0) { %>
+      <div class="card card-flat"><div class="small muted"><%= label %></div><div class="stat-value mt-1"><%= isMoney ? t('रु. ', 'Rs. ') + money(latest[k]) : (k === 'npa_percent' ? num(latest[k]) + '%' : num(Number(latest[k]).toLocaleString('en-IN'))) %></div></div>
+    <% } }) %>
+  </div>
+  <% if (rows.length > 1) { %>
+  <h2 class="mt-4"><%= t('विगतका विवरण', 'History') %></h2>
+  <div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('आ.व.', 'FY') %></th><th><%= t('महिना', 'Month') %></th><th class="num"><%= t('सदस्य', 'Members') %></th><th class="num"><%= t('बचत', 'Deposits') %></th><th class="num"><%= t('ऋण', 'Loans') %></th><th class="num"><%= t('सम्पत्ति', 'Assets') %></th></tr></thead><tbody>
+    <% rows.forEach(r => { %><tr><td><%= num(r.fiscal_year) %></td><td><%= r.report_month ? (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[r.report_month - 1] : '' %></td><td class="num"><%= num(r.total_members || '') %></td><td class="num"><%= money(r.deposit) %></td><td class="num"><%= money(r.loan) %></td><td class="num"><%= money(r.total_assets) %></td></tr><% }) %>
+  </tbody></table></div><% } %>
+  <% } %>
+</div></section>

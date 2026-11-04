@@ -1,0 +1,7 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<div class="alert alert-info"><%- icon('shield') %><span><%= t('यहाँका कागजात गोप्य हुन्। हेरेको विवरण अभिलेख गरिन्छ।', 'These documents are confidential. Access is logged.') %></span></div>
+<% if (!items.length) { %><div class="empty"><%= t('कागजात छैन।', 'No documents yet.') %></div><% } else { %>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('शीर्षक', 'Title') %></th><th><%= t('समूह', 'Category') %></th><th><%= t('मिति', 'Date') %></th><th></th></tr></thead><tbody>
+  <% items.forEach(i => { %><tr><td><div style="font-weight:500"><%= f(i, 'title') %></div><% if (i.reference_no) { %><div class="small faint"><%= i.reference_no %></div><% } %></td><td><%= i.category || '' %></td><td class="small"><%= i.meeting_date ? bsDate(i.meeting_date) : '' %></td>
+    <td class="text-right"><a class="btn btn-soft btn-sm" href="/member/information-room/<%= i.id %>" target="_blank" rel="noopener"><%- icon(i.allow_download ? 'download' : 'eye') %><%= i.allow_download ? t('डाउनलोड', 'Download') : t('हेर्नुहोस्', 'View') %></a></td></tr><% }) %>
+</tbody></table></div><% } %>

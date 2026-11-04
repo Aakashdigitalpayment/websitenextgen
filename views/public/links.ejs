@@ -1,0 +1,4 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container"><div class="grid grid-3">
+  <% links.forEach(l => { %><a class="card card-link" href="<%= l.url %>" target="_blank" rel="noopener"><div class="flex gap-2 items-center"><span class="icon-tile" style="margin:0"><%- icon('link') %></span><div><h3 class="mb-0"><%= f(l, 'title') %></h3><div class="small faint"><%= String(l.url || '').replace(/^https?:\/\//, '').split('/')[0] %></div></div></div></a><% }) %>
+</div><% if (!links.length) { %><div class="empty"><%= t('लिङ्क छैन।', 'No links yet.') %></div><% } %></div></section>

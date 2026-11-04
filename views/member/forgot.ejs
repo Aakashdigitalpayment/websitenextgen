@@ -1,0 +1,12 @@
+<div class="form-card">
+  <h1 style="font-size:1.35rem"><%= title %></h1>
+  <% if (done) { %>
+    <div class="alert alert-success"><%= t('अनुरोध प्राप्त भयो। विवरण मिलेमा कार्यालयले तपाईंलाई फोन गरी अस्थायी पासवर्ड दिनेछ।', 'Request received. If the details match, the office will call you with a temporary password.') %></div>
+    <a class="btn btn-outline btn-block" href="/member/login"><%= t('लगइनमा फर्कनुहोस्', 'Back to sign in') %></a>
+  <% } else { %>
+  <p class="muted small"><%= t('दर्ता गरिएको मोबाइल वा सदस्यता नम्बर राख्नुहोस्।', 'Enter your registered mobile or membership number.') %></p>
+  <form method="post" action="/member/forgot"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="field"><label for="i"><%= t('मोबाइल / सदस्यता नं.', 'Mobile / member no.') %></label><input class="input" id="i" name="identifier" required></div>
+    <button class="btn btn-primary btn-block mt-2"><%= t('अनुरोध पठाउनुहोस्', 'Send request') %></button>
+  </form><% } %>
+</div>

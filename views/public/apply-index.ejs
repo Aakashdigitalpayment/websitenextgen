@@ -1,0 +1,8 @@
+<%- include('../partials/page-head', { lead: t('कार्यालय नआई अनलाइन आवेदन दिनुहोस्।', 'Apply online without visiting the office.') }) %>
+<section class="section"><div class="container">
+  <div class="grid grid-3"><% list.forEach(m => { %>
+    <a class="card card-link" href="/apply/<%= m.key %>"><span class="icon-tile"><%- icon(m.icon) %></span><h3><%= t(...m.title) %></h3><% if (m.intro) { %><p class="muted small"><%= t(...m.intro) %></p><% } %></a>
+  <% }) %>
+    <a class="card card-link" href="/track"><span class="icon-tile"><%- icon('search') %></span><h3><%= t('आवेदनको स्थिति', 'Track application') %></h3><p class="muted small"><%= t('ट्र्याकिङ नम्बरबाट स्थिति हेर्नुहोस्।', 'Check status with your tracking number.') %></p></a>
+  </div>
+</div></section>

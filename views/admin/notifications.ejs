@@ -1,0 +1,28 @@
+<div class="content-head"><h1><%= title %></h1><div class="flex gap-1"><a class="btn btn-outline btn-sm" href="/admin/settings?tab=notify"><%- icon('settings') %><%= t('SMS/इमेल सेटिङ', 'SMS/email settings') %></a><a class="btn btn-outline btn-sm" href="/admin/r/notification_templates"><%- icon('file') %><%= t('ढाँचा', 'Templates') %></a></div></div>
+<div class="grid grid-2 mb-3">
+  <form class="card" method="post" action="/admin/notifications/test">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3><%= t('परीक्षण पठाउनुहोस्', 'Send a test') %></h3>
+    <div class="form-grid">
+      <div class="field"><label><%= t('माध्यम', 'Channel') %></label><select class="select" name="channel"><option value="sms">SMS</option><option value="email"><%= t('इमेल', 'Email') %></option></select></div>
+      <div class="field"><label><%= t('फोन वा इमेल', 'Phone or email') %></label><input class="input" name="to" required></div>
+    </div>
+    <button class="btn btn-primary mt-2"><%= t('पठाउनुहोस्', 'Send test') %></button>
+  </form>
+  <form class="card" method="post" action="/admin/notifications/push">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3><%= t('सबै सदस्यलाई सूचना', 'Notify all members') %> <span class="badge"><%= num(subs) %> <%= t('push उपकरण', 'push devices') %></span></h3>
+    <div class="stack">
+      <div class="field"><label><%= t('शीर्षक', 'Title') %></label><input class="input" name="title" maxlength="120" required></div>
+      <div class="field"><label><%= t('सन्देश', 'Message') %></label><textarea class="textarea" name="body" rows="2" maxlength="300"></textarea></div>
+      <div class="field"><label><%= t('लिङ्क (ऐच्छिक)', 'Link (optional)') %></label><input class="input" name="url" placeholder="/notices"></div>
+    </div>
+    <button class="btn btn-primary mt-2" data-confirm="<%= t('सबै सदस्यलाई पठाउने?', 'Send to all members?') %>"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button>
+  </form>
+</div>
+<h2><%= t('पठाइएको लग', 'Delivery log') %></h2>
+<% if (!rows.length) { %><div class="empty mt-2"><%= t('अहिलेसम्म केही पठाइएको छैन।', 'Nothing sent yet.') %></div><% } else { %>
+<div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('समय', 'When') %></th><th><%= t('घटना', 'Event') %></th><th><%= t('माध्यम', 'Channel') %></th><th><%= t('प्राप्तकर्ता', 'To') %></th><th><%= t('स्थिति', 'Status') %></th></tr></thead><tbody>
+  <% rows.forEach(r => { %><tr><td class="small"><%= bsDate(r.created_at) %> <span class="faint"><%= new Date(r.created_at).toTimeString().slice(0,5) %></span></td><td class="small"><%= r.event_type %></td><td><span class="badge"><%= r.channel %></span></td><td class="small"><%= r.recipient %><div class="faint"><%= util.excerpt(r.subject || r.message, 70) %></div></td><td><span class="badge <%= r.status === 'sent' ? 'badge-ok' : 'badge-bad' %>"><%= r.status %></span><% if (r.error_msg) { %><div class="small faint"><%= r.error_msg %></div><% } %></td></tr><% }) %>
+</tbody></table></div>
+<%- include('../partials/pagination', { pg }) %><% } %>

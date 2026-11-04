@@ -1,0 +1,4 @@
+<div class="content-head"><h1><%= title %></h1><a class="btn btn-primary" href="/apply"><%- icon('plus') %><%= t('नयाँ आवेदन', 'New application') %></a></div>
+<% if (!requests.length) { %><div class="empty"><%= t('अहिलेसम्म आवेदन छैन।', 'No applications yet.') %></div><% } else { %>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('प्रकार', 'Type') %></th><th><%= t('ट्र्याकिङ', 'Tracking') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('टिप्पणी', 'Remarks') %></th></tr></thead><tbody>
+<% requests.forEach(r => { %><%- include('../partials/request-row', r) %><% }) %></tbody></table></div><% } %>

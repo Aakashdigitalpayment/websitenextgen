@@ -1,0 +1,9 @@
+<% if (pg && pg.pages > 1) { const qs = n => { const q = new URLSearchParams(query); q.set('page', n); return '?' + q.toString(); }; %>
+<nav class="pagination" aria-label="Pages">
+  <% if (pg.page > 1) { %><a href="<%= qs(pg.page - 1) %>" aria-label="Previous">‹</a><% } %>
+  <% for (let n = Math.max(1, pg.page - 2); n <= Math.min(pg.pages, pg.page + 2); n++) { %>
+    <% if (n === pg.page) { %><span class="current"><%= num(n) %></span><% } else { %><a href="<%= qs(n) %>"><%= num(n) %></a><% } %>
+  <% } %>
+  <% if (pg.page < pg.pages) { %><a href="<%= qs(pg.page + 1) %>" aria-label="Next">›</a><% } %>
+</nav>
+<% } %>

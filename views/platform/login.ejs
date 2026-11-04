@@ -1,0 +1,10 @@
+<form class="form-card maxw-sm mx-auto mt-4" method="post" action="/platform/login">
+  <h1 style="font-size:1.35rem">Platform sign in</h1>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="stack">
+    <div class="field"><label>Username</label><input class="input" name="username" autocomplete="username" required autofocus></div>
+    <div class="field"><label>Password</label><input class="input" name="password" type="password" autocomplete="current-password" required></div>
+    <button class="btn btn-primary btn-block">Sign in</button>
+  </div>
+</form>

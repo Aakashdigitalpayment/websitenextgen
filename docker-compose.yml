@@ -1,0 +1,33 @@
+# Local / single-server deployment:  docker compose up -d
+# then:  docker compose exec app npm run db:migrate
+#        docker compose exec app npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --domain=aakash.localhost --password=ChangeMe@12345
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: coop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-coop}
+      POSTGRES_DB: coop
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coop"]
+      interval: 5s
+      retries: 10
+  app:
+    build: .
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://coop:${POSTGRES_PASSWORD:-coop}@db:5432/coop
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      NODE_ENV: production
+      BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
+      PLATFORM_HOST: ${PLATFORM_HOST:-platform.localhost}
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+    ports: ["3000:3000"]
+    volumes: [uploads:/app/uploads]
+volumes:
+  pgdata:
+  uploads:

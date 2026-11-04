@@ -1,0 +1,14 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<h2><%= t('आगामी कार्यक्रम', 'Upcoming') %></h2>
+<% if (!upcoming.length) { %><div class="empty mt-2"><%= t('आगामी कार्यक्रम छैन।', 'No upcoming programmes.') %></div><% } %>
+<div class="grid grid-3 mt-2"><% upcoming.forEach(p => { %>
+  <div class="card"><div class="card-meta"><%- icon('calendar') %><%= p.event_date ? bsDate(p.event_date) : '' %><%= p.event_time ? ' · ' + p.event_time : '' %></div><h3><%= p.title %></h3><p class="small muted"><%= p.location || '' %></p>
+    <% if (registered.has(p.id)) { %><span class="badge badge-ok"><%= t('दर्ता भयो', 'Registered') %></span>
+    <% } else if (Number(p.pre_registration_open)) { %><form method="post" action="/member/programs/<%= p.id %>/register"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-soft btn-sm"><%= t('पूर्व दर्ता', 'Register') %></button></form><% } %>
+  </div>
+<% }) %></div>
+<h2 class="mt-4"><%= t('मेरो उपस्थिति', 'My attendance') %></h2>
+<% if (!mine.length) { %><div class="empty mt-2"><%= t('अहिलेसम्म कुनै उपस्थिति छैन।', 'No attendance yet.') %></div><% } else { %>
+<div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('समय', 'When') %></th></tr></thead><tbody>
+  <% mine.forEach(a => { %><tr><td><%= a.program_title %></td><td><%= a.location_label || '' %></td><td class="small"><%= bsDate(a.attended_at) %> <%= new Date(a.attended_at).toTimeString().slice(0,5) %></td></tr><% }) %>
+</tbody></table></div><% } %>

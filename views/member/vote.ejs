@@ -1,0 +1,19 @@
+<div class="content-head"><div><div class="crumbs"><a href="/member"><%= t('ड्यासबोर्ड', 'Dashboard') %></a></div><h1><%= title %></h1></div></div>
+<% if (voted) { %>
+  <div class="card tracking-box"><span class="icon-tile" style="margin:0 auto 12px;background:var(--ok-soft);color:var(--ok)"><%- icon('check', 'icon-lg') %></span><h2><%= t('तपाईंले मतदान गरिसक्नुभयो', 'You have voted') %></h2><p class="muted"><%= bsDate(voted.submitted_at) %></p></div>
+<% } else { %>
+<form method="post" action="/member/elections/<%= cycle.id %>">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <% positions.forEach(p => { const list = candidates.filter(c => c.position_id === p.id); const max = p.max_votes_per_voter || p.seats || 1; %>
+    <div class="card mb-2">
+      <h3><%= f(p, 'title') %></h3><p class="small muted"><%= t('बढीमा ' + num(max) + ' जना छान्नुहोस्', 'Choose up to ' + max) %></p>
+      <div class="grid grid-3"><% list.forEach(c => { %>
+        <label class="choice" style="padding:12px;align-items:center"><input type="<%= max > 1 ? 'checkbox' : 'radio' %>" name="pos_<%= p.id %>" value="<%= c.id %>">
+          <span class="person-photo" style="width:44px;height:44px;margin:0;font-size:1rem"><% if (c.photo) { %><img src="<%= mediaUrl(c.photo) %>" alt=""><% } else { %><%= (f(c, 'name') || '?').charAt(0) %><% } %></span>
+          <span><span style="font-weight:500;display:block"><%= f(c, 'name') %></span><% if (c.symbol_no) { %><span class="small faint"><%= t('चिन्ह ', 'Symbol ') %><%= num(c.symbol_no) %></span><% } %></span></label>
+      <% }) %></div>
+    </div>
+  <% }) %>
+  <button class="btn btn-primary btn-lg" data-confirm="<%= t('मत पक्का गर्ने? पछि परिवर्तन गर्न मिल्दैन।', 'Submit your ballot? It cannot be changed later.') %>"><%- icon('vote') %><%= t('मत खसाल्नुहोस्', 'Cast vote') %></button>
+</form>
+<% } %>

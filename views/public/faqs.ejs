@@ -1,0 +1,8 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container maxw-md" style="margin-left:0">
+  <% if (!faqs.length) { %><div class="empty"><%= t('प्रश्न छैन।', 'No FAQs yet.') %></div><% } %>
+  <div class="stack"><% faqs.forEach(q => { %>
+    <details class="card card-flat"><summary style="cursor:pointer;font-weight:500"><%= f(q, 'question') %></summary><div class="muted mt-1"><%- util.richText(f(q, 'answer')) %></div></details>
+  <% }) %></div>
+  <p class="mt-3 muted"><%= t('अझै प्रश्न छ?', 'Still have a question?') %> <a href="/contact"><%= t('सम्पर्क गर्नुहोस्', 'Contact us') %></a></p>
+</div></section>

@@ -1,0 +1,12 @@
+<form class="form-card" method="post" action="/admin/login<%= query.next ? '?next=' + encodeURIComponent(query.next) : '' %>">
+  <h1 style="font-size:1.35rem"><%= t('प्रशासक लगइन', 'Admin sign in') %></h1>
+  <p class="muted small"><%= t('आफ्नो प्रयोगकर्ता नाम र पासवर्ड राख्नुहोस्।', 'Enter your username and password.') %></p>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="stack">
+    <div class="field"><label for="u"><%= t('प्रयोगकर्ता नाम', 'Username') %></label><input class="input" id="u" name="username" value="<%= username %>" autocomplete="username" required autofocus></div>
+    <div class="field"><label for="p"><%= t('पासवर्ड', 'Password') %></label><input class="input" id="p" name="password" type="password" autocomplete="current-password" required></div>
+    <button class="btn btn-primary btn-block btn-lg"><%= t('लगइन', 'Sign in') %></button>
+  </div>
+</form>
+<p class="text-center small mt-2"><a href="/"><%= t('← वेबसाइटमा फर्कनुहोस्', '← Back to website') %></a></p>

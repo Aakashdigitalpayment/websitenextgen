@@ -1,0 +1,16 @@
+<%- include('../partials/page-head', { crumbs: [['/auctions', t('लिलाम', 'Auctions')]] }) %>
+<section class="section"><div class="container layout-side">
+  <div>
+    <% if (item.image) { %><img src="<%= mediaUrl(item.image) %>" alt="" style="border-radius:var(--radius);width:100%;margin-bottom:16px"><% } %>
+    <% if (images.length) { %><div class="gallery" style="columns:3 140px"><% images.forEach(im => { %><a href="<%= mediaUrl(im) %>" target="_blank" rel="noopener"><img src="<%= mediaUrl(im) %>" alt="" loading="lazy"></a><% }) %></div><% } %>
+    <div class="prose"><%- util.richText(f(item, 'description')) %></div>
+    <% if (item.document) { %><a class="btn btn-outline mt-2" href="<%= mediaUrl(item.document) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('सूचना', 'Notice document') %></a><% } %>
+  </div>
+  <aside class="card">
+    <div class="kv" style="grid-template-columns:1fr 1fr">
+      <% [[t('स्थिति','Status'), item.status], [t('प्रकार','Type'), item.property_type], [t('स्थान','Location'), item.location], [t('क्षेत्रफल','Area'), item.area], [t('न्यूनतम मूल्य','Minimum price'), item.minimum_price && 'रु. ' + money(item.minimum_price)], [t('मिति','Date'), item.auction_date && bsDate(item.auction_date)], [t('समय','Time'), item.auction_time], [t('सम्पर्क','Contact'), [item.contact_person, item.contact_phone].filter(Boolean).join(', ')], [t('कबोल संख्या','Bids'), num(bids)]].filter(x => x[1]).forEach(x => { %><div><%= x[0] %></div><div><%= x[1] %></div><% }) %>
+    </div>
+    <% if (['upcoming','ongoing'].includes(item.status)) { %><a class="btn btn-primary btn-block mt-2" href="/apply/bid?auction=<%= item.id %>"><%= t('कबोल गर्नुहोस्', 'Place a bid') %></a><% } %>
+    <% if (item.google_map_link) { %><a class="btn btn-ghost btn-block mt-1" href="<%= item.google_map_link %>" target="_blank" rel="noopener"><%- icon('pin') %><%= t('नक्सा', 'Map') %></a><% } %>
+  </aside>
+</div></section>

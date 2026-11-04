@@ -1,0 +1,26 @@
+<%- include('../partials/page-head', { crumbs: [['/marketplace', t('सदस्य बजार', 'Marketplace')]] }) %>
+<section class="section"><div class="container layout-side">
+  <div>
+    <% if (l.image) { %><img src="<%= mediaUrl(l.image) %>" alt="" style="border-radius:var(--radius);width:100%;max-height:480px;object-fit:cover;margin-bottom:20px"><% } %>
+    <div class="flex gap-1 wrap mb-2"><span class="badge badge-brand"><%= l.listing_type === 'skill' ? t('सीप/सेवा', 'Skill / service') : t('उत्पादन', 'Product') %></span><span class="badge"><%= catLabel(l.category) %></span></div>
+    <div class="prose" style="white-space:pre-wrap"><%= l.description %></div>
+    <div class="kv mt-3">
+      <% [[t('मूल्य', 'Price'), l.price ? 'रु. ' + money(l.price) + (l.unit ? ' / ' + l.unit : '') : l.price_note], [t('परिमाण', 'Quantity'), l.quantity], [t('अनुभव', 'Experience'), l.experience_years ? num(l.experience_years) + ' ' + t('वर्ष', 'years') : ''], [t('स्थान', 'Location'), l.location]].filter(x => x[1]).forEach(x => { %><div><%= x[0] %></div><div><%= x[1] %></div><% }) %>
+    </div>
+  </div>
+  <aside class="card">
+    <h3><%= t('सम्पर्क', 'Contact') %></h3>
+    <% if (l.contact_name) { %><div style="font-weight:500"><%= l.contact_name %></div><% } %>
+    <% if (l.contact_phone) { %><a class="btn btn-primary btn-block mt-1" href="tel:<%= l.contact_phone %>"><%- icon('phone') %><%= l.contact_phone %></a><% } %>
+    <hr>
+    <% if (sent) { %><div class="alert alert-success"><%= t('सन्देश पठाइयो। विक्रेताले सम्पर्क गर्नेछन्।', 'Message sent. The seller will contact you.') %></div><% } else { %>
+    <form method="post" action="/marketplace/<%= l.id %>/inquiry" class="stack">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <div class="small muted"><%= t('वा सन्देश पठाउनुहोस्', 'Or send a message') %></div>
+      <%- include('../partials/field', { field: { name: 'name', label: ['नाम', 'Name'], required: true }, values, errors }) %>
+      <%- include('../partials/field', { field: { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true }, values, errors }) %>
+      <%- include('../partials/field', { field: { name: 'message', label: ['सन्देश', 'Message'], type: 'textarea', rows: 3 }, values, errors }) %>
+      <button class="btn btn-outline"><%= t('पठाउनुहोस्', 'Send') %></button>
+    </form><% } %>
+  </aside>
+</div></section>

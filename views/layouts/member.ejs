@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="<%= lang === 'en' ? 'en' : 'ne' %>">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= locals.title ? title + ' · ' : '' %><%= siteName %></title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/admin.css">
+  <style>:root{--brand:<%= brandColor %>}</style>
+</head>
+<body class="panel">
+<div class="shell">
+  <aside class="sidebar" data-nav>
+    <a class="brand" href="/"><% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %><span class="brand-name" style="font-size:.92rem"><%= siteName %></span></a>
+    <% const cur = path.replace(/\/$/, ''); %>
+    <% [['/member', 'home', t('ड्यासबोर्ड', 'Dashboard')], ['/member/requests', 'inbox', t('मेरा आवेदन', 'My applications')], ['/member/notifications', 'bell', t('सूचनाहरू', 'Notifications')], ['/member/id-card', 'id', t('परिचयपत्र', 'ID card')], ['/member/programs', 'calendar', t('कार्यक्रम', 'Programmes')], ['/member/marketplace', 'store', t('मेरो बजार', 'My marketplace')], ['/member/profile', 'user', t('मेरो विवरण', 'Profile')]].concat(member.information_room_enabled ? [['/member/information-room', 'shield', t('सूचना कक्ष', 'Information room')]] : []).forEach(([href, ic, label]) => { %>
+      <a class="side-link <%= cur === href ? 'active' : '' %>" href="<%= href %>"><%- icon(ic) %><%= label %><% if (href === '/member/notifications' && unread) { %><span class="count"><%= num(unread) %></span><% } %></a>
+    <% }) %>
+    <div class="side-group"><div class="side-title"><%= t('नयाँ आवेदन', 'Apply') %></div>
+      <% (locals.applyModules || []).forEach(m => { %><a class="side-link" href="/apply/<%= m.key %>"><%- icon(m.icon) %><%= t(...m.title) %></a><% }) %>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topnav">
+      <button class="btn btn-ghost btn-icon side-toggle" data-nav-toggle aria-label="Menu"><%- icon('menu') %></button>
+      <a class="btn btn-ghost btn-sm" href="/"><%- icon('globe') %><span class="btn-text"><%= t('वेबसाइट', 'Website') %></span></a>
+      <div class="grow"></div>
+      <span class="lang-switch"><a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">ने</a><a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a></span>
+      <div class="who"><b><%= member.name_np || member.name %></b><%= member.sadasyata_number || member.phone || '' %></div>
+      <form method="post" action="/member/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-icon" aria-label="Log out"><%- icon('logout') %></button></form>
+    </header>
+    <main class="content">
+      <% (locals.flash || []).forEach(m => { %><div class="alert alert-<%= m.type %>"><%= m.message %></div><% }) %>
+      <%- body %>
+    </main>
+  </div>
+</div>
+<script src="/static/js/app.js" defer></script>
+</body>
+</html>

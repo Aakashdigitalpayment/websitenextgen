@@ -1,0 +1,15 @@
+<%- include('../partials/page-head', { lead: t('आज: ', 'Today: ') + nd.formatBs(today, lang) + ' (' + today + ' BS)' }) %>
+<section class="section"><div class="container"><div class="grid grid-2">
+  <form class="form-card" method="get">
+    <h3><%= t('वि.सं. → ई.सं.', 'BS → AD') %></h3>
+    <div class="field"><label for="bs"><%= t('वि.सं. मिति', 'BS date') %></label><input class="input" id="bs" name="bs" placeholder="2081-05-15" value="<%= query.bs || '' %>"></div>
+    <button class="btn btn-primary mt-2"><%= t('परिवर्तन', 'Convert') %></button>
+    <% if (out.ad) { %><div class="alert <%= out.ad === 'invalid' ? 'alert-error' : 'alert-success' %> mt-2"><%= out.ad === 'invalid' ? t('मिति मिलेन', 'Invalid date') : out.ad + ' AD (' + new Date(out.ad + 'T00:00:00Z').toUTCString().slice(0, 16) + ')' %></div><% } %>
+  </form>
+  <form class="form-card" method="get">
+    <h3><%= t('ई.सं. → वि.सं.', 'AD → BS') %></h3>
+    <div class="field"><label for="ad"><%= t('ई.सं. मिति', 'AD date') %></label><input class="input" id="ad" name="ad" type="date" value="<%= query.ad || '' %>"></div>
+    <button class="btn btn-primary mt-2"><%= t('परिवर्तन', 'Convert') %></button>
+    <% if (out.bs) { %><div class="alert <%= out.bs === 'invalid' ? 'alert-error' : 'alert-success' %> mt-2"><%= out.bs === 'invalid' ? t('मिति मिलेन', 'Invalid date') : nd.formatBs(out.bs, lang) + ' (' + out.bs + ' BS)' %></div><% } %>
+  </form>
+</div></div></section>

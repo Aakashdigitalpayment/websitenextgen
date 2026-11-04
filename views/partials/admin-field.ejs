@@ -1,0 +1,32 @@
+<%
+  const fl = field; let val = values[fl.name]; if (val === undefined || val === null) val = '';
+  if (val instanceof Date) val = fl.type === 'datetime' ? new Date(val.getTime() - val.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : val.toISOString().slice(0, 10);
+  const err = errors[fl.name]; const id = 'f_' + fl.name; const label = t(fl.label[0], fl.label[1]);
+  const wide = ['textarea', 'richtext'].includes(fl.type); const opts = options[fl.name] || [];
+%>
+<div class="field <%= wide ? 'span-2' : '' %> <%= err ? 'has-error' : '' %>">
+  <% if (fl.type === 'bool') { %>
+    <label class="choice" style="margin-top:26px"><input type="checkbox" name="<%= fl.name %>" value="1" <%= Number(val) ? 'checked' : '' %>> <%= label %></label>
+  <% } else { %>
+    <label for="<%= id %>"><%= label %><% if (fl.required) { %><span class="req">*</span><% } %></label>
+    <% if (fl.type === 'textarea' || fl.type === 'richtext') { %>
+      <textarea class="textarea" id="<%= id %>" name="<%= fl.name %>" rows="<%= fl.type === 'richtext' ? 10 : 4 %>"><%= val %></textarea>
+      <% if (fl.type === 'richtext') { %><div class="field-hint"><%= t('सादा पाठ वा HTML (p, strong, ul, li, a, img, table) प्रयोग गर्न सकिन्छ।', 'Plain text or basic HTML (p, strong, ul, li, a, img, table).') %></div><% } %>
+    <% } else if (fl.type === 'select') { %>
+      <select class="select" id="<%= id %>" name="<%= fl.name %>"><option value="">—</option>
+        <% opts.forEach(o => { %><option value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select>
+    <% } else if (fl.type === 'image' || fl.type === 'file') { %>
+      <% if (val) { %><div class="file-current">
+        <% if (fl.type === 'image') { %><img class="thumb" src="<%= mediaUrl(val) %>" alt=""><% } else { %><%- icon('file') %><a href="<%= mediaUrl(val) %>" target="_blank" rel="noopener"><%= String(val).split('/').pop() %></a><% } %>
+        <label class="choice" style="padding:4px 10px"><input type="checkbox" name="remove_<%= fl.name %>" value="1"> <%= t('हटाउने', 'Remove') %></label>
+      </div><% } %>
+      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" <%= fl.type === 'image' ? 'accept=image/jpeg,image/png,image/webp,image/gif' : '' %>>
+    <% } else { %>
+      <input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>"
+        type="<%= fl.type === 'date' ? 'date' : fl.type === 'datetime' ? 'datetime-local' : fl.type === 'color' ? 'color' : fl.type === 'url' ? 'url' : 'text' %>"
+        <%= fl.type === 'number' ? 'inputmode=decimal' : '' %>>
+    <% } %>
+    <% if (fl.hint) { %><div class="field-hint"><%= fl.hint %></div><% } %>
+  <% } %>
+  <% if (err) { %><div class="field-error"><%= err %></div><% } %>
+</div>

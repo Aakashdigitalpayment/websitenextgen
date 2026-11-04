@@ -1,0 +1,16 @@
+<div class="content-head">
+  <div><div class="crumbs"><a href="/admin/r/<%= r.key %>"><%= title %></a></div><h1><%= item ? t('सम्पादन', 'Edit') : t('नयाँ', 'New') %></h1></div>
+  <% if (item && ['notices','news','pages','services','careers','auction_notices'].includes(r.key)) { const pub = { notices: '/notices/', news: '/news/', services: '/services/', careers: '/careers/', auction_notices: '/auctions/', pages: '/page/' }[r.key] + (r.key === 'pages' ? item.slug : item.id); %>
+    <a class="btn btn-outline btn-sm" href="<%= pub %>" target="_blank" rel="noopener"><%- icon('eye') %><%= t('हेर्नुहोस्', 'View') %></a><% } %>
+</div>
+<% if (errors._upload) { %><div class="alert alert-error"><%= errors._upload %></div><% } %>
+<% if (Object.keys(errors).filter(k => k !== '_upload').length) { %><div class="alert alert-error"><%= t('रातो चिन्ह लागेका विवरण सच्याउनुहोस्।', 'Please fix the highlighted fields.') %></div><% } %>
+<% const action = '/admin/r/' + r.key + (item ? '/' + item.id : ''); const multi = r.fileFields.length > 0; %>
+<form class="form-card" method="post" action="<%= action %><%= multi ? '?_csrf=' + encodeURIComponent(csrfToken) : '' %>" <%= multi ? 'enctype=multipart/form-data' : '' %> novalidate>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="form-grid"><% fields.filter(fl => !fl.hidden).forEach(fl => { %><%- include('../partials/admin-field', { field: fl, values, errors, options }) %><% }) %></div>
+  <div class="form-actions">
+    <button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button>
+    <a class="btn btn-ghost" href="/admin/r/<%= r.key %>"><%= t('रद्द', 'Cancel') %></a>
+  </div>
+</form>

@@ -1,0 +1,21 @@
+<%- include('../partials/page-head', { lead: t('मासिक किस्ता, कुल ब्याज र भुक्तानी तालिका हेर्नुहोस्।', 'See your monthly instalment, total interest and repayment schedule.') }) %>
+<section class="section"><div class="container layout-side" style="grid-template-columns:360px 1fr">
+  <form class="form-card" method="get" data-emi>
+    <div class="stack">
+      <div class="field"><label for="amount"><%= t('ऋण रकम (रु.)', 'Loan amount (Rs.)') %></label><input class="input" id="amount" name="amount" inputmode="decimal" value="<%= amount %>"></div>
+      <div class="field"><label for="rate"><%= t('वार्षिक ब्याजदर (%)', 'Annual rate (%)') %></label><input class="input" id="rate" name="rate" inputmode="decimal" value="<%= rate %>"></div>
+      <div class="field"><label for="months"><%= t('अवधि (महिना)', 'Tenure (months)') %></label><input class="input" id="months" name="months" inputmode="numeric" value="<%= months %>"></div>
+      <button class="btn btn-primary btn-block"><%= t('तालिका हेर्नुहोस्', 'Show schedule') %></button>
+    </div>
+  </form>
+  <div>
+    <div class="grid grid-3">
+      <div class="card card-flat"><div class="small muted"><%= t('मासिक किस्ता', 'Monthly EMI') %></div><div class="stat-value" data-emi-monthly>Rs. <%= Math.round(emi).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('कुल ब्याज', 'Total interest') %></div><div class="stat-value" data-emi-interest>Rs. <%= Math.round(total - amount).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('कुल भुक्तानी', 'Total payment') %></div><div class="stat-value" data-emi-total>Rs. <%= Math.round(total).toLocaleString('en-IN') %></div></div>
+    </div>
+    <div class="table-wrap mt-3" style="max-height:480px;overflow:auto"><table class="table"><thead><tr><th>#</th><th class="num"><%= t('किस्ता', 'EMI') %></th><th class="num"><%= t('साँवा', 'Principal') %></th><th class="num"><%= t('ब्याज', 'Interest') %></th><th class="num"><%= t('बाँकी', 'Balance') %></th></tr></thead><tbody>
+      <% schedule.forEach(r => { %><tr><td><%= r.i %></td><td class="num"><%= Math.round(r.emi).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.principal).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.interest).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.bal).toLocaleString('en-IN') %></td></tr><% }) %>
+    </tbody></table></div>
+  </div>
+</div></section>

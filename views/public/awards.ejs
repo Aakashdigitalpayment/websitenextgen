@@ -1,0 +1,16 @@
+<%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
+<section class="section"><div class="container">
+  <% if (!awards.length && !spotlight.length) { %><div class="empty"><%= t('विवरण चाँडै।', 'Coming soon.') %></div><% } %>
+  <div class="grid grid-3"><% awards.forEach(a => { %>
+    <div class="card"><% if (a.image) { %><div class="card-media"><img src="<%= mediaUrl(a.image) %>" alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('award') %></span><% } %>
+      <div class="card-meta"><%= a.award_date ? bsDate(a.award_date) : '' %></div><h3><%= f(a, 'title') %></h3><p class="muted small"><%= f(a, 'awarded_by') %></p></div>
+  <% }) %></div>
+  <% if (spotlight.length) { %>
+    <h2 class="mt-4"><%= t('वर्षको उत्कृष्ट सदस्य', 'Member of the year') %></h2>
+    <div class="grid grid-3 mt-2"><% spotlight.forEach(m => { %>
+      <div class="card person"><div class="person-photo"><% if (m.photo) { %><img src="<%= mediaUrl(m.photo) %>" alt=""><% } else { %><%- icon('star') %><% } %></div>
+        <div class="person-name"><%= f(m, 'member_name') %></div><div class="person-role"><%= num(m.spotlight_year) %></div>
+        <p class="muted small mt-1"><%= util.excerpt(lang === 'en' ? (m.achievement_en || m.achievement) : m.achievement, 160) %></p></div>
+    <% }) %></div>
+  <% } %>
+</div></section>

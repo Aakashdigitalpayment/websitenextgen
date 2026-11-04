@@ -1,0 +1,38 @@
+<div class="content-head"><div><h1><%= t('नमस्ते', 'Hello') %>, <%= admin.full_name || admin.username %></h1><div class="muted small"><%= nd.formatBs(nd.todayBs(), lang) %></div></div></div>
+<div class="kpis">
+  <a class="kpi card-link" href="/admin/members"><div class="l"><%= t('कुल सदस्य', 'Members') %></div><div class="v"><%= num(stats.members) %></div></a>
+  <a class="kpi card-link" href="/admin/members?status=pending"><div class="l"><%= t('स्वीकृति बाँकी', 'Pending approval') %></div><div class="v"><%= num(stats.pendingMembers) %></div></a>
+  <a class="kpi card-link" href="/admin/r/notices"><div class="l"><%= t('सक्रिय सूचना', 'Active notices') %></div><div class="v"><%= num(stats.notices) %></div></a>
+  <a class="kpi card-link" href="/admin/r/news"><div class="l"><%= t('समाचार', 'News') %></div><div class="v"><%= num(stats.news) %></div></a>
+</div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+  <div class="card" style="padding:0">
+    <div class="flex justify-between items-center" style="padding:16px 20px;border-bottom:1px solid var(--line)"><h3 class="mb-0"><%= t('पछिल्ला आवेदन', 'Recent submissions') %></h3></div>
+    <% if (!recent.length) { %><div class="muted" style="padding:20px"><%= t('अहिलेसम्म कुनै आवेदन छैन।', 'No submissions yet.') %></div><% } %>
+    <table class="table"><tbody>
+      <% recent.forEach(({ mod, row }) => { %><tr>
+        <td><span class="badge"><%= t(...mod.title) %></span></td>
+        <td><a href="/admin/inbox/<%= mod.key %>/<%= row.id %>" style="font-weight:500;color:var(--text)"><%= row[mod.nameCol] %></a><div class="small faint"><%= row.tracking_id || '' %></div></td>
+        <td><% if (row.status) { %><span class="badge <%= row.status === 'pending' ? 'badge-warn' : /approved|completed|resolved|selected|confirmed/.test(row.status) ? 'badge-ok' : '' %>"><%= statusLabel(row.status) %></span><% } %></td>
+        <td class="small faint text-right"><%= bsDate(row.created_at) %></td>
+      </tr><% }) %>
+    </tbody></table>
+  </div>
+  <div class="stack">
+    <div class="card">
+      <h3><%= t('पछिल्ला १४ दिनको भ्रमण', 'Page views, last 14 days') %></h3>
+      <% const max = Math.max(1, ...visitors.map(v => v.views)); %>
+      <div class="bars"><% visitors.forEach(v => { %><div style="height:<%= Math.round(v.views / max * 100) %>%"><span><%= v.views %></span></div><% }) %></div>
+    </div>
+    <div class="card">
+      <h3><%= t('छिटो कार्य', 'Quick actions') %></h3>
+      <div class="flex gap-1 wrap">
+        <a class="btn btn-soft btn-sm" href="/admin/r/notices/new"><%- icon('plus') %><%= t('सूचना', 'Notice') %></a>
+        <a class="btn btn-soft btn-sm" href="/admin/r/news/new"><%- icon('plus') %><%= t('समाचार', 'News') %></a>
+        <a class="btn btn-soft btn-sm" href="/admin/r/gallery/new"><%- icon('plus') %><%= t('फोटो', 'Photo') %></a>
+        <a class="btn btn-soft btn-sm" href="/admin/r/interest_rates"><%- icon('percent') %><%= t('ब्याजदर', 'Rates') %></a>
+        <a class="btn btn-soft btn-sm" href="/admin/members/new"><%- icon('plus') %><%= t('सदस्य', 'Member') %></a>
+      </div>
+    </div>
+  </div>
+</div>

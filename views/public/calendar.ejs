@@ -1,0 +1,16 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container">
+  <div class="flex justify-between items-center mb-2">
+    <a class="btn btn-outline btn-sm" href="?y=<%= prev[0] %>&m=<%= prev[1] %>"><%- icon('left') %></a>
+    <h2 class="mb-0"><%= (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[grid.month - 1] %> <%= num(grid.year) %></h2>
+    <a class="btn btn-outline btn-sm" href="?y=<%= next[0] %>&m=<%= next[1] %>"><%- icon('right') %></a>
+  </div>
+  <div class="cal">
+    <% (lang === 'en' ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] : ['आइत','सोम','मंगल','बुध','बिही','शुक्र','शनि']).forEach(d => { %><div class="cal-h"><%= d %></div><% }) %>
+    <% for (let i = 0; i < grid.startWeekday; i++) { %><div></div><% } %>
+    <% for (let d = 1; d <= grid.days; d++) { const ad = new Date(Date.parse(grid.adStart + 'T00:00:00Z') + (d - 1) * 86400000); const wd = (grid.startWeekday + d - 1) % 7; const bs = grid.year + '-' + String(grid.month).padStart(2, '0') + '-' + String(d).padStart(2, '0'); const ev = events.filter(e => e.bs_day === d); %>
+      <div class="cal-d <%= wd === 6 ? 'is-sat' : '' %> <%= bs === today ? 'is-today' : '' %>"><b><%= num(d) %></b><small><%= ad.getUTCDate() %> <%= ad.toUTCString().slice(8, 11) %></small><% ev.forEach(e => { %><span class="ev"><%= f(e, 'title') %></span><% }) %></div>
+    <% } %>
+  </div>
+  <% if (events.length) { %><h3 class="mt-3"><%= t('यस महिनाका कार्यक्रम', 'This month') %></h3><ul class="list"><% events.forEach(e => { %><li class="list-item"><span class="badge badge-brand"><%= num(e.bs_day) %></span><div><div style="font-weight:500"><%= f(e, 'title') %></div><div class="small muted"><%= f(e, 'description') %></div></div></li><% }) %></ul><% } %>
+</div></section>

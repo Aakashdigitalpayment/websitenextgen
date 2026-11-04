@@ -1,0 +1,28 @@
+<div class="content-head">
+  <h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
+  <a class="btn btn-primary" href="/admin/r/<%= r.key %>/new"><%- icon('plus') %><%= t('नयाँ थप्नुहोस्', 'Add new') %></a>
+</div>
+<form class="toolbar" method="get"><input class="input" name="q" value="<%= q %>" placeholder="<%= t('खोज्नुहोस्…', 'Search…') %>"><button class="btn btn-outline"><%- icon('search') %></button><% if (q) { %><a class="btn btn-ghost" href="/admin/r/<%= r.key %>"><%= t('हटाउनुहोस्', 'Clear') %></a><% } %></form>
+<% if (!rows.length) { %><div class="empty"><%= t('कुनै रेकर्ड छैन।', 'Nothing here yet.') %> <a href="/admin/r/<%= r.key %>/new"><%= t('पहिलो थप्नुहोस्', 'Add the first one') %></a></div><% } else { %>
+<div class="table-wrap"><table class="table">
+  <thead><tr><% listFields.forEach(fl => { %><th><%= t(fl.label[0], fl.label[1]) %></th><% }) %><th></th></tr></thead>
+  <tbody>
+  <% rows.forEach(row => { %><tr>
+    <% listFields.forEach((fl, i) => { const v = row[fl.name]; %><td>
+      <% if (fl.type === 'image') { %><% if (v) { %><img class="thumb" src="<%= mediaUrl(v) %>" alt=""><% } %>
+      <% } else if (fl.type === 'bool') { %>
+        <% if (fl.name === 'is_active') { %><form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/toggle"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="badge <%= v ? 'badge-ok' : '' %>" style="border:0;cursor:pointer"><%= v ? t('सक्रिय', 'Active') : t('निष्क्रिय', 'Hidden') %></button></form>
+        <% } else { %><%= v ? '✓' : '' %><% } %>
+      <% } else if (fl.type === 'select') { const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); %><%= o ? t(o[1], o[2]) : (v ?? '') %>
+      <% } else if (fl.type === 'date') { %><span class="small"><%= v ? bsDate(v) : '' %></span>
+      <% } else { %><% if (i === 0) { %><a href="/admin/r/<%= r.key %>/<%= row.id %>/edit" style="font-weight:500;color:var(--text)"><%= util.excerpt(v, 80) || '#' + row.id %></a><% } else { %><%= util.excerpt(v, 60) %><% } %><% } %>
+    </td><% }) %>
+    <td><div class="row-actions">
+      <a class="btn btn-ghost btn-sm btn-icon" href="/admin/r/<%= r.key %>/<%= row.id %>/edit" title="Edit"><%- icon('edit') %></a>
+      <form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm btn-icon" title="Delete" data-confirm="<%= t('पक्का हटाउने?', 'Delete this item?') %>"><%- icon('trash') %></button></form>
+    </div></td>
+  </tr><% }) %>
+  </tbody>
+</table></div>
+<%- include('../partials/pagination', { pg }) %>
+<% } %>

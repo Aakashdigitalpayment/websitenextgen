@@ -1,0 +1,16 @@
+<div class="content-head"><h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1><div class="flex gap-1"><% if (roleLevel(admin.role) >= 3) { %><a class="btn btn-outline" href="/admin/members/import"><%- icon('download') %><%= t('CSV आयात', 'Import CSV') %></a><% } %><a class="btn btn-primary" href="/admin/members/new"><%- icon('plus') %><%= t('नयाँ सदस्य', 'New member') %></a></div></div>
+<form class="toolbar" method="get">
+  <input class="input" name="q" value="<%= q %>" placeholder="<%= t('नाम, फोन, सदस्यता नं…', 'Name, phone, member no…') %>">
+  <select class="select" name="status" data-autosubmit><option value=""><%= t('सबै', 'All') %></option><% ['pending','approved','rejected'].forEach(s => { %><option value="<%= s %>" <%= st === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %></select>
+  <button class="btn btn-outline"><%- icon('search') %></button>
+</form>
+<% if (!rows.length) { %><div class="empty"><%= t('सदस्य भेटिएन।', 'No members found.') %></div><% } else { %>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('फोन', 'Phone') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('अन्तिम लगइन', 'Last login') %></th></tr></thead><tbody>
+  <% rows.forEach(m => { %><tr>
+    <td><a href="/admin/members/<%= m.id %>" style="font-weight:500;color:var(--text)"><%= m.name_np || m.name %></a><div class="small faint"><%= m.email || '' %></div></td>
+    <td><%= m.sadasyata_number || m.member_card_no || '' %></td><td><%= m.phone || '' %></td>
+    <td><span class="badge <%= m.approval_status === 'approved' ? 'badge-ok' : m.approval_status === 'rejected' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(m.approval_status || 'pending') %></span><% if (!m.is_active) { %> <span class="badge"><%= t('निष्क्रिय', 'Inactive') %></span><% } %></td>
+    <td class="small faint"><%= m.last_login ? bsDate(m.last_login) : '—' %></td>
+  </tr><% }) %>
+</tbody></table></div>
+<%- include('../partials/pagination', { pg }) %><% } %>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= locals.title ? title + ' · ' : '' %>Cooperative Cloud</title><meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/admin.css"></head>
+<body class="panel">
+  <header class="topnav"><span class="brand"><span class="brand-mark"><%- icon('tenant') %></span><span class="brand-name">Cooperative Cloud</span></span><div class="grow"></div>
+    <% if (locals.operator) { %><div class="who"><b><%= operator.full_name || operator.username %></b>operator</div><form method="post" action="/platform/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-icon" aria-label="Log out"><%- icon('logout') %></button></form><% } %></header>
+  <main class="content" style="margin:0 auto">
+    <% (locals.flash || []).forEach(m => { %><div class="alert alert-<%= m.type %>"><%= m.message %></div><% }) %>
+    <%- body %>
+  </main>
+  <script src="/static/js/app.js" defer></script>
+</body></html>

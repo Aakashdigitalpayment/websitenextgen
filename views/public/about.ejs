@@ -1,0 +1,28 @@
+<%- include('../partials/page-head', { crumbs: [] }) %>
+<section class="section">
+  <div class="container layout-side">
+    <div class="prose">
+      <%- util.richText(settings.about_content || settings.about_short || t('संस्थाको परिचय चाँडै राखिनेछ।', 'Our introduction will be added soon.')) %>
+    </div>
+    <aside class="card">
+      <h3><%= t('संक्षिप्त जानकारी', 'At a glance') %></h3>
+      <div class="kv" style="grid-template-columns:1fr 1fr">
+        <% if (settings.established_year) { %><div><%= t('स्थापना', 'Established') %></div><div><%= num(settings.established_year) %></div><% } %>
+        <% if (settings.registration_no) { %><div><%= t('दर्ता नं.', 'Registration') %></div><div><%= num(settings.registration_no) %></div><% } %>
+        <% if (settings.address) { %><div><%= t('ठेगाना', 'Address') %></div><div><%= settings.address %></div><% } %>
+        <% if (settings.phone) { %><div><%= t('फोन', 'Phone') %></div><div><%= settings.phone %></div><% } %>
+      </div>
+      <div class="flex gap-1 wrap mt-2">
+        <a class="btn btn-soft btn-sm" href="/vision-mission"><%= t('दृष्टिकोण', 'Vision') %></a>
+        <a class="btn btn-soft btn-sm" href="/team"><%= t('टिम', 'Team') %></a>
+        <a class="btn btn-soft btn-sm" href="/reports"><%= t('प्रतिवेदन', 'Reports') %></a>
+      </div>
+    </aside>
+  </div>
+</section>
+<% if (features.length) { %>
+<section class="section" style="padding-top:0"><div class="container">
+  <h2><%= t('हाम्रो विशेषता', 'What sets us apart') %></h2>
+  <div class="grid grid-3 mt-2"><% features.forEach(fe => { %><div class="card card-flat"><span class="icon-tile"><%- icon('check') %></span><h3><%= f(fe, 'title') %></h3><p class="muted"><%= lang === 'en' ? (fe.desc_en || fe.desc_np) : (fe.desc_np || fe.desc_en) %></p></div><% }) %></div>
+</div></section>
+<% } %>

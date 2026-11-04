@@ -1,0 +1,48 @@
+<div class="content-head">
+  <div><div class="crumbs"><a href="/admin/inbox/<%= m.key %>"><%= title %></a></div><h1><%= row[m.nameCol] %></h1><div class="small muted"><%= row.tracking_id || '#' + row.id %> · <%= bsDate(row.created_at) %></div></div>
+  <div class="flex gap-1 no-print">
+    <button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button>
+    <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('पक्का हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form><% } %>
+  </div>
+</div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+  <div class="stack">
+    <% m.sections.forEach(sec => { %>
+      <div class="card">
+        <% if (sec.title) { %><h3><%= t(...sec.title) %></h3><% } %>
+        <div class="kv">
+          <% sec.fields.forEach(fl => { let v = row[fl.name]; if (v === null || v === undefined || v === '') return; const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); if (o) v = t(o[1], o[2]); %>
+            <div><%= t(fl.label[0], fl.label[1]) %></div>
+            <div>
+              <% if (fl.type === 'image') { %><a href="<%= mediaUrl(v) %>" target="_blank" rel="noopener"><img src="<%= mediaUrl(v) %>" alt="" style="max-height:160px;border-radius:8px;border:1px solid var(--line)"></a>
+              <% } else if (fl.type === 'file') { %><a class="btn btn-soft btn-sm" href="<%= mediaUrl(v) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('फाइल हेर्नुहोस्', 'Open file') %></a>
+              <% } else if (fl.type === 'checkbox') { %><%= Number(v) ? '✓' : '—' %>
+              <% } else if (fl.type === 'bsdate') { %><%= v %> <% if (fl.adCol && row[fl.adCol]) { %><span class="faint small">(<%= row[fl.adCol] %> AD)</span><% } %>
+              <% } else if (fl.format === 'money') { %>रु. <%= money(v) %>
+              <% } else if (fl.type === 'tel') { %><a href="tel:<%= v %>"><%= v %></a>
+              <% } else if (fl.type === 'email') { %><a href="mailto:<%= v %>"><%= v %></a>
+              <% } else { %><span style="white-space:pre-wrap"><%= v %></span><% } %>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+  <div class="stack no-print">
+    <% if (statuses.length || hasRemarks) { %>
+    <form class="card" method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/status">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <h3><%= t('कारबाही', 'Action') %></h3>
+      <% if (statuses.length) { %><div class="field mb-2"><label><%= t('स्थिति', 'Status') %></label><div class="choices"><% statuses.forEach(s => { %><label class="choice"><input type="radio" name="status" value="<%= s %>" <%= row.status === s ? 'checked' : '' %>> <%= statusLabel(s) %></label><% }) %></div></div><% } %>
+      <% if (m.key === 'welfare') { %><div class="field mb-2"><label><%= t('स्वीकृत रकम', 'Approved amount') %></label><input class="input" name="approved_amount" value="<%= row.approved_amount || '' %>" inputmode="decimal"></div><% } %>
+      <div class="field"><label><%= t('टिप्पणी (आवेदकले देख्छन्)', 'Remarks (visible to applicant)') %></label><textarea class="textarea" name="comment" rows="3"><%= row[m.remarksCol] || '' %></textarea></div>
+      <% if (!m.noTracking) { %><label class="choice mt-2"><input type="checkbox" name="notify" value="1" checked> <%= t('आवेदकलाई SMS/इमेल पठाउने', 'Send SMS/email to applicant') %></label><% } %>
+      <button class="btn btn-primary mt-2 btn-block"><%= t('अद्यावधिक गर्नुहोस्', 'Update') %></button>
+    </form>
+    <% } %>
+    <div class="card"><h3><%= t('इतिहास', 'History') %></h3>
+      <% if (!history.length) { %><p class="muted small"><%= t('अहिलेसम्म कुनै परिवर्तन छैन।', 'No changes yet.') %></p><% } %>
+      <ul class="timeline"><% history.forEach(h => { %><li><div class="small faint"><%= bsDate(h.created_at) %> · <%= h.actor_name || '' %></div><div style="font-weight:500"><%= statusLabel(h.old_status || '—') %> → <%= statusLabel(h.new_status || '—') %></div><% if (h.admin_comment) { %><div class="small muted"><%= h.admin_comment %></div><% } %></li><% }) %></ul>
+    </div>
+  </div>
+</div>

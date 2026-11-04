@@ -1,0 +1,181 @@
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow"><%= settings.established_year ? t('स्थापना ' + num(settings.established_year), 'Since ' + settings.established_year) : t('सहकारी संस्था', 'Cooperative') %></div>
+        <h1><%= siteName %></h1>
+        <p class="lead"><%= settings.about_short ? util.excerpt(settings.about_short, 220) : t('बचत, ऋण र डिजिटल सेवा — सदस्यको हितमा, समुदायको साथमा।', 'Savings, loans and digital services — for our members and community.') %></p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="/apply/account"><%= t('खाता खोल्नुहोस्', 'Open an account') %><%- icon('right') %></a>
+          <a class="btn btn-outline btn-lg" href="/apply/loan"><%= t('ऋण आवेदन', 'Apply for a loan') %></a>
+        </div>
+      </div>
+      <div class="hero-media <%= sliders.length ? "" : "is-empty" %>">
+        <% if (sliders.length) { %>
+          <div class="slider" data-slider>
+            <% sliders.forEach((s, i) => { %>
+              <div class="slide <%= i === 0 ? 'active' : '' %>">
+                <img src="<%= mediaUrl(s.image) %>" alt="<%= s.title || '' %>" <%= i ? 'loading=lazy' : '' %>>
+                <% if (s.title) { %><div class="slide-caption"><strong style="font-weight:500"><%= s.title %></strong><% if (s.subtitle) { %><div class="muted small"><%= s.subtitle %></div><% } %></div><% } %>
+              </div>
+            <% }) %>
+            <% if (sliders.length > 1) { %><div class="slider-dots"><% sliders.forEach((s, i) => { %><button class="<%= i === 0 ? 'active' : '' %>" aria-label="Slide <%= i + 1 %>"></button><% }) %></div><% } %>
+          </div>
+        <% } else { %>
+          <div style="height:100%;display:grid;place-items:center;color:var(--brand)"><%- icon('building', 'icon-lg') %></div>
+        <% } %>
+      </div>
+    </div>
+
+    <% const statList = [
+      [profile?.total_members || stats.total_members || settings.total_members, t('सदस्य', 'Members')],
+      [profile?.deposit ? money(profile.deposit) : stats.total_deposit, t('कुल बचत (रु.)', 'Deposits (Rs.)')],
+      [profile?.loan ? money(profile.loan) : stats.total_loan, t('कुल ऋण (रु.)', 'Loans (Rs.)')],
+      [settings.years_experience || (settings.established_year ? (Number(nd.todayBs().slice(0,4)) - Number(nd.toLatinDigits(settings.established_year))) : null), t('वर्षको अनुभव', 'Years of service')],
+    ].filter(s => s[0]); %>
+    <% if (statList.length) { %>
+      <div class="stats">
+        <% statList.forEach(s => { %><div class="stat"><div class="stat-value"><%= typeof s[0] === 'number' ? num(s[0].toLocaleString('en-IN')) : s[0] %></div><div class="stat-label"><%= s[1] %></div></div><% }) %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<section class="section-sm">
+  <div class="container">
+    <div class="quick-links">
+      <% [
+        ['/apply/account', 'wallet', t('खाता खोल्नुहोस्', 'Open account')],
+        ['/apply/loan', 'banknote', t('ऋण आवेदन', 'Loan')],
+        ['/emi-calculator', 'calculator', t('EMI गणना', 'EMI calculator')],
+        ['/interest-rates', 'percent', t('ब्याजदर', 'Interest rates')],
+        ['/apply/appointment', 'calendar', t('भेटघाट', 'Appointment')],
+        ['/track', 'search', t('आवेदन ट्र्याक', 'Track')],
+      ].forEach(q => { %>
+        <a class="quick-link" href="<%= q[0] %>"><span class="icon-tile"><%- icon(q[1]) %></span><%= q[2] %></a>
+      <% }) %>
+    </div>
+  </div>
+</section>
+
+<% if (services.length) { %>
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <div><div class="eyebrow"><%= t('सेवाहरू', 'Services') %></div><h2><%= t('हाम्रा मुख्य सेवाहरू', 'What we offer') %></h2></div>
+      <a class="btn btn-ghost" href="/services"><%= t('सबै सेवा', 'All services') %><%- icon('right') %></a>
+    </div>
+    <div class="grid grid-3">
+      <% services.forEach(s => { %>
+        <a class="card card-link" href="/services/<%= s.id %>">
+          <span class="icon-tile"><%- icon(/loan|ऋण/i.test(s.title || '') ? 'banknote' : /digital|mobile/i.test(s.title || '') ? 'phone' : 'wallet') %></span>
+          <h3><%= f(s, 'title') %></h3>
+          <p class="muted"><%= util.excerpt(f(s, 'description'), 120) %></p>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="grid grid-2" style="gap:24px">
+      <div class="card">
+        <div class="section-head" style="margin-bottom:8px"><h3 class="mb-0"><%= t('पछिल्ला सूचना', 'Latest notices') %></h3><a class="small" href="/notices"><%= t('सबै', 'View all') %></a></div>
+        <% if (!notices.length) { %><p class="muted"><%= t('हाल कुनै सूचना छैन।', 'No notices yet.') %></p><% } %>
+        <ul class="list">
+          <% notices.forEach(n => { const bs = nd.adToBs(n.notice_date || String(n.created_at).slice(0, 10)) || ''; const parts = bs.split('-'); %>
+            <li class="list-item">
+              <div class="date-chip"><b><%= num(Number(parts[2] || 0)) %></b><span><%= parts[1] ? (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[Number(parts[1]) - 1] : '' %></span></div>
+              <div><a href="/notices/<%= n.id %>" style="color:var(--text);font-weight:500"><%= f(n, 'title') %></a>
+                <% if (n.attachment) { %><div class="small faint"><%- icon('file') %></div><% } %></div>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="section-head" style="margin-bottom:8px"><h3 class="mb-0"><%= t('ब्याजदर', 'Interest rates') %></h3><a class="small" href="/interest-rates"><%= t('विस्तृत', 'Details') %></a></div>
+        <% if (!rates.length) { %><p class="muted"><%= t('ब्याजदर चाँडै प्रकाशित हुनेछ।', 'Rates will be published soon.') %></p><% } %>
+        <ul class="list">
+          <% rates.forEach(r => { %>
+            <li class="list-item" style="justify-content:space-between;align-items:center">
+              <span><span class="badge <%= r.category === 'loan' ? 'badge-warn' : 'badge-ok' %>"><%= r.category === 'loan' ? t('ऋण', 'Loan') : t('बचत', 'Saving') %></span> &nbsp;<%= f(r, 'name') %></span>
+              <strong style="font-weight:600"><%= num(Number(r.rate).toFixed(2)) %>%</strong>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<% if (features.length) { %>
+<section class="section" style="background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="container">
+    <div class="section-head"><div><div class="eyebrow"><%= t('किन हामी', 'Why us') %></div><h2><%= t('हामीलाई किन छान्ने?', 'Why choose us') %></h2></div></div>
+    <div class="grid grid-3">
+      <% features.forEach(fe => { %>
+        <div>
+          <span class="icon-tile"><%- icon('check') %></span>
+          <h3><%= f(fe, 'title') %></h3>
+          <p class="muted"><%= lang === 'en' ? (fe.desc_en || fe.desc_np) : (fe.desc_np || fe.desc_en) %></p>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<% if (news.length) { %>
+<section class="section">
+  <div class="container">
+    <div class="section-head"><div><div class="eyebrow"><%= t('समाचार', 'News') %></div><h2><%= t('पछिल्ला गतिविधि', 'Recent updates') %></h2></div><a class="btn btn-ghost" href="/news"><%= t('सबै समाचार', 'All news') %><%- icon('right') %></a></div>
+    <div class="grid grid-3">
+      <% news.forEach(n => { %>
+        <a class="card card-link" href="/news/<%= n.id %>">
+          <% if (n.image) { %><div class="card-media"><img src="<%= mediaUrl(n.image) %>" alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('news') %></span><% } %>
+          <div class="card-meta"><%= bsDate(n.created_at) %></div>
+          <h3><%= f(n, 'title') %></h3>
+          <p class="muted small"><%= util.excerpt(f(n, 'content'), 110) %></p>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<% if (programs.length) { %>
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="section-head"><h2><%= t('आगामी कार्यक्रम', 'Upcoming programmes') %></h2></div>
+    <div class="grid grid-3">
+      <% programs.forEach(p => { %>
+        <div class="card"><div class="card-meta"><%- icon('calendar') %><%= bsDate(p.event_date) %><%= p.event_time ? ' · ' + p.event_time : '' %></div><h3><%= p.title %></h3><p class="muted small"><%= p.location || '' %></p></div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<section class="section-sm">
+  <div class="container">
+    <div class="card" style="display:flex;gap:24px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--brand);color:var(--brand-ink);border:0">
+      <div><h2 style="color:inherit;margin-bottom:4px"><%= t('सदस्य बन्नुहोस्', 'Become a member') %></h2><p style="margin:0;opacity:.85"><%= t('अनलाइन आवेदन दिनुहोस्, हामी तपाईंलाई सम्पर्क गर्नेछौं।', 'Apply online and we will get in touch.') %></p></div>
+      <a class="btn btn-lg" style="background:var(--brand-ink);color:var(--brand)" href="/apply/membership"><%= t('आवेदन दिनुहोस्', 'Apply now') %></a>
+    </div>
+  </div>
+</section>
+
+<% if (popup) { %>
+<div class="modal" data-popup="<%= popup.id %>" role="dialog" aria-modal="true" aria-label="<%= f(popup, 'title') %>">
+  <div class="modal-box">
+    <div class="modal-head"><strong style="font-weight:600"><%= f(popup, 'title') %></strong><button class="btn btn-ghost btn-icon" data-close aria-label="Close"><%- icon('close') %></button></div>
+    <div class="modal-body">
+      <% if (popup.popup_image) { %><img src="<%= mediaUrl(popup.popup_image) %>" alt="" style="border-radius:10px;width:100%"><% } %>
+      <% if (!popup.popup_photo_only) { %><div class="prose mt-2"><%- util.richText(f(popup, 'content')) %></div><% } %>
+      <a class="btn btn-soft btn-sm mt-2" href="/notices/<%= popup.id %>"><%= t('पूरा पढ्नुहोस्', 'Read more') %></a>
+    </div>
+  </div>
+</div>
+<% } %>

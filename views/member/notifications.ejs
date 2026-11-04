@@ -1,0 +1,5 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<% if (!rows.length) { %><div class="empty"><%= t('कुनै सूचना छैन।', 'No notifications.') %></div><% } %>
+<div class="card" style="padding:4px 22px"><ul class="list"><% rows.forEach(n => { %>
+  <li class="list-item"><span class="icon-tile" style="margin:0;width:36px;height:36px"><%- icon('bell') %></span><div class="grow"><div style="font-weight:<%= n.is_read ? 400 : 500 %>"><%= n.title %></div><% if (n.message) { %><div class="small muted"><%= n.message %></div><% } %><div class="small faint"><%= bsDate(n.created_at) %></div></div><% if (n.link && /^\/(?!\/)/.test(n.link)) { %><a class="btn btn-ghost btn-sm" href="<%= n.link %>"><%- icon('right') %></a><% } %></li>
+<% }) %></ul></div>
