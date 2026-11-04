@@ -1,9 +1,0 @@
-<section class="section"><div class="container maxw-sm">
-  <div class="card text-center">
-    <div class="person-photo" style="width:120px;height:120px"><% if (e.photo) { %><img src="<%= mediaUrl(e.photo) %>" alt=""><% } else { %><%- icon('user', 'icon-lg') %><% } %></div>
-    <h2 class="mb-0"><%= e.full_name %></h2><% if (e.full_name_en) { %><div class="muted"><%= e.full_name_en %></div><% } %>
-    <div class="mt-1"><%= e.designation || '' %><%= e.department ? ' · ' + e.department : '' %></div>
-    <div class="mt-2"><span class="badge <%= e.status === 'active' ? 'badge-ok' : 'badge-bad' %>" style="font-size:.95rem"><%= e.status === 'active' ? t('हाल कार्यरत कर्मचारी', 'Current staff member') : t('हाल कार्यरत छैनन्', 'Not currently employed') %></span></div>
-    <div class="small faint mt-2"><%= siteName %> · <%= e.employee_code %></div>
-  </div>
-</div></section>

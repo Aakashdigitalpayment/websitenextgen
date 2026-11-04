@@ -34,7 +34,6 @@
     <% } %>
     <% Object.entries(GROUPS).forEach(([g, label]) => { const list = Object.values(resources).filter(r => r.group === g && (!r.minRole || lvl >= roleLevel(r.minRole))); if (!list.length) return; %>
       <div class="side-group"><div class="side-title"><%= t(...label) %></div>
-        <% if (g === 'hrm') { %><a class="side-link <%= cur === '/admin/hrm' ? 'active' : '' %>" href="/admin/hrm"><%- icon('chart') %><%= t('HR ड्यासबोर्ड', 'HR dashboard') %></a><% } %>
         <% list.forEach(r => { %>
           <a class="side-link <%= cur.startsWith('/admin/r/' + r.key + '/') || cur === '/admin/r/' + r.key ? 'active' : '' %>" href="/admin/r/<%= r.key %>"><%- icon(r.icon) %><%= t(...r.title) %></a>
         <% }) %>

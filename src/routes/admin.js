@@ -394,7 +394,6 @@ router.post('/inbox/:module/:id/delete', getModule, ah(async (req, res) => {
 router.use('/programs', require('./admin-programs'));
 router.use('/marketplace', require('./marketplace').admin);
 router.use('/credentials', require('./admin-credentials'));
-router.use('/hrm', require('./admin-hrm'));
 router.use('/', require('./admin-system'));
 
 // ---------------------------------------------------------------- members
