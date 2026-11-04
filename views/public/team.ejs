@@ -1,19 +1,26 @@
 <%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
+<% const card = p => { %>
+  <div class="card person">
+    <div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>" alt="<%= f(p, 'name') %>" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
+    <div class="person-name"><%= f(p, 'name') %></div>
+    <div class="person-role"><%= f(p, 'position') %></div>
+    <% if (p.phone) { %><div class="small mt-1"><a href="tel:<%= p.phone %>"><%= p.phone %></a></div><% } %>
+  </div>
+<% } %>
 <section class="section"><div class="container">
-  <% if (!groups.length) { %><div class="empty"><%= t('टिम विवरण चाँडै।', 'Team details coming soon.') %></div><% } %>
-  <% groups.forEach(g => { %>
-    <h2 class="mt-3"><%= g.label %></h2>
-    <div class="grid grid-4 mt-2"><% g.people.forEach(p => { %>
-      <div class="card person">
-        <div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>" alt="<%= p.name %>" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
-        <div class="person-name"><%= f(p, 'name') %></div>
-        <div class="person-role"><%= f(p, 'position') %></div>
-        <% if (p.phone) { %><div class="small mt-1"><a href="tel:<%= p.phone %>"><%= p.phone %></a></div><% } %>
-      </div>
-    <% }) %></div>
+  <% if (menus.length > 1) { %><div class="tabs"><a class="tab <%= !cat ? 'active' : '' %>" href="/team"><%= t('सबै', 'All') %></a><% menus.forEach(m => { %><a class="tab <%= cat && cat.slug === m.slug ? 'active' : '' %>" href="/team?menu=<%= encodeURIComponent(m.slug) %>"><%= f(m, 'name') %></a><% }) %></div><% } %>
+  <% if (!sections.length && !officers.length) { %><div class="empty"><%= t('टिम विवरण चाँडै।', 'Team details coming soon.') %></div><% } %>
+  <% sections.forEach(s => { %>
+    <h2 class="mt-3" id="<%= s.id %>"><%= t(...s.label) %></h2>
+    <% if (!s.members.length && s.link) { %><a class="btn btn-soft btn-sm mt-1" href="<%= s.link %>"><%= t('समिति हेर्नुहोस्', 'View committee') %></a>
+    <% } else if (s.chart) { %>
+      <div class="org-chart mt-2"><% s.chart.forEach(([row, list]) => { %><div class="org-row org-row-<%= row %>"><% list.forEach(card) %></div><% }) %></div>
+    <% } else { %>
+      <div class="grid grid-4 mt-2"><% s.members.forEach(card) %></div>
+    <% } %>
   <% }) %>
   <% if (officers.length) { %>
-    <h2 class="mt-4"><%= t('सूचना तथा गुनासो अधिकारी', 'Information & grievance officers') %></h2>
+    <h2 class="mt-4" id="contact-officers"><%= t('सूचना तथा गुनासो अधिकारी', 'Information & grievance officers') %></h2>
     <div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('जिम्मेवारी', 'Role') %></th><th><%= t('सम्पर्क', 'Contact') %></th></tr></thead><tbody>
       <% officers.forEach(o => { %><tr><td><%= f(o, 'name') %></td><td><%= [o.is_information_officer ? t('सूचना अधिकारी', 'Information officer') : '', o.is_grievance_officer ? t('गुनासो सुन्ने अधिकारी', 'Grievance officer') : ''].filter(Boolean).join(', ') %></td><td><%= o.phone || '' %> <%= o.email || '' %></td></tr><% }) %>
     </tbody></table></div>

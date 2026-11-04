@@ -1,0 +1,22 @@
+<% const fw = locals.floatWidgets || {}; if ((fw.satisfaction && fw.satisfaction.length) || (fw.useful && fw.useful.length)) { %>
+<div class="float-widgets">
+  <% if (fw.useful && fw.useful.length) { %>
+  <details class="float-widget">
+    <summary class="btn btn-outline btn-sm" style="background:var(--surface)" aria-label="<%= t('उपयोगी लिङ्कहरू', 'Useful links') %>"><%- icon('link') %><span class="btn-text"><%= t('उपयोगी लिङ्क', 'Useful links') %></span></summary>
+    <div class="float-panel" role="dialog" aria-label="<%= t('उपयोगी लिङ्कहरू', 'Useful links') %>">
+      <h4><%= t('उपयोगी लिङ्कहरू', 'Useful links') %></h4>
+      <% fw.useful.forEach(l => { %><a href="<%= l.url %>" target="_blank" rel="noopener noreferrer"><%- icon('link') %><span><%= f(l, 'title') %></span></a><% }) %>
+    </div>
+  </details>
+  <% } %>
+  <% if (fw.satisfaction && fw.satisfaction.length) { %>
+  <details class="float-widget">
+    <summary class="btn btn-primary btn-sm" aria-label="<%= t('सेवा कस्तो लाग्यो?', 'How was our service?') %>"><%- icon('star') %><span class="btn-text"><%= t('सेवा कस्तो लाग्यो?', 'Rate our service') %></span></summary>
+    <div class="float-panel" role="dialog" aria-label="<%= t('सन्तुष्टि', 'Satisfaction') %>">
+      <h4><%= t('तपाईंको अनुभव बताउनुहोस्', 'Tell us about your experience') %></h4>
+      <% fw.satisfaction.forEach(l => { %><a href="<%= l.url %>" target="_blank" rel="noopener noreferrer"><%- icon('star') %><span><%= f(l, 'title') %></span></a><% }) %>
+    </div>
+  </details>
+  <% } %>
+</div>
+<% } %>

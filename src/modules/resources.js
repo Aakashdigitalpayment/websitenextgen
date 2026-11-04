@@ -15,16 +15,44 @@ const FILE = (name, np = 'फाइल', en = 'File', extra = {}) => T(name, np,
 const SEL = (name, np, en, options, extra = {}) => T(name, np, en, { type: 'select', options, ...extra });
 const REF = (name, np, en, table, label, extra = {}) => T(name, np, en, { type: 'select', ref: { table, label }, ...extra });
 const ACTIVE = B('is_active', 'सक्रिय', 'Active', { default: 1, list: true });
+const lazyDb = () => require('../db');
+
+// team_members.category: fixed groups + staff groups (slug) + committees ("cmt_<id>"), like the PHP site
+async function teamCategoryOptions() {
+  const db = lazyDb();
+  const [groups, committees] = await Promise.all([
+    db.many('SELECT slug, name_np, name_en FROM team_staff_groups ORDER BY display_order, id'),
+    db.many('SELECT id, name, name_np FROM committee_types ORDER BY display_order, id'),
+  ]);
+  return [['board', 'सञ्चालक समिति', 'Board'], ['management', 'व्यवस्थापन', 'Management'], ['staff', 'कर्मचारी', 'Staff'],
+    ...groups.filter(g => !['board', 'management', 'staff'].includes(g.slug)).map(g => [g.slug, g.name_np || g.name_en, g.name_en || g.name_np]),
+    ...committees.map(c => ['cmt_' + c.id, c.name_np || c.name, c.name || c.name_np])];
+}
+// only one chairman / CEO / information officer / grievance officer at a time
+async function teamExclusiveFlags(row) {
+  const db = lazyDb();
+  for (const flag of ['is_chairman', 'is_ceo', 'is_information_officer', 'is_grievance_officer']) {
+    if (Number(row[flag]) === 1) await db.query(`UPDATE team_members SET ${flag} = 0 WHERE id <> $1 AND ${flag} = 1`, [row.id]);
+  }
+}
+const youtubeId = url => (String(url || '').match(/(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([A-Za-z0-9_-]{11})/) || [])[1] || null;
+async function galleryAfterSave(row) {
+  const id = youtubeId(row.video_url);
+  const data = id ? { media_type: 'video', thumbnail: `https://img.youtube.com/vi/${id}/hqdefault.jpg` } : { media_type: 'photo', video_url: null };
+  const album = row.album_id ? await lazyDb().one('SELECT name_np, category FROM gallery_albums WHERE id = $1', [row.album_id]) : null;
+  if (album) Object.assign(data, { album: album.name_np, category: album.category || 'general' });
+  await lazyDb().update('gallery', row.id, data);
+}
 const ORDER = N('display_order', 'क्रम', 'Order', { default: 0 });
 
 const resources = {
   // ---------------------------------------------------------------- content
-  notices: { group: 'content', icon: 'bell', title: ['सूचना', 'Notices'], order: 'notice_date DESC NULLS LAST, id DESC', softDelete: true, fields: [
+  notices: { group: 'content', icon: 'bell', title: ['सूचना', 'Notices'], order: 'notice_date DESC NULLS LAST, id DESC', softDelete: true, bulk: true, fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     D('notice_date', 'मिति', 'Date', { list: true }), RT('content_np', 'विवरण (नेपाली)', 'Content (Nepali)'), RT('content', 'विवरण (English)', 'Content (English)'),
     FILE('attachment', 'संलग्न फाइल', 'Attachment'), B('is_popup', 'पपअपमा देखाउने', 'Show as popup', { list: true }),
     IMG('popup_image', 'पपअप फोटो', 'Popup image'), B('popup_photo_only', 'फोटो मात्र', 'Photo only'), D('popup_expires_at', 'पपअप म्याद', 'Popup until'), ACTIVE] },
-  news: { group: 'content', icon: 'news', title: ['समाचार', 'News'], order: 'created_at DESC', softDelete: true, fields: [
+  news: { group: 'content', icon: 'news', title: ['समाचार', 'News'], order: 'created_at DESC', softDelete: true, bulk: true, fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     IMG('image'), RT('content_np', 'विवरण (नेपाली)', 'Content (Nepali)'), RT('content', 'विवरण (English)', 'Content (English)'), ACTIVE] },
   sliders: { group: 'content', icon: 'image', title: ['स्लाइडर', 'Home sliders'], order: 'display_order, id', fields: [
@@ -41,18 +69,23 @@ const resources = {
     TA('answer_np', 'उत्तर (नेपाली)', 'Answer (Nepali)'), TA('answer', 'उत्तर (English)', 'Answer (English)'), T('category', 'समूह', 'Category', { list: true }), ORDER, ACTIVE] },
   gallery_albums: { group: 'media', icon: 'layers', title: ['एल्बम', 'Albums'], order: 'display_order, id DESC', fields: [
     T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'), T('category', 'समूह', 'Category'), ORDER, ACTIVE] },
-  gallery: { group: 'media', icon: 'image', title: ['ग्यालरी', 'Gallery'], order: 'id DESC', softDelete: true, fields: [
-    IMG('image', 'फोटो', 'Image', { required: true, list: true }), T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
+  gallery: { group: 'media', icon: 'image', title: ['ग्यालरी', 'Gallery'], order: 'id DESC', softDelete: true, bulk: true, afterSave: galleryAfterSave,
+    links: [['/admin/gallery/upload', 'image', 'धेरै फोटो / भिडियो', 'Bulk upload / video']], fields: [
+    IMG('image', 'फोटो', 'Image', { list: true }), T('video_url', 'YouTube लिङ्क (भिडियोका लागि)', 'YouTube link (for a video)', { type: 'url', hint: 'https://www.youtube.com/watch?v=…' }),
+    T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
+    SEL('media_type', 'प्रकार', 'Type', [['photo', 'फोटो', 'Photo'], ['video', 'भिडियो', 'Video']], { list: true, hint: 'auto' }),
     REF('album_id', 'एल्बम', 'Album', 'gallery_albums', 'name_np', { list: true }), ORDER, ACTIVE] },
-  downloads: { group: 'media', icon: 'download', title: ['डाउनलोड', 'Downloads'], order: 'id DESC', softDelete: true, fields: [
+  downloads: { group: 'media', icon: 'download', title: ['डाउनलोड', 'Downloads'], order: 'id DESC', softDelete: true, bulk: true, fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     FILE('file_path', 'फाइल', 'File', { required: true }), T('category', 'समूह', 'Category', { list: true }), ACTIVE] },
-  reports: { group: 'media', icon: 'chart', title: ['प्रतिवेदन', 'Reports'], order: 'report_year DESC NULLS LAST, id DESC', fields: [
+  // report files are private and served through /reports/:id/file (members-only reports stay gated)
+  reports: { group: 'media', icon: 'chart', title: ['प्रतिवेदन', 'Reports'], order: 'report_year DESC NULLS LAST, id DESC', privateFiles: true, fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     T('report_type', 'प्रकार', 'Type', { list: true }), T('report_year', 'वर्ष', 'Year', { list: true }), T('report_quarter', 'त्रैमास', 'Quarter'), T('report_month', 'महिना', 'Month'),
     FILE('file_path', 'फाइल', 'File'), SEL('access_level', 'पहुँच', 'Access', [['none', 'सबै', 'Public'], ['member', 'सदस्य मात्र', 'Members only']], { default: 'none', list: true }), ORDER, ACTIVE] },
 
-  information_room_items: { minRole: 'admin', privateFiles: true, group: 'media', icon: 'shield', title: ['सूचना कक्ष (सदस्य)', 'Information room'], order: 'display_order, meeting_date DESC NULLS LAST, id DESC', fields: [
+  information_room_items: { minRole: 'admin', privateFiles: true, group: 'media', icon: 'shield', title: ['सूचना कक्ष (सदस्य)', 'Information room'], order: 'display_order, meeting_date DESC NULLS LAST, id DESC',
+    links: [['/admin/information-room/browse', 'eye', 'पूर्वावलोकन', 'Preview'], ['/admin/information-room/logs', 'inbox', 'पहुँच लग', 'Access log']], fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     T('category', 'समूह', 'Category', { list: true }), D('meeting_date', 'बैठक मिति', 'Meeting date', { list: true }), T('reference_no', 'च.नं./सन्दर्भ', 'Reference no.'),
     FILE('file_path', 'फाइल (PDF)', 'File (PDF)', { required: true }), TA('description_np', 'विवरण', 'Description'),
@@ -88,13 +121,29 @@ const resources = {
     T('contact_phone', 'फोन', 'Phone'), T('contact_email', 'इमेल', 'Email'), T('website_url', 'वेबसाइट', 'Website', { type: 'url' }), B('is_featured', 'विशेष', 'Featured'), ORDER, ACTIVE] },
 
   // ---------------------------------------------------------------- organisation
-  team_members: { group: 'org', icon: 'users', title: ['टिम/कर्मचारी', 'Team'], order: "CASE category WHEN 'board' THEN 1 WHEN 'management' THEN 2 ELSE 3 END, display_order, id", fields: [
+  team_members: { group: 'org', icon: 'users', title: ['टिम/कर्मचारी', 'Team'], order: "CASE category WHEN 'board' THEN 1 WHEN 'management' THEN 2 ELSE 3 END, display_order, id", afterSave: teamExclusiveFlags,
+    links: [['/admin/r/team_staff_groups', 'layers', 'कर्मचारी समूह', 'Staff groups'], ['/admin/r/team_menu_categories', 'menu', 'मेनु श्रेणी', 'Menu categories']], fields: [
     IMG('photo', 'फोटो', 'Photo', { list: true }), T('name', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
     T('position', 'पद (नेपाली)', 'Position (Nepali)', { list: true }), T('position_en', 'पद (English)', 'Position (English)'),
-    SEL('category', 'समूह', 'Group', [['board', 'सञ्चालक समिति', 'Board'], ['management', 'व्यवस्थापन', 'Management'], ['staff', 'कर्मचारी', 'Staff']], { required: true, list: true }),
-    T('phone', 'फोन', 'Phone'), T('email', 'इमेल', 'Email'), B('is_information_officer', 'सूचना अधिकारी', 'Information officer'), B('is_grievance_officer', 'गुनासो अधिकारी', 'Grievance officer'), ORDER, ACTIVE] },
+    SEL('category', 'समूह', 'Group', null, { required: true, list: true, optionsFn: teamCategoryOptions }),
+    SEL('chart_row', 'संगठन चार्ट पङ्क्ति', 'Org-chart row', [['0', 'स्वतः (पदबाट)', 'Auto (from title)'], ['1', '१', '1'], ['2', '२', '2'], ['3', '३', '3'], ['4', '४', '4'], ['5', '५', '5']], { default: '0' }),
+    T('phone', 'फोन', 'Phone'), T('email', 'इमेल', 'Email'),
+    B('is_chairman', 'अध्यक्ष (सन्देश पृष्ठ)', 'Chairperson (message page)', { list: true }), B('is_ceo', 'प्रमुख कार्यकारी (सन्देश पृष्ठ)', 'CEO (message page)', { list: true }),
+    B('is_information_officer', 'सूचना अधिकारी', 'Information officer'), B('is_grievance_officer', 'गुनासो अधिकारी', 'Grievance officer'), ORDER, ACTIVE] },
+  team_staff_groups: { group: 'org', icon: 'layers', title: ['कर्मचारी समूह', 'Staff groups'], order: 'display_order, id', fields: [
+    T('slug', 'कोड (a-z)', 'Code (a-z)', { required: true, list: true, hint: 'e.g. branch_staff — used as the team member group' }),
+    T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
+    REF('menu_category_id', 'मेनु श्रेणी', 'Menu category', 'team_menu_categories', 'name_np', { list: true }),
+    B('show_in_nav', 'मेनुमा देखाउने', 'Show in menu', { default: 1 }), ORDER, ACTIVE] },
+  team_menu_categories: { group: 'org', icon: 'menu', title: ['टिम मेनु श्रेणी', 'Team menu categories'], order: 'display_order, id', fields: [
+    T('slug', 'कोड (a-z)', 'Code (a-z)', { required: true, list: true }),
+    T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
+    SEL('source_type', 'स्रोत', 'Source', [['staff', 'कर्मचारी समूह', 'Staff groups'], ['committees', 'समितिहरू', 'Committees']], { required: true, list: true, default: 'staff' }),
+    B('include_contact_officers', 'सम्पर्क अधिकारी समावेश', 'Include contact officers'), B('include_board', 'सञ्चालक समिति समावेश', 'Include board'),
+    B('show_in_nav', 'मेनुमा देखाउने', 'Show in menu', { default: 1, list: true }), ORDER, ACTIVE] },
   committee_types: { group: 'org', icon: 'users', title: ['समिति', 'Committees'], order: 'display_order, id', fields: [
     T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { list: true }), T('name', 'नाम (English)', 'Name (English)', { required: true }), TA('description', 'विवरण', 'Description'),
+    REF('menu_category_id', 'मेनु श्रेणी', 'Menu category', 'team_menu_categories', 'name_np'),
     B('show_in_navbar', 'मेनुमा देखाउने', 'Show in menu', { list: true }), ORDER, ACTIVE] },
   committee_tenures: { group: 'org', icon: 'calendar', title: ['समितिको कार्यकाल', 'Committee tenures'], order: 'committee_type_id, start_date DESC NULLS LAST', fields: [
     REF('committee_type_id', 'समिति', 'Committee', 'committee_types', 'name_np', { required: true, list: true }), T('tenure_name_np', 'कार्यकाल (नेपाली)', 'Tenure (Nepali)', { list: true }), T('tenure_name', 'कार्यकाल (English)', 'Tenure (English)', { required: true }),
@@ -172,8 +221,10 @@ const resources = {
   important_links: { group: 'links', icon: 'link', title: ['महत्त्वपूर्ण लिङ्क', 'Important links'], order: 'display_order, id', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)', { required: true }), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }), ORDER, ACTIVE] },
   useful_links: { group: 'links', icon: 'link', title: ['उपयोगी लिङ्क', 'Useful links'], order: 'display_order, id', fields: [
-    T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)', { required: true }), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }), ORDER, ACTIVE] },
-  satisfaction_links: { group: 'links', icon: 'star', title: ['सन्तुष्टि लिङ्क', 'Satisfaction links'], order: 'display_order, id', fields: [
+    T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)', { required: true }), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }),
+    TA('description_np', 'विवरण (नेपाली)', 'Description (Nepali)'), TA('description', 'विवरण (English)', 'Description (English)'),
+    B('is_popup', 'तैरने "उपयोगी लिङ्क" पपअपमा देखाउने', 'Show in the floating "Useful links" popup', { list: true }), ORDER, ACTIVE] },
+  satisfaction_links: { group: 'links', icon: 'star', title: ['सन्तुष्टि लिङ्क', 'Satisfaction links'], order: 'display_order, id', links: [['/admin/satisfaction', 'settings', 'विजेट सेटिङ', 'Widget setting']], fields: [
     T('title', 'शीर्षक', 'Title', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }), ORDER, ACTIVE] },
   notification_templates: { minRole: 'admin', group: 'links', icon: 'mail', title: ['SMS/इमेल ढाँचा', 'Message templates'], order: 'event_type, audience, channel', fields: [
     SEL('event_type', 'घटना', 'Event', [['submitted', 'आवेदन प्राप्त', 'Application received'], ['status_changed', 'स्थिति परिवर्तन', 'Status changed']], { required: true, list: true }),

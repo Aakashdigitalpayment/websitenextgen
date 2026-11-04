@@ -10,6 +10,7 @@
         <div class="form-grid"><% sec.fields.forEach(fl => { %><%- include('../partials/field', { field: fl, values: Object.assign({}, values, query.type && fl.name === 'service_type' && !values.service_type ? { service_type: query.type } : {}), errors, options }) %><% }) %></div>
       </div>
     <% }) %>
+    <%- include('../partials/turnstile') %>
     <div class="form-actions">
       <button class="btn btn-primary btn-lg"><%= t('आवेदन पेश गर्नुहोस्', 'Submit') %></button>
       <span class="small faint"><%= t('* चिन्ह भएका विवरण अनिवार्य छन्।', 'Fields marked * are required.') %></span>

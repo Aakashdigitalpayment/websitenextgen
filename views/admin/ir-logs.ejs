@@ -1,0 +1,23 @@
+<div class="content-head">
+  <h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
+  <div class="flex gap-1"><a class="btn btn-outline btn-sm" href="/admin/r/information_room_items"><%- icon('settings') %><%= t('व्यवस्थापन', 'Manage') %></a><a class="btn btn-outline btn-sm" href="/admin/information-room/browse"><%- icon('eye') %><%= t('पूर्वावलोकन', 'Preview') %></a></div>
+</div>
+<form class="toolbar" method="get">
+  <input class="input" type="number" min="1" name="item" value="<%= item || '' %>" placeholder="<%= t('कागजात ID', 'Document ID') %>" aria-label="<%= t('कागजात ID', 'Document ID') %>">
+  <select class="select" name="viewer" aria-label="<%= t('दर्शक', 'Viewer') %>"><option value=""><%= t('सबै दर्शक', 'All viewers') %></option><option value="member" <%= viewer === 'member' ? 'selected' : '' %>><%= t('सदस्य', 'Members') %></option><option value="admin" <%= viewer === 'admin' ? 'selected' : '' %>><%= t('प्रशासक', 'Admins') %></option></select>
+  <button class="btn btn-outline"><%- icon('search') %><%= t('फिल्टर', 'Filter') %></button>
+  <% if (item || viewer) { %><a class="btn btn-ghost" href="/admin/information-room/logs"><%= t('सबै', 'All') %></a><% } %>
+</form>
+<% if (!rows.length) { %><div class="empty"><%= t('अहिलेसम्म कुनै पहुँच रेकर्ड छैन।', 'No access recorded yet.') %></div><% } else { %>
+<div class="table-wrap"><table class="table">
+  <thead><tr><th><%= t('समय', 'Time') %></th><th><%= t('कागजात', 'Document') %></th><th><%= t('दर्शक', 'Viewer') %></th><th><%= t('क्रिया', 'Action') %></th><th>IP</th></tr></thead>
+  <tbody><% rows.forEach(r => { %><tr>
+    <td class="small"><%= bsDate(r.created_at) %> <span class="faint"><%= new Date(r.created_at).toTimeString().slice(0, 5) %></span></td>
+    <td><a href="?item=<%= r.item_id %>">#<%= r.item_id %></a> <%= f(r, 'title') || t('(हटाइएको)', '(deleted)') %></td>
+    <td><span class="badge"><%= r.viewer_type === 'admin' ? t('प्रशासक', 'Admin') : t('सदस्य', 'Member') %></span> <%= r.viewer_name || '#' + r.viewer_id %><% if (r.viewer_type === 'member') { %> <a class="small" href="/admin/members/<%= r.viewer_id %>">#<%= r.viewer_id %></a><% } %></td>
+    <td><span class="badge <%= r.action === 'download' ? 'badge-warn' : '' %>"><%= r.action === 'download' ? t('डाउनलोड', 'Download') : t('हेर्यो', 'View') %></span></td>
+    <td class="small faint"><%= r.ip_address || '' %></td>
+  </tr><% }) %></tbody>
+</table></div>
+<%- include('../partials/pagination', { pg }) %>
+<% } %>

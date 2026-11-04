@@ -1,0 +1,54 @@
+<div class="content-head">
+  <h1><%= title %></h1>
+  <div class="flex gap-1"><a class="btn btn-primary btn-sm" href="/admin/roles?new=1"><%- icon('plus') %><%= t('नयाँ भूमिका', 'New role') %></a><a class="btn btn-outline btn-sm" href="/admin/users"><%- icon('users') %><%= t('प्रशासक', 'Admin users') %></a></div>
+</div>
+<div class="alert alert-info"><%- icon('info') %><span><%= t('भूमिका दिइएका प्रशासकले छानिएका मेनु मात्र देख्छन्; बाँकी साइडबारबाट लुक्छन् र URL बाट खोल्दा पनि रोकिन्छ। थप्ने / सम्पादन / हटाउने छान्दा हेर्ने आफैँ आउँछ। स्तर (editor/staff/admin) को सीमा कायमै रहन्छ। सुपर प्रशासकका पेज कुनै भूमिकामा दिन मिल्दैन।', 'Admins with a role see only the menus it grants; others are hidden and blocked by URL too. Add / edit / delete imply view. The fixed level (editor/staff/admin) still applies. Superadmin pages are never grantable.') %></span></div>
+
+<% if (showForm) { %>
+<form class="form-card mb-3" method="post" action="/admin/roles" data-role-form>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="save_role"><input type="hidden" name="role_id" value="<%= editing ? editing.id : 0 %>">
+  <h3><%= editing ? t('भूमिका सम्पादन — ', 'Edit role — ') + editing.name : t('नयाँ भूमिका', 'New role') %></h3>
+  <div class="form-grid">
+    <div class="field"><label for="role_name"><%= t('भूमिकाको नाम', 'Role name') %> *</label><input class="input" id="role_name" name="name" maxlength="100" required value="<%= editing ? editing.name : '' %>" placeholder="<%= t('उदा. ऋण शाखा कर्मचारी', 'e.g. Loan desk staff') %>"></div>
+    <div class="field"><label for="role_desc"><%= t('विवरण', 'Description') %></label><input class="input" id="role_desc" name="description" maxlength="255" value="<%= editing ? editing.description : '' %>"></div>
+    <div class="field"><label for="role_preset"><%= t('Preset बाट भर्नुहोस्', 'Fill from preset') %></label>
+      <select class="select" id="role_preset" data-role-preset data-presets="<%= JSON.stringify(Object.fromEntries(Object.entries(presets).map(([k, p]) => [k, p.perms]))) %>">
+        <option value="">— <%= t('छान्नुहोस्', 'choose') %> —</option>
+        <% Object.entries(presets).forEach(([k, p]) => { %><option value="<%= k %>"><%= t(...p.label) %></option><% }) %>
+        <option value="__none"><%= t('सबै खाली गर्नुहोस्', 'Clear all') %></option>
+      </select></div>
+  </div>
+  <div class="table-wrap mt-2"><table class="table roles-matrix">
+    <thead><tr><th><%= t('मेनु', 'Menu') %></th><% Object.entries(actions).forEach(([fl, lb]) => { %><th class="text-center"><%= t(...lb) %></th><% }) %><th class="text-center"><%= t('सबै', 'All') %></th></tr></thead>
+    <% registry.forEach(g => { %>
+    <tbody data-group="<%= g.key %>">
+      <tr style="background:var(--surface-2)"><th><%= t(...g.label) %></th><% Object.entries(actions).forEach(([fl, lb]) => { %><td class="text-center"><input type="checkbox" data-col="<%= fl %>" aria-label="<%= t(...g.label) %> — <%= t(...lb) %>"></td><% }) %><td></td></tr>
+      <% g.items.forEach(it => { const have = current[it.key] || ''; %>
+      <tr data-row>
+        <td><%= t(...it.label) %><% if (it.minRole) { %> <span class="badge"><%= it.minRole %>+</span><% } %></td>
+        <% Object.keys(actions).forEach(fl => { %><td class="text-center"><input type="checkbox" name="perm" value="<%= it.key %>|<%= fl %>" data-flag="<%= fl %>" <%= have.includes(fl) ? 'checked' : '' %> aria-label="<%= t(...it.label) %> — <%= fl %>"></td><% }) %>
+        <td class="text-center"><input type="checkbox" data-all aria-label="<%= t(...it.label) %> — all"></td>
+      </tr>
+      <% }) %>
+    </tbody>
+    <% }) %>
+  </table></div>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('भूमिका सुरक्षित गर्नुहोस्', 'Save role') %></button><a class="btn btn-ghost" href="/admin/roles"><%= t('रद्द', 'Cancel') %></a><span class="small muted" data-role-count></span></div>
+</form>
+<% } %>
+
+<div class="table-wrap"><table class="table">
+  <thead><tr><th><%= t('भूमिका', 'Role') %></th><th><%= t('पहुँच', 'Access') %></th><th class="text-center"><%= t('प्रशासक', 'Admins') %></th><th></th></tr></thead>
+  <tbody>
+  <% if (!roles.length) { %><tr><td colspan="4" class="muted text-center"><%= t('अहिलेसम्म भूमिका छैन।', 'No roles yet.') %> <a href="/admin/roles?new=1"><%= t('नयाँ बनाउनुहोस्', 'Create one') %></a></td></tr><% } %>
+  <% roles.forEach(r => { const tl = tally(r); %><tr>
+    <td><div style="font-weight:500"><%= r.name %></div><% if (r.description) { %><div class="small faint"><%= r.description %></div><% } %></td>
+    <td class="small"><% Object.entries(actions).forEach(([fl, lb]) => { %><span class="badge"><%= t(...lb) %>: <%= num(tl[fl]) %></span> <% }) %></td>
+    <td class="text-center"><%= num(r.user_count) %></td>
+    <td><div class="row-actions">
+      <a class="btn btn-ghost btn-sm btn-icon" href="/admin/roles?edit=<%= r.id %>" title="<%= t('सम्पादन', 'Edit') %>"><%- icon('edit') %></a>
+      <form method="post" action="/admin/roles"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="delete_role"><input type="hidden" name="role_id" value="<%= r.id %>"><button class="btn btn-ghost btn-sm btn-icon" title="<%= t('हटाउने', 'Delete') %>" data-confirm="<%= t('यो भूमिका हटाउने?', 'Delete this role?') %>" <%= r.user_count > 0 ? 'disabled' : '' %>><%- icon('trash') %></button></form>
+    </div></td>
+  </tr><% }) %>
+  </tbody>
+</table></div>

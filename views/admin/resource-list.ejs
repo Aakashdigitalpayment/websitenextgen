@@ -1,13 +1,18 @@
 <div class="content-head">
   <h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
-  <a class="btn btn-primary" href="/admin/r/<%= r.key %>/new"><%- icon('plus') %><%= t('नयाँ थप्नुहोस्', 'Add new') %></a>
+  <div class="flex gap-1 wrap"><% (r.links || []).forEach(([href, ic, np, en]) => { %><a class="btn btn-outline" href="<%= href %>"><%- icon(ic) %><%= t(np, en) %></a><% }) %><a class="btn btn-primary" href="/admin/r/<%= r.key %>/new"><%- icon('plus') %><%= t('नयाँ थप्नुहोस्', 'Add new') %></a></div>
 </div>
 <form class="toolbar" method="get"><input class="input" name="q" value="<%= q %>" placeholder="<%= t('खोज्नुहोस्…', 'Search…') %>"><button class="btn btn-outline"><%- icon('search') %></button><% if (q) { %><a class="btn btn-ghost" href="/admin/r/<%= r.key %>"><%= t('हटाउनुहोस्', 'Clear') %></a><% } %></form>
 <% if (!rows.length) { %><div class="empty"><%= t('कुनै रेकर्ड छैन।', 'Nothing here yet.') %> <a href="/admin/r/<%= r.key %>/new"><%= t('पहिलो थप्नुहोस्', 'Add the first one') %></a></div><% } else { %>
+<% if (r.bulk) { %><form class="bulk-bar" id="bulkForm" method="post" action="/admin/r/<%= r.key %>/bulk" data-bulk data-confirm-delete="<%= t('छानिएका रेकर्ड हटाउने?', 'Delete the selected records?') %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <label class="choice" style="padding:4px 10px"><input type="checkbox" data-bulk-all="bulkForm"> <%= t('सबै छान्नुहोस्', 'Select all') %></label>
+  <select class="select" name="action" aria-label="<%= t('कार्य', 'Action') %>"><option value=""><%= t('छानिएकामा…', 'With selected…') %></option><% if (hasActive) { %><option value="activate"><%= t('सक्रिय गर्नुहोस्', 'Activate') %></option><option value="deactivate"><%= t('निष्क्रिय गर्नुहोस्', 'Deactivate') %></option><% } %><option value="delete"><%= t('हटाउनुहोस्', 'Delete') %></option></select>
+  <button class="btn btn-outline btn-sm"><%= t('लागू गर्नुहोस्', 'Apply') %></button>
+</form><% } %>
 <div class="table-wrap"><table class="table">
-  <thead><tr><% listFields.forEach(fl => { %><th><%= t(fl.label[0], fl.label[1]) %></th><% }) %><th></th></tr></thead>
+  <thead><tr><% if (r.bulk) { %><th style="width:32px"></th><% } %><% listFields.forEach(fl => { %><th><%= t(fl.label[0], fl.label[1]) %></th><% }) %><th></th></tr></thead>
   <tbody>
-  <% rows.forEach(row => { %><tr>
+  <% rows.forEach(row => { %><tr><% if (r.bulk) { %><td><input type="checkbox" name="ids" value="<%= row.id %>" form="bulkForm" aria-label="#<%= row.id %>"></td><% } %>
     <% listFields.forEach((fl, i) => { const v = row[fl.name]; %><td>
       <% if (fl.type === 'image') { %><% if (v) { %><img class="thumb" src="<%= mediaUrl(v) %>" alt=""><% } %>
       <% } else if (fl.type === 'bool') { %>

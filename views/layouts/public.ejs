@@ -3,11 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><%= locals.title ? title + ' · ' : '' %><%= siteName %></title>
-  <meta name="description" content="<%= locals.description || settings.meta_description || settings.about_short || siteName %>">
-  <meta property="og:title" content="<%= locals.title || siteName %>">
-  <meta property="og:site_name" content="<%= siteName %>">
-  <% if (locals.ogImage) { %><meta property="og:image" content="<%= ogImage %>"><% } %>
+  <%- include('../partials/seo-head') %>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -131,6 +127,7 @@
       </div>
     </div>
   </footer>
+  <%- include('../partials/float-widgets') %>
   <% if ((settings.ai_enabled === '1' || settings.chat_widget === '1') && (!locals.plan || plan.has('ai_chat'))) { %>
   <div class="chat" data-chat data-csrf="<%= csrfToken %>" data-lang="<%= lang %>">
     <button class="chat-fab btn btn-primary" data-chat-toggle aria-label="<%= t('सहयोग', 'Help') %>"><%- icon('message', 'icon-lg') %></button>

@@ -4,3 +4,8 @@
   <p class="small muted"><%= t('सुरक्षाका लागि पासवर्ड hash, 2FA secret, गोप्य सेटिङ र पासवर्ड भण्डारको सामग्री समावेश हुँदैन। पूर्ण डाटाबेस ब्याकअप सर्भरमा scripts/backup.sh बाट दैनिक लिइन्छ।', 'For safety, password hashes, 2FA secrets, secret settings and vault contents are left out. Full database backups run daily on the server via scripts/backup.sh.') %></p>
   <form method="post" action="/admin/backup"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary"><%- icon('download') %><%= t('JSON डाउनलोड', 'Download JSON') %></button></form>
 </div>
+<div class="card maxw-md mt-3">
+  <h3><%= t('ब्याकअपबाट पुनर्स्थापना', 'Restore from a backup') %></h3>
+  <p class="small muted"><%= t('यहीँबाट डाउनलोड गरिएको यस सहकारीको JSON ब्याकअप मात्र स्वीकार्य छ। अपलोडपछि जाँच गरेर पुष्टि माग्छ।', "Only a JSON backup of this cooperative downloaded from this page is accepted. The file is checked first and you confirm before anything changes.") %></p>
+  <form method="post" action="/admin/backup/restore?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data" class="flex gap-1 wrap"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" type="file" name="backup" accept=".json,application/json" required style="max-width:320px"><button class="btn btn-outline"><%- icon('layers') %><%= t('जाँच गर्नुहोस्', 'Check file') %></button></form>
+</div>

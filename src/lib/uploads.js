@@ -126,8 +126,9 @@ function sendStored(req, res, next, stored) {
   if (!file || !fs.existsSync(file)) return next();
   const inline = /\.(jpe?g|png|webp|gif|pdf)$/i.test(file);
   res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; plugin-types application/pdf" });
-  if (!inline) return res.download(file, path.basename(file));
-  res.sendFile(file);
+  // the file is already confined to this tenant's folder; allow dot-directories above it (e.g. a deploy path like /srv/.apps/…)
+  if (!inline) return res.download(file, path.basename(file), { dotfiles: 'allow' });
+  res.sendFile(file, { dotfiles: 'allow' });
 }
 
 module.exports = { upload, mediaUrl, remove, tenantDir, resolveStored, sendStored };

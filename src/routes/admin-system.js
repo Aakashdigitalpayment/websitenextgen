@@ -97,4 +97,61 @@ router.post('/backup', auth.requireAdmin('superadmin'), ah(async (req, res) => {
   res.end('}}');
 }));
 
+// ---------------------------------------------------------------- restore (superadmin): upload → validate → review → confirm
+const restore = require('../lib/backup-restore');
+const crypto = require('crypto');
+const { flash } = require('../lib/security');
+const restoreDir = req => path.join(tenantDir(req), '_private', 'restore');
+const restoreUpload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } }).single('backup');
+
+router.post('/backup/restore', auth.requireAdmin('superadmin'), (req, res, next) => restoreUpload(req, res, err => {
+  if (err) { flash(req, 'error', err.code === 'LIMIT_FILE_SIZE' ? 'File larger than 100 MB.' : err.message); return res.redirect('/admin/backup'); }
+  require('../lib/security').verifyCsrf(req, res, next);
+}), ah(async (req, res) => {
+  const t = res.locals.t;
+  const fail = msg => { flash(req, 'error', msg); res.redirect('/admin/backup'); };
+  if (!req.file || !/\.json$/i.test(req.file.originalname || '')) return fail(t('.json ब्याकअप फाइल छान्नुहोस्।', 'Choose a .json backup file.'));
+  let data;
+  try { data = JSON.parse(req.file.buffer.toString('utf8')); } catch { return fail(t('फाइल मान्य JSON होइन।', 'The file is not valid JSON.')); }
+  let check;
+  try { check = await restore.validate(data, req.tenant); } catch (e) { if (e instanceof restore.RestoreError) return fail(e.message); throw e; }
+  fs.mkdirSync(restoreDir(req), { recursive: true });
+  for (const f of fs.readdirSync(restoreDir(req))) fs.rmSync(path.join(restoreDir(req), f), { force: true }); // one pending restore at a time
+  const token = crypto.randomBytes(16).toString('hex');
+  fs.writeFileSync(path.join(restoreDir(req), token + '.json'), req.file.buffer);
+  req.session.pendingRestore = { token, at: Date.now(), name: String(req.file.originalname).slice(0, 120) };
+  await auth.audit(req, 'restore_upload', 'tenant', null, `Backup uploaded for restore: ${req.session.pendingRestore.name} (${check.plan.length} tables)`);
+  res.render('admin/backup-restore', { title: res.locals.t('ब्याकअप पुनर्स्थापना', 'Restore backup'), check, file: req.session.pendingRestore });
+}));
+
+router.post('/backup/restore/confirm', auth.requireAdmin('superadmin'), ah(async (req, res) => {
+  const t = res.locals.t;
+  const p = req.session.pendingRestore;
+  const file = p && /^[a-f0-9]{32}$/.test(p.token) ? path.join(restoreDir(req), p.token + '.json') : null;
+  if (req.body.action === 'cancel' || !file || Date.now() - p.at > 30 * 60_000 || !fs.existsSync(file)) {
+    if (file) fs.rmSync(file, { force: true });
+    delete req.session.pendingRestore;
+    flash(req, req.body.action === 'cancel' ? 'info' : 'error', req.body.action === 'cancel' ? t('पुनर्स्थापना रद्द गरियो।', 'Restore cancelled.') : t('पुनर्स्थापनाको समय सकियो। फेरि अपलोड गर्नुहोस्।', 'Restore expired. Upload the file again.'));
+    return res.redirect('/admin/backup');
+  }
+  const me = await db.one('SELECT password FROM admin_users WHERE id = $1', [req.admin.id]);
+  if (String(req.body.confirm_slug || '').trim() !== req.tenant.slug || !(await auth.checkPassword(String(req.body.password || ''), me.password))) {
+    flash(req, 'error', t('पासवर्ड वा पुष्टि कोड मिलेन। पुनर्स्थापना गरिएन।', 'Password or confirmation did not match. Nothing was restored.'));
+    return res.redirect('/admin/backup');
+  }
+  try {
+    const r = await restore.apply(JSON.parse(fs.readFileSync(file, 'utf8')), req.tenant);
+    settings.invalidate(); require('../lib/navigation').invalidate();
+    await auth.audit(req, 'restore', 'tenant', null, `Backup restored: ${p.name} — ${r.tables} tables, ${r.rows} rows`);
+    flash(req, 'success', t(`पुनर्स्थापना सम्पन्न: ${r.tables} तालिका, ${r.rows} रेकर्ड।`, `Restore complete: ${r.tables} tables, ${r.rows} rows.`));
+  } catch (e) {
+    await auth.audit(req, 'restore_failed', 'tenant', null, `Restore failed (rolled back): ${String(e.message).slice(0, 300)}`);
+    flash(req, 'error', t('पुनर्स्थापना असफल — केही परिवर्तन भएन: ', 'Restore failed — nothing was changed: ') + String(e.message).slice(0, 300));
+  } finally {
+    fs.rmSync(file, { force: true });
+    delete req.session.pendingRestore;
+  }
+  res.redirect('/admin/backup');
+}));
+
 module.exports = router;

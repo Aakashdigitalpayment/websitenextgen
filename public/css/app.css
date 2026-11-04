@@ -410,7 +410,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: .93rem; }
 .mode-card input { accent-color: var(--brand); }
 .mode-card:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
 
-/* =====================================================================
+/* ==============================================================
    Per-tenant layouts (body classes from src/lib/layouts.js)
    ===================================================================== */
 /* corners */
@@ -497,3 +497,23 @@ table.table { width: 100%; border-collapse: collapse; font-size: .93rem; }
 .lmock-home-centered .tx { left: 30%; top: 8px; } .lmock-home-centered .tx.s { left: 36%; width: 28%; top: 19px; } .lmock-home-centered .im { left: 12%; right: 12%; top: 32px; height: 30px; }
 
 @media (max-width: 600px) { .topbar .tb-hours, .topbar .tb-date { display: none; } }
+=======
+/* ---- team org chart ---- */
+.org-chart { display: grid; gap: 18px; }
+.org-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; position: relative; }
+.org-row > .card { width: 210px; }
+.org-row + .org-row::before { content: ""; position: absolute; top: -18px; left: 50%; height: 18px; border-left: 1px solid var(--line); }
+.org-row-1 > .card { border-color: var(--brand); }
+/* ---- gallery videos ---- */
+.gallery .video-tile { position: relative; display: block; }
+.gallery .video-tile .play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 2rem; text-shadow: 0 2px 8px rgba(0, 0, 0, .5); pointer-events: none; }
+/* ---- floating widgets (satisfaction, useful links) ---- */
+.float-widgets { position: fixed; left: 16px; bottom: 16px; z-index: 45; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.float-widget { position: relative; }
+.float-widget > summary { list-style: none; cursor: pointer; }
+.float-widget > summary::-webkit-details-marker { display: none; }
+.float-panel { position: absolute; left: 0; bottom: calc(100% + 8px); width: min(300px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 12px; }
+.float-panel h4 { margin: 0 0 8px; font-size: .95rem; }
+.float-panel a { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; color: var(--text); font-size: .9rem; }
+.float-panel a:hover { background: var(--surface-2); text-decoration: none; }
+.turnstile-wrap { margin: 8px 0; min-height: 65px; }

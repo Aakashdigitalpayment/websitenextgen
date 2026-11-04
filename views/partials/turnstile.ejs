@@ -1,0 +1,4 @@
+<% if (settings.turnstile_site_key && settings.turnstile_secret_key) { %>
+<div class="turnstile-wrap"><div class="cf-turnstile" data-sitekey="<%= settings.turnstile_site_key %>" data-language="<%= lang === 'en' ? 'en' : 'ne' %>"></div></div>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<% } %>

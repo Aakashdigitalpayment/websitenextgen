@@ -46,8 +46,13 @@
       <a class="side-link <%= cur.startsWith('/admin/notifications') ? 'active' : '' %>" href="/admin/notifications"><%- icon('bell') %><%= t('SMS/इमेल/Push', 'SMS / email / push') %></a>
       <a class="side-link <%= cur.startsWith('/admin/plan') ? 'active' : '' %>" href="/admin/plan"><%- icon('layers') %><%= t('सेवा प्लान', 'Service plan') %></a>
       <a class="side-link <%= cur.startsWith('/admin/license') ? 'active' : '' %>" href="/admin/license"><%- icon('award') %><%= t('सेवा नवीकरण', 'Licence') %></a>
-      <a class="side-link <%= cur.startsWith('/admin/audit') ? 'active' : '' %>" href="/admin/audit"><%- icon('eye') %><%= t('अडिट लग', 'Audit log') %></a><% } %>
+      <a class="side-link <%= cur.startsWith('/admin/audit') ? 'active' : '' %>" href="/admin/audit"><%- icon('eye') %><%= t('अडिट लग', 'Audit log') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/analytics') ? 'active' : '' %>" href="/admin/analytics"><%- icon('chart') %><%= t('विश्लेषण', 'Analytics') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/satisfaction') ? 'active' : '' %>" href="/admin/satisfaction"><%- icon('star') %><%= t('सन्तुष्टि विजेट', 'Satisfaction widget') %></a><% } %>
       <% if (lvl >= 4) { %><a class="side-link <%= cur.startsWith('/admin/users') ? 'active' : '' %>" href="/admin/users"><%- icon('shield') %><%= t('प्रशासक', 'Admin users') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/roles') ? 'active' : '' %>" href="/admin/roles"><%- icon('shield') %><%= t('भूमिका र अनुमति', 'Roles & permissions') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/menu-control') ? 'active' : '' %>" href="/admin/menu-control"><%- icon('layers') %><%= t('मेनु नियन्त्रण', 'Menu control') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/error-log') ? 'active' : '' %>" href="/admin/error-log"><%- icon('alert') %><%= t('त्रुटि लग', 'Error log') %></a>
       <a class="side-link <%= cur.startsWith('/admin/domains') ? 'active' : '' %>" href="/admin/domains"><%- icon('globe') %><%= t('वेबसाइट डोमेन', 'Website domain') %></a>
       <a class="side-link <%= cur.startsWith('/admin/integrations') ? 'active' : '' %>" href="/admin/integrations"><%- icon('link') %><%= t('CBS/DMS API', 'CBS / DMS API') %></a>
       <a class="side-link <%= cur.startsWith('/admin/credentials') ? 'active' : '' %>" href="/admin/credentials"><%- icon('settings') %><%= t('कार्यालय पासवर्ड', 'Office credentials') %></a>
@@ -60,6 +65,7 @@
     <header class="topnav">
       <button class="btn btn-ghost btn-icon side-toggle" data-nav-toggle aria-label="Menu"><%- icon('menu') %></button>
       <a class="btn btn-ghost btn-sm" href="/" target="_blank" rel="noopener"><%- icon('globe') %><span class="btn-text"><%= t('वेबसाइट', 'View site') %></span></a>
+      <div class="qsearch" data-qsearch data-empty="<%= t('केही भेटिएन', 'No results') %>"><input class="input" type="search" placeholder="<%= t('खोज्नुहोस्… (/)', 'Search… (/)') %>" aria-label="<%= t('छिटो खोज', 'Quick search') %>" autocomplete="off"><div class="qsearch-results" data-qsearch-results hidden></div></div>
       <div class="grow"></div>
       <%- include('../partials/theme-picker') %>
       <% if (!locals.languages || languages.length > 1) { %><span class="lang-switch"><a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">ने</a><a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a></span><% } %>
@@ -75,5 +81,6 @@
   </div>
 </div>
 <script src="/static/js/app.js" defer></script>
+<script src="/static/js/admin-tools.js" defer></script>
 </body>
 </html>

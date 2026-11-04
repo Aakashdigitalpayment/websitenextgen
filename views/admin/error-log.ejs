@@ -1,0 +1,20 @@
+<div class="content-head">
+  <div><h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1><div class="muted small"><%= t('सर्भर त्रुटि (HTTP 5xx) — यो सहकारीको मात्र', 'Server errors (HTTP 5xx) for this cooperative only') %></div></div>
+  <% if (pg.total) { %><form method="post" action="/admin/error-log/clear"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('लग खाली गर्ने?', 'Clear the log?') %>"><%- icon('trash') %><%= t('लग खाली गर्नुहोस्', 'Clear log') %></button></form><% } %>
+</div>
+<% if (!pg.total) { %>
+  <div class="alert alert-success"><%- icon('check') %><span><%= t('कुनै त्रुटि छैन। साइट राम्रोसँग चलिरहेको छ।', 'No errors recorded. The site is running fine.') %></span></div>
+<% } else { %>
+  <% if (top.length) { %><div class="card mb-3"><h3><%= t('पछिल्ला ७ दिनका धेरै देखिएका', 'Most frequent, last 7 days') %></h3>
+    <table class="table"><tbody><% top.forEach(r => { %><tr><td><code class="small"><%= r.message %></code></td><td class="text-right"><span class="badge badge-bad">× <%= num(r.n) %></span></td><td class="small faint text-right"><%= bsDate(r.last) %></td></tr><% }) %></tbody></table></div><% } %>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th><%= t('समय', 'Time') %></th><th><%= t('अनुरोध', 'Request') %></th><th><%= t('त्रुटि', 'Error') %></th></tr></thead>
+    <tbody><% rows.forEach(r => { %><tr>
+      <td class="small" style="white-space:nowrap"><%= bsDate(r.created_at) %><div class="faint"><%= new Date(r.created_at).toTimeString().slice(0, 8) %></div></td>
+      <td class="small"><span class="badge"><%= r.status %></span> <b style="font-weight:500"><%= r.method %></b> <code><%= r.path %></code><div class="faint"><%= r.ip_address || '' %><%= r.admin_id ? ' · admin #' + r.admin_id : '' %><%= r.member_id ? ' · member #' + r.member_id : '' %></div></td>
+      <td><div style="font-weight:500"><%= r.message %></div><% if (r.code) { %><span class="small faint">code <%= r.code %></span><% } %>
+        <% if (r.stack) { %><details class="small"><summary><%= t('विवरण', 'Stack trace') %></summary><pre class="log-stack"><%= r.stack %></pre></details><% } %></td>
+    </tr><% }) %></tbody>
+  </table></div>
+  <%- include('../partials/pagination', { pg }) %>
+<% } %>
