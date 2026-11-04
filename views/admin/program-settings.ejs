@@ -1,0 +1,14 @@
+<div class="content-head"><div><div class="crumbs"><a href="/admin/programs"><%= t('कार्यक्रम', 'Programmes') %></a></div><h1><%= title %></h1><div class="small muted"><%= t('नयाँ कार्यक्रम बनाउँदा लागू हुने पूर्वनिर्धारित मान।', 'Defaults applied when a new programme is created.') %></div></div></div>
+<form class="form-card" method="post" action="/admin/programs/settings">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="choices">
+    <label class="choice"><input type="checkbox" name="default_instant_attendance" value="1" <%= v.instant ? 'checked' : '' %>> <%= t('तुरुन्त QR उपस्थिति (स्वीकृति बिना — स्क्यान गर्नेबित्तिकै उपस्थित)', 'Instant QR attendance (no approval — counted as soon as scanned)') %></label>
+    <label class="choice"><input type="checkbox" name="default_shared_qr" value="1" <%= v.shared ? 'checked' : '' %>> <%= t('बहु-स्थान कार्यक्रममा एउटै (मुख्य) QR', 'One shared parent QR for multi-location programmes') %></label>
+  </div>
+  <div class="form-grid mt-2">
+    <div class="field"><label for="es"><%= t('योग्य सदस्य दायरा', 'Eligible member scope') %></label><select class="select" id="es" name="eligible_scope"><% SCOPES.forEach(s => { %><option value="<%= s[0] %>" <%= v.scope === s[0] ? 'selected' : '' %>><%= t(s[1], s[2]) %></option><% }) %></select>
+      <div class="field-hint"><%= t('साधारण सभाको गणपूरक संख्या / मतदाता योग्यता पछि यही दायराबाट थपिनेछ।', 'AGM quorum and voter eligibility will extend from this scope.') %></div></div>
+  </div>
+  <% if (roleLevel(admin.role) >= 3) { %><div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div><% } %>
+</form>
+<div class="alert alert-info mt-3"><%- icon('info') %><span><%= t('कार्यक्रमका प्रकार: सामान्य, AGM, SGM, अभिमुखीकरण, तालिम, गोष्ठी, कार्यशाला, वित्तीय साक्षरता, अन्य — कार्यक्रम फारममा छान्न सकिन्छ।', 'Programme types: General, AGM, SGM, Orientation, Training, Seminar, Workshop, Financial literacy, Other — chosen on the programme form.') %></span></div>

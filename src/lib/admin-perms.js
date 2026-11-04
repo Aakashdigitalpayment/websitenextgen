@@ -32,6 +32,8 @@ const EXTRA = [
   ['analytics', ['विश्लेषण', 'Analytics'], 'system', ['/analytics']],
   ['satisfaction', ['सन्तुष्टि विजेट', 'Satisfaction widget'], 'links', ['/satisfaction']],
   ['client_protection', ['ग्राहक संरक्षण', 'Client protection'], 'system', ['/client-protection']],
+  ['partners', ['साझेदार सेवा लग', 'Partner service log'], 'services', ['/partners']],
+  ['institutional_welfare', ['संस्थागत कल्याण कोष', 'Institutional welfare'], 'org', ['/institutional-welfare']],
 ];
 // sub-pages that use another section's permission
 const ALIASES = [

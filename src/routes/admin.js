@@ -246,6 +246,8 @@ async function saveResource(req, res, existing) {
   const fields = await resourceFields(r);
   const { data, errors } = readResourceForm(fields, req.body, req.uploaded, existing);
   if (req.uploadError) errors._upload = req.uploadError;
+  // per-resource rules (defaults, cross-field checks); may fill data and report field errors
+  if (r.beforeSave && !Object.keys(errors).length) Object.assign(errors, await r.beforeSave(data, { db, body: req.body, existing }) || {});
   // keep legacy single-language columns in sync so old PHP-era queries still find text
   const cols = await db.columns(r.table);
   for (const base of ['title', 'name', 'content', 'description']) {
@@ -313,6 +315,8 @@ router.post('/r/:resource/:id/toggle', getResource, ah(async (req, res) => {
 router.post('/r/:resource/:id/delete', getResource, ah(async (req, res) => {
   const r = req.resource;
   const id = util.int(req.params.id);
+  const blocked = r.beforeDelete ? await r.beforeDelete(id, { db }) : null;
+  if (blocked) { flash(req, 'error', res.locals.t(...blocked)); return res.redirect(`/admin/r/${r.key}`); }
   const cols = await db.columns(r.table);
   if (r.softDelete && cols.has('deleted_at')) await db.query(`UPDATE ${r.table} SET deleted_at = now() WHERE id = $1`, [id]);
   else {
@@ -420,7 +424,13 @@ router.post('/inbox/:module/:id/status', getModule, ah(async (req, res, next) =>
     await db.query('UPDATE request_status_history SET admin_chose_to_notify = 1, notify_sent = 1 WHERE id = (SELECT max(id) FROM request_status_history WHERE module = $1 AND request_id = $2)', [m.key, row.id]);
   }
   await auth.audit(req, 'status', m.table, row.id, `${row.status} → ${data.status || row.status}`, { old: { status: row.status }, new: data });
-  flash(req, 'success', res.locals.t('स्थिति अद्यावधिक भयो।', 'Status updated.'));
+  let msg = res.locals.t('स्थिति अद्यावधिक भयो।', 'Status updated.');
+  // an approved vendor is also listed as a partner facility (legacy vendor-enlistment.php)
+  if (m.key === 'vendor' && data.status === 'approved' && row.status !== 'approved') {
+    const promo = await require('../lib/partners').promoteVendor(row.id);
+    if (promo.ok && promo.created) msg += ' ' + res.locals.t(`साझेदार सुविधा सूचीमा पनि थपियो (#${promo.partnerId}) — छुट/विवरण मिलाउनुहोस्।`, `Also added to partner facilities (#${promo.partnerId}) — set the discount and details.`);
+  }
+  flash(req, 'success', msg);
   res.redirect(`/admin/inbox/${m.key}/${row.id}`);
 }));
 
@@ -445,6 +455,9 @@ router.get('/files/*rest', requireAdmin('staff'), (req, res, next) => {
 });
 
 router.use('/programs', require('./admin-programs'));
+router.use('/elections', require('./admin-elections'));
+router.use('/partners', require('./admin-partners'));
+router.use('/institutional-welfare', require('./admin-welfare'));
 router.use('/marketplace', require('./marketplace').admin);
 router.use('/credentials', require('./admin-credentials'));
 router.use('/integrations', require('./admin-integrations'));

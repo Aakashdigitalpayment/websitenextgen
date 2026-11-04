@@ -1,0 +1,141 @@
+<%
+  const pid = prog ? prog.id : 0;
+  const L = l => t(l[0], l[1]);
+  const when = v => v ? bsDate(v) + ' ' + new Date(v).toTimeString().slice(0, 5) : '';
+  const qs = o => '?' + new URLSearchParams(Object.entries(o).filter(([, v]) => v !== '' && v != null && v !== 0)).toString();
+  const csvHref = extra => qs({ program_id: pid, ...extra, export: 'csv' });
+  const needsProgram = !['duplicates', 'member', 'history'].includes(kind);
+  const limitNote = (shown, total) => total > shown ? `<div class="small muted mb-1">${util.escapeHtml(t(`${total} मध्ये ${shown} देखाइएको — सबैका लागि CSV`, `Showing ${shown} of ${total} — use CSV for all`))}</div>` : '';
+%>
+<div class="content-head"><div><div class="crumbs"><a href="/admin/programs"><%= t('कार्यक्रम', 'Programmes') %></a><% if (prog) { %> / <a href="/admin/programs/<%= prog.id %>"><%= prog.title %></a><% } %></div><h1><%= title %></h1></div>
+  <a class="btn btn-outline btn-sm" href="/admin/programs/dashboard<%= pid ? '?program_id=' + pid : '' %>"><%- icon('chart') %><%= t('लाइभ ड्यासबोर्ड', 'Live dashboard') %></a></div>
+<div class="tabs"><% REPORTS.forEach(r => { %><a class="tab <%= kind === r[0] ? 'active' : '' %>" href="/admin/programs/reports/<%= r[0] %><%= pid && !['member', 'history'].includes(r[0]) ? '?program_id=' + pid : '' %>"><%= t(r[1], r[2]) %></a><% }) %></div>
+
+<% if (!['member', 'history'].includes(kind)) { %>
+<form method="get" class="flex gap-1 wrap items-center mb-2">
+  <select class="select" name="program_id" data-autosubmit style="max-width:420px" aria-label="<%= t('कार्यक्रम', 'Programme') %>">
+    <option value=""><%= kind === 'duplicates' ? t('— सबै कार्यक्रम —', '— all programmes —') : t('— कार्यक्रम छान्नुहोस् —', '— choose a programme —') %></option>
+    <% programs.forEach(p => { %><option value="<%= p.id %>" <%= p.id === pid ? 'selected' : '' %>><%= p.title %><%= p.event_date ? ' (' + bsDate(p.event_date) + ')' : '' %></option><% }) %>
+  </select>
+  <% if (kind === 'duplicates' && query.result) { %><input type="hidden" name="result" value="<%= query.result %>"><% } %>
+  <noscript><button class="btn btn-outline btn-sm"><%= t('हेर्नुहोस्', 'Show') %></button></noscript>
+  <% if (prog && !['duplicates', 'breakdown'].includes(kind)) { %><a class="btn btn-soft btn-sm" href="<%= csvHref({}) %>"><%- icon('download') %>CSV</a><% } %>
+</form>
+<% } %>
+<% if (needsProgram && !prog) { %><div class="empty"><%= t('रिपोर्ट हेर्न कार्यक्रम छान्नुहोस्।', 'Choose a programme to see the report.') %></div><% } %>
+
+<% if (kind === 'consolidated' && prog) { %>
+  <div class="kpis">
+    <div class="kpi"><div class="l"><%= t('उपस्थित (एकपटक गणना)', 'Unique attended') %></div><div class="v"><%= num(stats.attended) %></div></div>
+    <div class="kpi"><div class="l"><%= t('पूर्व दर्ता', 'Pre-registered') %></div><div class="v"><%= num(stats.prereg) %></div></div>
+    <div class="kpi"><div class="l"><%= t('योग्य सदस्य', 'Eligible members') %></div><div class="v"><%= num(stats.eligible) %></div></div>
+    <div class="kpi"><div class="l"><%= t('उपस्थिति %', 'Attendance %') %></div><div class="v"><%= num(stats.pct) %>%</div></div>
+  </div>
+  <%- limitNote(rows.length, stats.attended) %>
+  <div class="card" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('बुबाको नाम', 'Father') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('तरिका', 'Method') %></th><th><%= t('समय', 'Time') %></th></tr></thead><tbody>
+    <% rows.forEach(r => { const no = r.member_card_no || r.sadasyata_number || ''; %><tr><td class="small"><%= no %></td><td><a href="/admin/programs/reports/history?member_id=<%= encodeURIComponent(no) %>"><%= r.member_name_np || r.member_name %></a></td><td class="small"><%= r.father_name %></td><td class="small"><%= r.location_label || '' %></td><td><span class="badge"><%= L(rep.methodLabel(r.attendance_method)) %></span></td><td class="small faint"><%= when(r.attended_at) %></td></tr><% }) %>
+    <% if (!rows.length) { %><tr><td colspan="6" class="muted small"><%= t('अहिलेसम्म उपस्थिति छैन।', 'No attendance yet.') %></td></tr><% } %>
+  </tbody></table></div></div>
+<% } %>
+
+<% if (kind === 'absent' && prog) { %>
+  <div class="mb-2"><span class="badge"><%= num(total) %> <%= t('अनुपस्थित', 'absent') %></span> <span class="small muted"><%= t('योग्य सक्रिय सदस्य जो यो कार्यक्रममा उपस्थित भएनन्।', 'Eligible active members who did not attend.') %></span></div>
+  <%- limitNote(rows.length, total) %>
+  <div class="card" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('फोन', 'Phone') %></th></tr></thead><tbody>
+    <% rows.forEach(r => { %><tr><td class="small"><%= r.sadasyata_number %></td><td><%= r.name_np || r.name %></td><td class="small"><%= r.phone || '' %></td></tr><% }) %>
+    <% if (!rows.length) { %><tr><td colspan="3" class="muted small"><%= t('सबै योग्य सदस्य उपस्थित।', 'Every eligible member attended.') %></td></tr><% } %>
+  </tbody></table></div></div>
+<% } %>
+
+<% if (kind === 'location' && prog) { %>
+  <% if (multi) occ.forEach(o => { %>
+    <div class="card mb-2" style="padding:0"><div class="flex justify-between items-center" style="padding:14px 20px"><strong style="font-weight:500"><%= o.location_name %></strong><span class="badge badge-ok"><%= num(o.attended_count) %> <%= t('उपस्थित', 'attended') %></span></div>
+      <div class="table-wrap"><table class="table"><tbody><% o.members.forEach(m => { %><tr><td class="small"><%= m.member_card_no || m.sadasyata_number %></td><td><%= m.member_name_np || m.member_name %></td><td><span class="badge"><%= L(rep.methodLabel(m.attendance_method)) %></span></td><td class="small faint"><%= when(m.attended_at) %></td></tr><% }) %>
+      <% if (!o.members.length) { %><tr><td class="muted small"><%= t('उपस्थिति छैन।', 'No attendance.') %></td></tr><% } %></tbody></table></div></div>
+  <% }); else { %>
+    <%- limitNote(rows.length, total) %>
+    <div class="card" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('तरिका', 'Method') %></th><th><%= t('समय', 'Time') %></th></tr></thead><tbody>
+      <% rows.forEach(m => { %><tr><td class="small"><%= m.member_card_no || m.sadasyata_number %></td><td><%= m.member_name_np || m.member_name %></td><td class="small"><%= m.location_label || prog.location || '' %></td><td><span class="badge"><%= L(rep.methodLabel(m.attendance_method)) %></span></td><td class="small faint"><%= when(m.attended_at) %></td></tr><% }) %>
+      <% if (!rows.length) { %><tr><td colspan="5" class="muted small"><%= t('अहिलेसम्म उपस्थिति छैन।', 'No attendance yet.') %></td></tr><% } %>
+    </tbody></table></div></div>
+  <% } %>
+<% } %>
+
+<% if (kind === 'breakdown' && prog) {
+  const groups = [['gender', 'लिङ्ग अनुसार', 'By gender'], ['staff', 'स्टाफ अनुसार', 'By staff'], ['location', 'स्थान अनुसार', 'By location'], ['desk', 'डेस्क अनुसार', 'By desk'], ['method', 'तरिका अनुसार', 'By method']];
+  const link = set => qs({ program_id: pid, ...f, ...set }); %>
+  <div class="flex gap-1 wrap items-center mb-2">
+    <span class="badge"><%= num(total) %><%= total !== grandTotal ? ' / ' + num(grandTotal) : '' %> <%= t('उपस्थिति', 'check-ins') %></span>
+    <% Object.entries(f).filter(([, v]) => v).forEach(([k, v]) => { %><a class="badge" href="<%= link({ [k]: '' }) %>" title="<%= t('हटाउनुहोस्', 'Remove') %>"><%= k %>: <%= v %> ✕</a><% }) %>
+    <form method="get" class="flex gap-1"><% Object.entries({ program_id: pid, ...f }).filter(([k, v]) => v && k !== 'q').forEach(([k, v]) => { %><input type="hidden" name="<%= k %>" value="<%= v %>"><% }) %><input class="input" name="q" value="<%= f.q %>" placeholder="<%= t('नाम / सदस्यता नं. / फोन', 'Name / member no. / phone') %>" style="max-width:240px"><button class="btn btn-ghost btn-sm"><%- icon('search') %></button></form>
+    <a class="btn btn-soft btn-sm" href="<%= link({ export: 'csv' }) %>"><%- icon('download') %><%= t('सारांश CSV', 'Summary CSV') %></a>
+    <a class="btn btn-soft btn-sm" href="<%= link({ export: 'detail' }) %>"><%- icon('download') %><%= t('विस्तृत CSV', 'Detail CSV') %></a>
+  </div>
+  <div class="grid grid-3 mb-2"><% groups.forEach(([k, np, enl]) => { const list = data[k]; const top = Math.max(1, ...list.map(r => r.count)); %>
+    <div class="card"><h3><%= t(np, enl) %></h3>
+      <% if (!list.length) { %><p class="small muted">—</p><% } %>
+      <% list.forEach(r => { const on = f[k] === r.key; %><a href="<%= link({ [k]: on ? '' : r.key, page: '' }) %>" class="mb-1" style="display:block;text-decoration:none;color:inherit">
+        <div class="flex justify-between small"><span style="<%= on ? 'font-weight:600' : '' %>"><%= L(r.label) %></span><span><%= num(r.count) %></span></div>
+        <div style="height:6px;background:var(--surface-2);border-radius:3px"><div style="height:6px;width:<%= Math.round(r.count / top * 100) %>%;background:var(--brand);border-radius:3px"></div></div></a><% }) %>
+    </div><% }) %></div>
+  <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('को उपस्थित भए', 'Who attended') %> <span class="small muted">(<%= num(detail.total) %>)</span></h3><div class="table-wrap"><table class="table"><thead><tr><th>#</th><th><%= t('सदस्य', 'Member') %></th><th><%= t('बुबाको नाम', 'Father') %></th><th><%= t('लिङ्ग', 'Gender') %></th><th><%= t('फोन', 'Phone') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('डेस्क / स्टाफ', 'Desk / staff') %></th><th><%= t('समय', 'Time') %></th></tr></thead><tbody>
+    <% detail.rows.forEach((r, i) => { %><tr><td class="small faint"><%= num((page - 1) * 100 + i + 1) %></td><td><%= r.name_np || r.name %><div class="small faint"><%= r.member_card_no || r.sadasyata_number %></div></td><td class="small"><%= r.father_name %></td><td class="small"><%= L(rep.GENDER_LABELS[rep.genderKey(r.gender_raw)]) %></td><td class="small"><%= r.phone || '' %></td><td class="small"><%= r.loc %></td><td class="small"><%= [r.desk_label, r.staff_name].filter(Boolean).join(' · ') || '—' %></td><td class="small faint"><%= when(r.attended_at) %></td></tr><% }) %>
+  </tbody></table></div>
+  <% if (detail.total > 100) { const pages = Math.ceil(detail.total / 100); %><div class="flex gap-1" style="padding:12px 20px"><% if (page > 1) { %><a class="btn btn-ghost btn-sm" href="<%= link({ page: page - 1 }) %>">←</a><% } %><span class="small muted"><%= num(page) %> / <%= num(pages) %></span><% if (page < pages) { %><a class="btn btn-ghost btn-sm" href="<%= link({ page: page + 1 }) %>">→</a><% } %></div><% } %></div>
+<% } %>
+
+<% if (kind === 'duplicates') { %>
+  <div class="flex gap-1 wrap mb-2">
+    <a class="btn btn-sm <%= !result ? 'btn-primary' : 'btn-ghost' %>" href="<%= qs({ program_id: pid }) %>"><%= t('सबै', 'All') %> (<%= num(Object.values(counts).reduce((s, n) => s + n, 0)) %>)</a>
+    <% Object.entries(rep.ATTEMPT_RESULTS).filter(([k]) => counts[k]).forEach(([k, l]) => { %><a class="btn btn-sm <%= result === k ? 'btn-primary' : 'btn-ghost' %>" href="<%= qs({ program_id: pid, result: k }) %>"><%= L(l) %> (<%= num(counts[k]) %>)</a><% }) %>
+  </div>
+  <%- limitNote(rows.length, total) %>
+  <div class="card" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th><%= t('समय', 'Time') %></th><th><%= t('सदस्य', 'Member') %></th><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('कारण', 'Reason') %></th><th><%= t('पहिलेको उपस्थिति', 'Earlier check-in') %></th><th><%= t('डेस्क / स्टाफ', 'Desk / staff') %></th><th><%= t('तरिका', 'Method') %></th></tr></thead><tbody>
+    <% rows.forEach(r => { %><tr><td class="small faint"><%= when(r.attempted_at) %></td>
+      <td><% if (r.sadasyata_number) { %><a href="/admin/programs/reports/history?member_id=<%= encodeURIComponent(r.sadasyata_number) %>"><%= r.member_name_np || r.member_name %></a> <span class="small faint"><%= r.sadasyata_number %></span><% } else { %><%= r.member_name || '—' %><% } %></td>
+      <td class="small"><%= r.program_title || '' %></td><td><span class="badge"><%= L(rep.ATTEMPT_RESULTS[r.result] || rep.ATTEMPT_RESULTS.OTHER) %></span><% if (r.result_message) { %><div class="small faint"><%= r.result_message %></div><% } %></td>
+      <td class="small"><%= [r.prev_location, when(r.prev_attended_at)].filter(Boolean).join(' ') || '—' %></td><td class="small"><%= [r.desk_label, r.staff_name].filter(Boolean).join(' · ') || '—' %></td><td class="small"><%= L(rep.methodLabel(r.attempted_method)) %></td></tr><% }) %>
+    <% if (!rows.length) { %><tr><td colspan="7" class="muted small"><%= t('अहिलेसम्म कुनै रोकिएको प्रयास छैन।', 'No blocked attempts yet.') %></td></tr><% } %>
+  </tbody></table></div></div>
+<% } %>
+
+<% if (kind === 'member') { %>
+  <form method="get" class="flex gap-1 wrap mb-2"><input class="input" name="q" value="<%= q %>" placeholder="<%= t('सदस्यता नं. / नाम / कार्यक्रम', 'Member no. / name / programme') %>" style="max-width:360px"><button class="btn btn-primary btn-sm"><%- icon('search') %><%= t('खोज्नुहोस्', 'Search') %></button><a class="btn btn-soft btn-sm" href="<%= qs({ q, export: 'csv' }) %>"><%- icon('download') %>CSV</a></form>
+  <%- limitNote(rows.length, total) %>
+  <div class="card" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('बुबाको नाम', 'Father') %></th><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('तरिका', 'Method') %></th><th><%= t('समय', 'Time') %></th></tr></thead><tbody>
+    <% rows.forEach(r => { const no = r.member_card_no || r.sadasyata_number || ''; %><tr><td class="small"><%= no %></td><td><a href="/admin/programs/reports/history?member_id=<%= encodeURIComponent(no) %>"><%= r.member_name_np || r.member_name %></a></td><td class="small"><%= r.father_name %></td><td class="small"><%= r.program_title %></td><td class="small"><%= r.location_label || '—' %></td><td><span class="badge"><%= L(rep.methodLabel(r.attendance_method)) %></span></td><td class="small faint"><%= when(r.attended_at) %></td></tr><% }) %>
+    <% if (!rows.length) { %><tr><td colspan="7" class="muted small"><%= t('कुनै रेकर्ड भेटिएन।', 'No records found.') %></td></tr><% } %>
+  </tbody></table></div></div>
+<% } %>
+
+<% if (kind === 'history') { const typeName = type ? L(rep.typeLabel(type)) : t('सबै कार्यक्रम', 'All programmes'); %>
+  <form method="get" class="flex gap-1 wrap items-center mb-2">
+    <input class="input" name="member_id" value="<%= q %>" placeholder="<%= t('सदस्यता नं.', 'Member no.') %>" required style="max-width:240px" aria-label="<%= t('सदस्यता नं.', 'Member no.') %>">
+    <select class="select" name="type" style="max-width:260px" aria-label="<%= t('लगातार उपस्थिति जाँच', 'Streak check') %>"><% Object.entries(rep.TYPES).forEach(([k, l]) => { %><option value="<%= k %>" <%= type === k ? 'selected' : '' %>><%= L(l) %></option><% }) %><option value="" <%= type === '' ? 'selected' : '' %>><%= t('सबै कार्यक्रम', 'All programmes') %></option></select>
+    <button class="btn btn-primary btn-sm"><%- icon('search') %><%= t('हेर्नुहोस्', 'Show') %></button>
+    <% if (member) { %><a class="btn btn-soft btn-sm" href="<%= qs({ member_id: q, type, export: 'csv' }) %>"><%- icon('download') %>CSV</a><% } %>
+  </form>
+  <% if (q && !member) { %><div class="alert alert-warn"><%= t(`सदस्य नं. «${q}» फेला परेन।`, `Member “${q}” not found.`) %></div><% } %>
+  <% if (member) { const last3 = register.rows.slice(0, 3); const last3Att = last3.filter(r => r.attended).length; %>
+  <div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:20px">
+    <div class="card"><h3 class="mb-0"><%= member.name_np || member.name %></h3><div class="small muted"><%= member.sadasyata_number || member.member_card_no %></div>
+      <div class="kv mt-2"><div><%= t('बुबाको नाम', 'Father') %></div><div><%= member.father_name || '—' %></div><div><%= t('लिङ्ग', 'Gender') %></div><div><%= L(rep.GENDER_LABELS[rep.genderKey(member.gender)]) %></div><% if (member.dob) { %><div><%= t('जन्म मिति', 'Born') %></div><div><%= bsDate(member.dob) %></div><% } %><% if (member.phone) { %><div><%= t('फोन', 'Phone') %></div><div><%= member.phone %></div><% } %></div>
+      <% if (!Number(member.is_active)) { %><span class="badge mt-1"><%= t('निष्क्रिय सदस्य', 'Inactive member') %></span><% } %></div>
+    <div><div class="kpis">
+      <div class="kpi"><div class="l"><%= t('कुल उपस्थिति', 'Total attendance') %></div><div class="v"><%= num(log.length) %></div></div>
+      <div class="kpi"><div class="l"><%= typeName %> (<%= t('पछिल्ला', 'last') %> <%= num(register.total) %>)</div><div class="v"><%= num(register.attended) %>/<%= num(register.total) %></div></div>
+      <div class="kpi"><div class="l"><%= t('लगातार (भर्खरदेखि)', 'Current streak') %></div><div class="v"><%= num(register.streak) %></div></div>
+      <div class="kpi"><div class="l"><%= t('पछिल्ला ३ मा', 'Last 3') %></div><div class="v" style="font-size:1rem"><%= last3.length < 3 ? t('३ वटा भएका छैनन्', 'fewer than 3 held') : last3Att === 3 ? t('✓ लगातार ३ मा', '✓ all 3') : t(`${last3Att}/३ मा मात्र`, `${last3Att}/3 only`) %></div></div>
+    </div>
+    <% if (byType.length) { %><div class="flex gap-1 wrap"><% byType.forEach(([k, n]) => { %><span class="badge"><%= L(rep.typeLabel(k)) %>: <%= num(n) %></span><% }) %></div><% } %></div>
+  </div>
+  <div class="grid mt-3" style="grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:20px">
+    <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= typeName %> — <%= t('उपस्थिति रजिस्टर', 'register') %></h3><div class="table-wrap"><table class="table"><tbody>
+      <% register.rows.forEach(r => { %><tr><td><%= r.title %><div class="small faint"><%= r.event_date ? bsDate(r.event_date) : '' %></div></td><td class="text-right"><span class="badge <%= r.attended ? 'badge-ok' : '' %>"><%= r.attended ? t('उपस्थित', 'Present') : t('अनुपस्थित', 'Absent') %></span></td></tr><% }) %>
+      <% if (!register.rows.length) { %><tr><td class="muted small"><%= t('यस प्रकारका कार्यक्रम भएका छैनन्।', 'No programmes of this type held.') %></td></tr><% } %></tbody></table></div></div>
+    <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('सबै उपस्थिति', 'All check-ins') %></h3><div class="table-wrap"><table class="table"><tbody>
+      <% log.forEach(r => { %><tr><td><%= r.parent_title || r.program_title %><div class="small faint"><%= L(rep.typeLabel(r.program_type)) %><%= r.location_label ? ' · ' + r.location_label : '' %></div></td><td><span class="badge"><%= L(rep.methodLabel(r.attendance_method)) %></span></td><td class="small faint"><%= when(r.attended_at) %></td></tr><% }) %>
+      <% if (!log.length) { %><tr><td class="muted small"><%= t('उपस्थिति छैन।', 'No attendance.') %></td></tr><% } %></tbody></table></div></div>
+  </div>
+  <% } %>
+<% } %>

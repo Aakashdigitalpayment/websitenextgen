@@ -1,11 +1,10 @@
 'use strict';
-/** Election results, system health and tenant data backup. Mounted at /admin. */
+/** System health and tenant data backup. Mounted at /admin. */
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db');
 const auth = require('../lib/auth');
-const util = require('../lib/util');
 const settings = require('../lib/settings');
 const license = require('../lib/license');
 const vault = require('../lib/credentials-crypto');
@@ -13,32 +12,6 @@ const { tenantDir } = require('../lib/uploads');
 
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-
-// ---------------------------------------------------------------- election results
-router.get('/elections', auth.requireAdmin('staff'), ah(async (req, res) => {
-  const cycles = await db.many(`SELECT c.*, (SELECT count(*) FROM election_vote_submissions s WHERE s.cycle_id = c.id) AS ballots
-                                FROM election_cycles c ORDER BY c.date_from DESC NULLS LAST, c.id DESC`);
-  res.render('admin/elections', { title: res.locals.t('निर्वाचन नतिजा', 'Election results'), cycles });
-}));
-
-router.get('/elections/:id', auth.requireAdmin('staff'), ah(async (req, res, next) => {
-  const cycle = await db.one('SELECT * FROM election_cycles WHERE id = $1', [util.int(req.params.id)]);
-  if (!cycle) return next();
-  const [positions, tallies, ballots, eligible, recent] = await Promise.all([
-    db.many('SELECT * FROM election_positions WHERE cycle_id = $1 ORDER BY display_order, id', [cycle.id]),
-    db.many(`SELECT c.id, c.position_id, c.name, c.name_en, c.symbol_no, c.photo, count(v.id) AS votes
-             FROM election_candidates c LEFT JOIN election_votes v ON v.candidate_id = c.id AND v.cycle_id = c.cycle_id
-             WHERE c.cycle_id = $1 AND c.is_active = 1 GROUP BY c.id ORDER BY c.position_id, votes DESC, c.display_order`, [cycle.id]),
-    db.value('SELECT count(*) FROM election_vote_submissions WHERE cycle_id = $1', [cycle.id]),
-    db.value("SELECT count(*) FROM members WHERE deleted_at IS NULL AND is_active = 1 AND approval_status = 'approved'"),
-    db.many(`SELECT s.submitted_at, s.source, m.name, m.sadasyata_number FROM election_vote_submissions s LEFT JOIN members m ON m.id = s.member_id
-             WHERE s.cycle_id = $1 ORDER BY s.submitted_at DESC LIMIT 20`, [cycle.id]),
-  ]);
-  // tallies stay hidden while voting is open (date_to not yet passed in Nepal time)
-  const today = new Date(Date.now() + 345 * 60_000).toISOString().slice(0, 10);
-  const closed = !!cycle.date_to && String(cycle.date_to).slice(0, 10) < today;
-  res.render('admin/election-results', { title: res.locals.f(cycle, 'title'), cycle, positions, tallies: closed ? tallies : [], closed, ballots, eligible, recent });
-}));
 
 // ---------------------------------------------------------------- system health
 const dirSize = dir => {

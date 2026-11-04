@@ -1,0 +1,24 @@
+<% const isAdmin = roleLevel(admin.role) >= 3; const months = lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP; %>
+<div class="content-head"><div><div class="crumbs"><a href="/admin/r/institutional_profile"><%= t('संस्थागत विवरण', 'Institutional profile') %></a></div><h1><%= title %></h1></div>
+  <a class="btn btn-outline btn-sm" href="/admin/r/welfare_claim_types"><%- icon('heart') %><%= t('राहत प्रकार', 'Welfare types') %></a></div>
+<div class="alert alert-info"><%- icon('info') %><span><%= t('पोर्टल सुरु हुनुअघि दिइएको राहत यहाँ Opening का रूपमा राख्नुहोस्। मासिक प्रोफाइलमा Opening + पोर्टलमा स्वीकृत दाबी आफैं जोडिन्छ; नम्बर फेर्न सकिन्छ।', 'Enter relief paid before the portal existed as opening values. Monthly profiles add opening + approved portal claims automatically; you can adjust the numbers.') %></span></div>
+<div class="grid" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px">
+  <div>
+  <% if (!types.length) { %><div class="alert alert-warn"><%= t('राहत प्रकार छैन — पहिले प्रकार थप्नुहोस्।', 'No welfare types yet — add one first.') %> <a href="/admin/r/welfare_claim_types/new"><%= t('थप्नुहोस्', 'Add') %></a></div><% } else { %>
+  <form method="post" action="/admin/institutional-welfare" class="card" style="padding:0">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3 style="padding:16px 20px 0"><%= t('सुरुआती कुल (Opening)', 'Opening totals') %></h3>
+    <div class="table-wrap"><table class="table"><thead><tr><th><%= t('राहत प्रकार', 'Type') %></th><th style="width:110px"><%= t('संख्या', 'Count') %></th><th style="width:150px"><%= t('रकम (रु.)', 'Amount (Rs.)') %></th><th><%= t('टिप्पणी', 'Note') %></th></tr></thead><tbody>
+      <% types.forEach(ty => { const o = opening[ty.slug] || { count: 0, amount: 0, note: '' }; %><tr>
+        <td><input type="hidden" name="claim_type" value="<%= ty.slug %>"><span style="font-weight:500"><%= lang === 'en' ? ty.name_en || ty.name_np : ty.name_np %></span><div class="small faint"><code><%= ty.slug %></code></div></td>
+        <td><input class="input" type="number" min="0" step="1" name="opening_count" value="<%= o.count %>" aria-label="<%= t('संख्या', 'Count') %>" <%= isAdmin ? '' : 'disabled' %>></td>
+        <td><input class="input" type="number" min="0" step="0.01" name="opening_amount" value="<%= o.amount %>" aria-label="<%= t('रकम', 'Amount') %>" <%= isAdmin ? '' : 'disabled' %>></td>
+        <td><input class="input" name="note" value="<%= o.note %>" maxlength="255" placeholder="<%= t('उदा. २०७५–८० को राहत', 'e.g. relief 2075–80') %>" aria-label="<%= t('टिप्पणी', 'Note') %>" <%= isAdmin ? '' : 'disabled' %>></td></tr><% }) %>
+    </tbody></table></div>
+    <% if (isAdmin) { %><div class="form-actions" style="padding:0 20px 16px"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div><% } %>
+  </form><% } %>
+  </div>
+  <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('मासिक प्रोफाइल अनुसार', 'By monthly profile') %></h3><ul class="list">
+    <% profiles.forEach(p => { %><li class="list-item"><a href="/admin/institutional-welfare/<%= p.id %>"><%= num(p.fiscal_year) %> · <%= p.report_month ? months[p.report_month - 1] : t('वार्षिक', 'Annual') %></a><span class="badge <%= p.saved ? 'badge-ok' : '' %>" style="margin-left:auto"><%= p.saved ? t('सुरक्षित', 'saved') : t('स्वचालित', 'auto') %></span></li><% }) %>
+    <% if (!profiles.length) { %><li class="list-item muted small"><%= t('संस्थागत विवरण छैन।', 'No institutional profiles yet.') %></li><% } %></ul></div>
+</div>

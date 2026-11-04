@@ -44,7 +44,7 @@ async function existing(memberId, programId, occurrenceId) {
 async function record({ member, program, occurrence = null, method, source, ip = null, staffAdminId = null, deskId = null, note = null }) {
   const prev = await existing(member.id, program.id, occurrence?.id);
   if (prev) {
-    await logAttempt(member.id, program, occurrence, method, 'DUPLICATE_BLOCKED', 'already attended', prev.id, ip, staffAdminId);
+    await logAttempt(member.id, program, occurrence, method, 'DUPLICATE_BLOCKED', 'already attended', prev.id, ip, staffAdminId, deskId);
     return { duplicate: prev };
   }
   try {
@@ -64,10 +64,10 @@ async function record({ member, program, occurrence = null, method, source, ip =
 }
 
 /** Failed attempts only (legacy CHECK: DUPLICATE_BLOCKED, WINDOW_CLOSED, INELIGIBLE, INVALID_MEMBER, INVALID_PROGRAM, OTHER). */
-async function logAttempt(memberId, program, occurrence, method, result, message, prevId, ip, staffAdminId) {
-  await db.query(`INSERT INTO program_attendance_attempts (member_id, parent_program_id, program_id, occurrence_id, attempted_method, attempted_at, previous_attendance_id, result, result_message, verified_by_ip, staff_admin_id)
-                  VALUES ($1, $2, $3, $4, $5, now(), $6, $7, $8, $9, $10)`,
-    [memberId, program.parent_program_id || program.id, program.id, occurrence?.id || null, method, prevId, result, message, ip, staffAdminId]).catch(() => {});
+async function logAttempt(memberId, program, occurrence, method, result, message, prevId, ip, staffAdminId, deskId = null) {
+  await db.query(`INSERT INTO program_attendance_attempts (member_id, parent_program_id, program_id, occurrence_id, attempted_method, attempted_at, previous_attendance_id, result, result_message, verified_by_ip, staff_admin_id, desk_id)
+                  VALUES ($1, $2, $3, $4, $5, now(), $6, $7, $8, $9, $10, $11)`,
+    [memberId, program.parent_program_id || program.id, program.id, occurrence?.id || null, method, prevId, result, message, ip, staffAdminId, deskId]).catch(() => {});
 }
 
 async function voidAttendance(id, adminId, reason) {

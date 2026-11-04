@@ -126,9 +126,12 @@ function sendStored(req, res, next, stored) {
   if (!file || !fs.existsSync(file)) return next();
   const inline = /\.(jpe?g|png|webp|gif|pdf)$/i.test(file);
   res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; plugin-types application/pdf" });
-  // the file is already confined to this tenant's folder; allow dot-directories above it (e.g. a deploy path like /srv/.apps/…)
-  if (!inline) return res.download(file, path.basename(file), { dotfiles: 'allow' });
-  res.sendFile(file, { dotfiles: 'allow' });
+  // serve relative to the tenant folder so the dotfile check applies to the stored path only, not to an install
+  // directory that happens to contain a dot segment (e.g. /home/x/.apps/site)
+  const opts = { root: path.resolve(tenantDir(req)) };
+  const rel = path.relative(opts.root, file);
+  if (!inline) return res.download(rel, path.basename(file), opts);
+  res.sendFile(rel, opts);
 }
 
 module.exports = { upload, mediaUrl, remove, tenantDir, resolveStored, sendStored };

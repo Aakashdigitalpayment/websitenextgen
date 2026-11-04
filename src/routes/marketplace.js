@@ -15,6 +15,10 @@ const { flash, isBot } = require('../lib/security');
 
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+/** Approved listings whose "available until" has passed become expired (legacy mpExpireStaleListings; also run daily by scripts/cleanup.js). */
+const EXPIRE_SQL = "UPDATE member_marketplace_listings SET status = 'expired', updated_at = now() WHERE status = 'approved' AND available_until IS NOT NULL AND available_until < now()";
+const expireStale = async () => (await db.query(EXPIRE_SQL)).rowCount;
+
 const CATEGORIES = [
   ['agriculture', 'कृषि उपज', 'Farm produce'], ['livestock', 'पशुपालन', 'Livestock'], ['food', 'खाद्य/घरेलु', 'Food & home-made'],
   ['handicraft', 'हस्तकला', 'Handicraft'], ['clothing', 'कपडा', 'Clothing'], ['electronics', 'इलेक्ट्रोनिक्स', 'Electronics'],
@@ -99,6 +103,7 @@ const admin = express.Router();
 admin.use(auth.requireAdmin('staff'));
 
 admin.get('/', ah(async (req, res) => {
+  await expireStale();
   const status = ['pending', 'approved', 'rejected', 'withdrawn', 'expired'].includes(req.query.status) ? req.query.status : 'pending';
   const rows = await db.many(`SELECT l.*, m.name AS member_name, m.name_np AS member_name_np, m.sadasyata_number,
       (SELECT count(*) FROM member_marketplace_inquiries i WHERE i.listing_id = l.id) AS inquiries
@@ -115,6 +120,22 @@ admin.post('/:id', ah(async (req, res) => {
   if (action === 'approve') await db.query("UPDATE member_marketplace_listings SET status = 'approved', is_active = 1, approved_at = now(), approved_by = $1, admin_note = $2 WHERE id = $3", [req.admin.id, note, l.id]);
   else if (action === 'reject') await db.query("UPDATE member_marketplace_listings SET status = 'rejected', is_active = 0, admin_note = $1 WHERE id = $2", [note, l.id]);
   else if (action === 'delete') { await db.query('DELETE FROM member_marketplace_inquiries WHERE listing_id = $1', [l.id]); await db.query('DELETE FROM member_marketplace_listings WHERE id = $1', [l.id]); remove(req, l.image); }
+  else if (action === 'expire') {
+    // off the public site now (legacy member-marketplace.php "expire")
+    await db.query("UPDATE member_marketplace_listings SET status = 'expired', updated_at = now() WHERE id = $1", [l.id]);
+    flash(req, 'success', res.locals.t('सूची सार्वजनिकबाट हटाइयो (अवधि सकियो)।', 'Listing taken off the public site (expired).'));
+  } else if (action === 'extend') {
+    // new "available until"; an expired listing goes back to review (legacy extend_until)
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.until_date || '')) ? req.body.until_date : new Date(Date.now() + 30 * 86_400_000 + 345 * 60_000).toISOString().slice(0, 10);
+    const time = /^\d{2}:\d{2}$/.test(String(req.body.until_time || '')) ? req.body.until_time : '23:59';
+    const until = new Date(`${date}T${time}:00`);
+    if (Number.isNaN(until.getTime()) || until <= new Date()) {
+      flash(req, 'error', res.locals.t('नयाँ उपलब्ध मिति अहिलेभन्दा पछाडि हुनुपर्छ।', 'The new date must be in the future.'));
+      return res.redirect('/admin/marketplace?status=' + encodeURIComponent(req.query.back || l.status));
+    }
+    await db.query("UPDATE member_marketplace_listings SET available_until = $1, status = CASE WHEN status = 'expired' THEN 'pending' ELSE status END, updated_at = now() WHERE id = $2", [until, l.id]);
+    flash(req, 'success', res.locals.t('उपलब्ध मिति अपडेट भयो।', 'Availability date updated.'));
+  }
   if (action === 'approve' || action === 'reject') {
     await notify.notifyMember(l.member_id, `${l.title}: ${action === 'approve' ? res.locals.t('बजारमा स्वीकृत', 'approved') : res.locals.t('अस्वीकृत', 'rejected')}`, note || null, '/member/marketplace');
   }
@@ -164,4 +185,4 @@ pub.post('/:id/inquiry', inquiryLimiter, ah(async (req, res, next) => {
   res.redirect(`/marketplace/${l.id}?sent=1`);
 }));
 
-module.exports = { member, admin, pub, CATEGORIES };
+module.exports = { member, admin, pub, CATEGORIES, expireStale, EXPIRE_SQL };

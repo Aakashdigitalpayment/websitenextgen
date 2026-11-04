@@ -1,7 +1,13 @@
 <div class="content-head"><div><div class="crumbs"><a href="/member"><%= t('ड्यासबोर्ड', 'Dashboard') %></a></div><h1><%= title %></h1></div></div>
 <% if (voted) { %>
   <div class="card tracking-box"><span class="icon-tile" style="margin:0 auto 12px;background:var(--ok-soft);color:var(--ok)"><%- icon('check', 'icon-lg') %></span><h2><%= t('तपाईंले मतदान गरिसक्नुभयो', 'You have voted') %></h2><p class="muted"><%= bsDate(voted.submitted_at) %></p></div>
+<% } else if (!votingOpen) { %>
+  <div class="card tracking-box"><span class="icon-tile" style="margin:0 auto 12px"><%- icon('vote', 'icon-lg') %></span><h2><%= t(...stateLabel) %></h2>
+    <% if (cycle.vote_start_at && cycle.vote_end_at) { %><p class="muted"><%= t('मतदान समय', 'Voting window') %>: <%= bsDate(cycle.vote_start_at) %> <%= new Date(cycle.vote_start_at).toTimeString().slice(0, 5) %> — <%= bsDate(cycle.vote_end_at) %> <%= new Date(cycle.vote_end_at).toTimeString().slice(0, 5) %></p><% } %>
+    <% if (attendanceOnly) { %><p class="small muted"><%= t('तपाईंको उपस्थिति दर्ता भएको छ।', 'Your attendance is recorded.') %></p><% } %></div>
 <% } else { %>
+<% if (attendanceOnly) { %><div class="alert alert-info"><%- icon('check') %><span><%= t('तपाईंको उपस्थिति दर्ता भएको छ — अब मत खसाल्न सक्नुहुन्छ।', 'Your attendance is recorded — you can still cast your vote.') %></span></div><% } %>
+<% if (cycle.vote_end_at) { %><p class="small muted"><%= t('मतदान बन्द हुने', 'Voting closes') %>: <%= bsDate(cycle.vote_end_at) %> <%= new Date(cycle.vote_end_at).toTimeString().slice(0, 5) %></p><% } %>
 <form method="post" action="/member/elections/<%= cycle.id %>">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <% positions.forEach(p => { const list = candidates.filter(c => c.position_id === p.id); const max = p.max_votes_per_voter || p.seats || 1; %>

@@ -1,3 +1,10 @@
-<div class="content-head"><h1><%= title %></h1><a class="btn btn-outline btn-sm" href="/admin/r/election_cycles"><%- icon('edit') %><%= t('निर्वाचन व्यवस्थापन', 'Manage elections') %></a></div>
+<div class="content-head"><h1><%= title %></h1>
+  <div class="flex gap-1 wrap"><a class="btn btn-outline btn-sm" href="/admin/r/election_posts"><%- icon('layers') %><%= t('पद मास्टर', 'Post master') %></a><a class="btn btn-outline btn-sm" href="/admin/r/election_cycles"><%- icon('edit') %><%= t('निर्वाचन व्यवस्थापन', 'Manage elections') %></a></div></div>
 <% if (!cycles.length) { %><div class="empty"><%= t('निर्वाचन छैन।', 'No elections yet.') %></div><% } %>
-<div class="grid grid-3"><% cycles.forEach(c => { %><a class="card card-link" href="/admin/elections/<%= c.id %>"><span class="icon-tile"><%- icon('vote') %></span><h3><%= f(c, 'title') %></h3><div class="small muted"><%= c.period_label || '' %> · <%= num(c.ballots) %> <%= t('मत', 'ballots') %></div></a><% }) %></div>
+<div class="grid grid-3"><% cycles.forEach(c => { const st = c.state; %>
+  <div class="card">
+    <div class="flex justify-between items-center"><span class="icon-tile" style="margin:0"><%- icon('vote') %></span><span class="badge <%= st === 'open' ? 'badge-ok' : '' %>"><%= t(...STATE_LABELS[st]) %></span></div>
+    <h3 class="mt-2"><a href="/admin/elections/<%= c.id %>"><%= f(c, 'title') %></a></h3>
+    <div class="small muted"><%= c.period_label || '' %> · <%= num(c.ballots) %> <%= t('मत', 'ballots') %> · <%= num(c.attendance_only) %> <%= t('उपस्थिति मात्र', 'attendance only') %><%= Number(c.results_finalized) ? ' · ' + t('नतिजा अन्तिम', 'final') : '' %></div>
+    <div class="flex gap-1 mt-2"><a class="btn btn-soft btn-sm" href="/admin/elections/<%= c.id %>"><%- icon('chart') %><%= t('नतिजा', 'Results') %></a><a class="btn btn-ghost btn-sm" href="/admin/elections/<%= c.id %>/desk"><%- icon('id') %><%= t('मतदान डेस्क', 'Voting desk') %></a></div>
+  </div><% }) %></div>

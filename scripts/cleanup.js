@@ -7,6 +7,8 @@
  */
 const db = require('../src/db');
 
+const EXPIRE_MARKETPLACE = "UPDATE member_marketplace_listings SET status = 'expired', updated_at = now() WHERE status = 'approved' AND available_until IS NOT NULL AND available_until < now()";
+
 const RULES = [
   ['login_attempts', "attempted_at < now() - interval '2 days'"],
   ['member_otp_tokens', "expires_at < now() - interval '1 day' OR is_used = 1"],
@@ -36,6 +38,9 @@ const RULES = [
         const n = (await db.query(`DELETE FROM ${db.ident(table)} WHERE ${where}`)).rowCount;
         if (n) out.push(`${table}=${n}`);
       }
+      // marketplace listings past their "available until" leave the public site (legacy mpExpireStaleListings)
+      const expired = await db.query(EXPIRE_MARKETPLACE).then(r => r.rowCount).catch(() => 0);
+      if (expired) out.push(`marketplace_expired=${expired}`);
       // temporary passwords shown to staff once must not linger
       await db.query("UPDATE member_password_reset_requests SET temp_password = NULL WHERE temp_password IS NOT NULL").catch(() => {});
       console.log(`${t.slug}: ${out.join(', ') || 'nothing to remove'}`);

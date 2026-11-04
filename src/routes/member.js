@@ -132,13 +132,27 @@ router.post('/push/unsubscribe', ah(async (req, res) => { await push.unsubscribe
 
 // ---------------------------------------------------------------- dashboard
 router.get('/', ah(async (req, res) => {
-  const [requests, notes, card, elections] = await Promise.all([
+  const electionsLib = require('../lib/elections');
+  const [requests, notes, card, cycles, partnerHistory] = await Promise.all([
     myRequests(req.member),
     db.many('SELECT * FROM member_notifications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 5', [req.member.id]),
     db.one("SELECT * FROM member_id_cards WHERE member_id = $1 AND status = 'active' ORDER BY id DESC LIMIT 1", [String(req.member.id)]),
-    db.many('SELECT * FROM election_cycles WHERE is_published = 1 AND (date_to IS NULL OR date_to >= CURRENT_DATE) AND (date_from IS NULL OR date_from <= CURRENT_DATE) ORDER BY id DESC'),
+    db.many(`SELECT c.*, EXISTS (SELECT 1 FROM election_vote_submissions s WHERE s.cycle_id = c.id AND s.member_id = $1 AND s.is_ballot = 1) AS voted
+             FROM election_cycles c WHERE c.is_published = 1 AND c.voting_enabled = 1 ORDER BY c.sort_order, c.id DESC LIMIT 30`, [req.member.id]),
+    // partner visits / services logged at partner desks (legacy member/index.php)
+    db.many(`SELECT s.*, p.facility_type, p.partner_name_en FROM member_partner_services s LEFT JOIN partner_facilities p ON p.id = s.partner_id
+             WHERE s.member_id = $1 ORDER BY s.created_at DESC LIMIT 80`, [req.member.id]),
   ]);
-  res.render('member/dashboard', { title: res.locals.t('मेरो खाता', 'My account'), requests: requests.slice(0, 10), notes, card, elections });
+  const elections = cycles.filter(c => electionsLib.windowState(c) === 'open');
+  const summary = new Map();
+  for (const h of partnerHistory) {
+    const key = h.partner_id ? 'p' + h.partner_id : 'n:' + h.partner_name;
+    const s = summary.get(key) || { name: req.lang === 'en' && h.partner_name_en ? h.partner_name_en : h.partner_name, total: 0, taken: 0 };
+    s.total++; if (Number(h.service_taken)) s.taken++;
+    summary.set(key, s);
+  }
+  const partnerSummary = [...summary.values()].sort((a, b) => b.total - a.total);
+  res.render('member/dashboard', { title: res.locals.t('मेरो खाता', 'My account'), requests: requests.slice(0, 10), notes, card, elections, partnerHistory, partnerSummary });
 }));
 
 router.get('/requests', ah(async (req, res) => {
@@ -325,56 +339,40 @@ router.post('/programs/:id/register', ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- elections (online voting)
-async function openCycle(id) {
-  return db.one(`SELECT * FROM election_cycles WHERE id = $1 AND is_published = 1
-                 AND (date_from IS NULL OR date_from <= CURRENT_DATE) AND (date_to IS NULL OR date_to >= CURRENT_DATE)`, [id]);
-}
+// open only while voting_enabled and inside the Nepal-time window (legacy member/election-vote.php)
+const elections = require('../lib/elections');
+const publishedCycle = id => db.one('SELECT * FROM election_cycles WHERE id = $1 AND is_published = 1', [id]);
 
 router.get('/elections/:id', ah(async (req, res, next) => {
-  const cycle = await openCycle(util.int(req.params.id));
+  const cycle = await publishedCycle(util.int(req.params.id));
   if (!cycle) return next();
-  const voted = await db.one('SELECT * FROM election_vote_submissions WHERE cycle_id = $1 AND member_id = $2', [cycle.id, req.member.id]);
+  const sub = await elections.submissionOf(cycle.id, req.member.id);
+  const voted = sub && Number(sub.is_ballot) === 1 ? sub : null;
+  const state = elections.windowState(cycle);
   const positions = await db.many('SELECT * FROM election_positions WHERE cycle_id = $1 AND is_active = 1 ORDER BY display_order, id', [cycle.id]);
   const candidates = await db.many('SELECT * FROM election_candidates WHERE cycle_id = $1 AND is_active = 1 ORDER BY display_order, id', [cycle.id]);
-  res.render('member/vote', { title: res.locals.f(cycle, 'title'), cycle, voted, positions, candidates, error: null });
+  res.render('member/vote', { title: res.locals.f(cycle, 'title'), cycle, voted, attendanceOnly: !!(sub && !voted), state, stateLabel: elections.STATE_LABELS[state], votingOpen: state === 'open', positions, candidates, error: null });
 }));
 
 router.post('/elections/:id', ah(async (req, res, next) => {
-  const cycle = await openCycle(util.int(req.params.id));
+  const cycle = await publishedCycle(util.int(req.params.id));
   if (!cycle) return next();
-  const positions = await db.many('SELECT * FROM election_positions WHERE cycle_id = $1 AND is_active = 1', [cycle.id]);
-  const candidates = await db.many('SELECT id, position_id FROM election_candidates WHERE cycle_id = $1 AND is_active = 1', [cycle.id]);
-  const picks = [];
-  for (const p of positions) {
-    const raw = req.body['pos_' + p.id];
-    const chosen = [...new Set((Array.isArray(raw) ? raw : raw ? [raw] : []).map(Number))];
-    const max = p.max_votes_per_voter || p.seats || 1;
-    if (chosen.length > max) {
-      flash(req, 'error', res.locals.t(`${p.title_np} मा बढीमा ${max} जना छान्न मिल्छ।`, `You may choose at most ${max} for ${p.title_en || p.title_np}.`));
-      return res.redirect(`/member/elections/${cycle.id}`);
-    }
-    for (const c of chosen) {
-      if (!candidates.some(x => x.id === c && x.position_id === p.id)) return res.status(400).render('public/error', { title: 'Invalid ballot', code: 400, message: 'Invalid ballot.' });
-      picks.push([p.id, c]);
-    }
+  const back = `/member/elections/${cycle.id}`;
+  const closedMsg = () => res.locals.t('मतदान समय बाहिर छ।', 'Voting is closed for this time window.');
+  if (!elections.isOpen(cycle)) { flash(req, 'error', closedMsg()); return res.redirect(back); }
+  const raw = {};
+  for (const [k, v] of Object.entries(req.body)) if (/^pos_\d+$/.test(k)) raw[k.slice(4)] = v;
+  let picks;
+  try { picks = await elections.normalisePicks(cycle.id, raw); } catch (e) {
+    if (e.code !== 'too_many') return res.status(400).render('public/error', { title: 'Invalid ballot', code: 400, message: 'Invalid ballot.' });
+    flash(req, 'error', res.locals.t(`${e.position.title_np} मा बढीमा ${e.max} जना छान्न मिल्छ।`, `You may choose at most ${e.max} for ${e.position.title_en || e.position.title_np}.`));
+    return res.redirect(back);
   }
-  try {
-    await db.transaction(async () => {
-      // one ballot per member per election — enforced by row lock + check
-      await db.query('SELECT pg_advisory_xact_lock($1, $2)', [cycle.id, req.member.id]);
-      if (await db.value('SELECT 1 FROM election_vote_submissions WHERE cycle_id = $1 AND member_id = $2', [cycle.id, req.member.id])) throw Object.assign(new Error('dup'), { dup: true });
-      await db.query(`INSERT INTO election_vote_submissions (cycle_id, member_id, submitted_at, source, is_ballot, ip, user_agent) VALUES ($1, $2, now(), 'online', 1, $3, $4)`,
-        [cycle.id, req.member.id, req.ip, String(req.get('user-agent') || '').slice(0, 255)]);
-      // secret ballot: the vote rows do not record who voted (the submission row above does) nor the exact time
-      for (const [pos, cand] of picks.sort(() => Math.random() - 0.5)) await db.query('INSERT INTO election_votes (cycle_id, position_id, candidate_id, member_id, created_at) VALUES ($1, $2, $3, NULL, CURRENT_DATE)', [cycle.id, pos, cand]);
-    });
-  } catch (e) {
-    if (!e.dup) throw e;
-    flash(req, 'error', res.locals.t('तपाईंले पहिले नै मतदान गरिसक्नुभएको छ।', 'You have already voted.'));
-    return res.redirect(`/member/elections/${cycle.id}`);
-  }
-  flash(req, 'success', res.locals.t('मतदान सफल भयो। धन्यवाद!', 'Your vote has been recorded. Thank you!'));
-  res.redirect(`/member/elections/${cycle.id}`);
+  if (!picks.length) { flash(req, 'error', res.locals.t('कम्तीमा एक उम्मेदवार छान्नुहोस्।', 'Please select at least one candidate.')); return res.redirect(back); }
+  const r = await elections.submit({ cycle, memberId: req.member.id, picks, source: 'member_portal', ip: req.ip, userAgent: req.get('user-agent') });
+  if (r.ok) flash(req, 'success', res.locals.t('मतदान सफल भयो। धन्यवाद!', 'Your vote has been recorded. Thank you!'));
+  else flash(req, 'error', r.code === 'closed' ? closedMsg() : res.locals.t('तपाईंले पहिले नै मतदान गरिसक्नुभएको छ।', 'You have already voted.'));
+  res.redirect(back);
 }));
 
 module.exports = router;

@@ -1,21 +1,45 @@
-<div class="content-head"><div><div class="crumbs"><a href="/admin/elections"><%= t('निर्वाचन नतिजा', 'Election results') %></a></div><h1><%= title %></h1></div><button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button></div>
+<% const isAdmin = roleLevel(admin.role) >= 3; const fmtTime = v => v ? bsDate(v) + ' ' + new Date(v).toTimeString().slice(0, 5) : '—'; %>
+<div class="content-head"><div><div class="crumbs"><a href="/admin/elections"><%= t('निर्वाचन नतिजा', 'Election results') %></a></div><h1><%= title %></h1>
+  <div class="small muted"><span class="badge <%= state === 'open' ? 'badge-ok' : '' %>"><%= t(...stateLabel) %></span> <%= t('मतदान समय', 'Voting window') %>: <%= fmtTime(cycle.vote_start_at) %> — <%= fmtTime(cycle.vote_end_at) %><% if (Number(cycle.results_finalized)) { %> · <span class="badge badge-ok"><%= t('नतिजा अन्तिम', 'Results final') %></span><% } %></div></div>
+  <div class="flex gap-1 no-print"><a class="btn btn-outline btn-sm" href="/admin/elections/<%= cycle.id %>/desk"><%- icon('id') %><%= t('मतदान डेस्क', 'Voting desk') %></a><a class="btn btn-outline btn-sm" href="/admin/r/election_cycles/<%= cycle.id %>/edit"><%- icon('edit') %><%= t('सम्पादन', 'Edit') %></a><button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button></div></div>
 <div class="kpis">
   <div class="kpi"><div class="l"><%= t('मतपत्र', 'Ballots cast') %></div><div class="v"><%= num(ballots) %></div></div>
-  <div class="kpi"><div class="l"><%= t('योग्य सदस्य', 'Eligible members') %></div><div class="v"><%= num(eligible) %></div></div>
-  <div class="kpi"><div class="l"><%= t('मतदान प्रतिशत', 'Turnout') %></div><div class="v"><%= num(eligible ? (ballots / eligible * 100).toFixed(1) : 0) %>%</div></div>
-  <div class="kpi"><div class="l"><%= t('पद', 'Positions') %></div><div class="v"><%= num(positions.length) %></div></div>
+  <div class="kpi"><div class="l"><%= t('डिजिटल / म्यानुअल', 'Digital / manual') %></div><div class="v"><%= num(counts.digital) %> / <%= num(counts.manual) %></div></div>
+  <div class="kpi"><div class="l"><%= t('उपस्थिति मात्र', 'Attendance only') %></div><div class="v"><%= num(counts.attendance) %></div></div>
+  <div class="kpi"><div class="l"><%= t('मतदान प्रतिशत', 'Turnout') %></div><div class="v"><%= num(eligible ? (ballots / eligible * 100).toFixed(1) : 0) %>%</div><div class="small faint"><%= num(eligible) %> <%= t('योग्य', 'eligible') %></div></div>
 </div>
-<% if (!closed) { %><div class="alert alert-info"><%- icon('shield') %><span><%= t('मतदान जारी छ। गोपनीयताका लागि नतिजा मतदान सकिएपछि (अन्तिम मितिपछि) मात्र देखिन्छ।', 'Voting is open. For secrecy, results are shown only after the closing date.') %></span></div><% } %>
+<% if (!closed) { %><div class="alert alert-info"><%- icon('shield') %><span><%= t('मतदान जारी छ। गोपनीयताका लागि नतिजा मतदान सकिएपछि मात्र देखिन्छ।', 'Voting is open. For secrecy, results are shown only after voting closes.') %></span></div><% } %>
 <% if (closed) positions.forEach(p => { const list = tallies.filter(x => x.position_id === p.id); const top = Math.max(1, ...list.map(x => x.votes)); const seats = p.seats || 1; %>
-  <div class="card mb-2"><h3><%= f(p, 'title') %> <span class="badge"><%= num(seats) %> <%= t('पद', 'seats') %></span></h3>
+  <div class="card mb-2"><h3><%= f(p, 'title') %> <span class="badge"><%= num(seats) %> <%= t('पद', 'seats') %></span> <% if (p.committee_name) { %><span class="badge"><%= p.committee_name %></span><% } else { %><span class="badge" title="<%= t('समिति तोकिएको छैन', 'No committee set') %>">—</span><% } %></h3>
     <% if (!list.length) { %><p class="muted small"><%= t('उम्मेदवार छैन।', 'No candidates.') %></p><% } %>
     <% list.forEach((c, i) => { const lead = i < seats && c.votes > 0; %>
       <div class="flex gap-2 items-center mb-1">
-        <div style="width:200px" class="<%= lead ? '' : 'muted' %>"><%= f(c, 'name') %><%= c.symbol_no ? ' (' + num(c.symbol_no) + ')' : '' %> <% if (lead) { %><span class="badge badge-ok"><%= t('अग्रता', 'leading') %></span><% } %></div>
+        <div style="width:200px" class="<%= lead ? '' : 'muted' %>"><%= f(c, 'name') %><%= c.symbol_no ? ' (' + num(c.symbol_no) + ')' : '' %> <% if (lead) { %><span class="badge badge-ok"><%= Number(cycle.results_finalized) ? t('विजयी', 'elected') : t('अग्रता', 'leading') %></span><% } %></div>
         <div class="grow" style="height:10px;background:var(--surface-2);border-radius:5px"><div style="height:10px;width:<%= Math.round(c.votes / top * 100) %>%;background:<%= lead ? 'var(--brand)' : 'var(--line-strong)' %>;border-radius:5px"></div></div>
         <div style="width:60px" class="text-right"><strong style="font-weight:600"><%= num(c.votes) %></strong></div>
       </div>
     <% }) %>
   </div>
 <% }) %>
-<% if (recent.length) { %><div class="card"><h3><%= t('पछिल्ला मतदान', 'Latest ballots') %></h3><div class="table-wrap"><table class="table"><tbody><% recent.forEach(r => { %><tr><td><%= r.name || '' %></td><td class="small"><%= r.sadasyata_number || '' %></td><td><span class="badge"><%= r.source || '' %></span></td><td class="small faint"><%= bsDate(r.submitted_at) %> <%= new Date(r.submitted_at).toTimeString().slice(0,5) %></td></tr><% }) %></tbody></table></div></div><% } %>
+<% if (isAdmin) { %>
+<div class="grid no-print" style="grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:20px">
+  <div class="card"><h3><%= t('नतिजा अन्तिम गर्नुहोस्', 'Finalise results') %></h3>
+    <p class="small muted"><%= t('नतिजा अन्तिम गर्दा मतदान बन्द हुन्छ।', 'Finalising closes voting for this election.') %></p>
+    <form method="post" action="/admin/elections/<%= cycle.id %>/finalize"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary" data-confirm="<%= t('नतिजा अन्तिम गरी मतदान बन्द गर्ने?', 'Finalise results and close voting?') %>" <%= Number(cycle.results_finalized) ? 'disabled' : '' %>><%- icon('check') %><%= t('अन्तिम गर्नुहोस्', 'Finalise') %></button></form>
+  </div>
+  <div class="card"><h3><%= t('विजेतालाई समिति सदस्य बनाउनुहोस्', 'Winners → committee members') %></h3>
+    <p class="small muted"><%= t('समिति तोकिएका प्रत्येक पदका विजेता (सिट संख्या बराबर) नयाँ कार्यकालमा थपिन्छन्; पुरानो कार्यकाल "हालको" रहँदैन।', 'Winners of every position linked to a committee (as many as its seats) are added to a new current tenure of that committee.') %> (<%= num(committees) %> <%= t('पद तयार', 'positions ready') %>)</p>
+    <form method="post" action="/admin/elections/<%= cycle.id %>/convert">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-grid">
+        <div class="field"><label for="tn"><%= t('कार्यकाल (English)', 'Tenure name') %></label><input class="input" id="tn" name="tenure_name" value="<%= convertDefaults.name %>" maxlength="100"></div>
+        <div class="field"><label for="tnn"><%= t('कार्यकाल (नेपाली)', 'Tenure (Nepali)') %></label><input class="input" id="tnn" name="tenure_name_np" maxlength="100"></div>
+        <div class="field"><label for="sd"><%= t('सुरु मिति', 'Start date') %></label><input class="input" type="date" id="sd" name="start_date" value="<%= convertDefaults.start %>"></div>
+        <div class="field"><label for="ed"><%= t('अन्त्य मिति', 'End date') %></label><input class="input" type="date" id="ed" name="end_date" value="<%= convertDefaults.end %>"></div>
+      </div>
+      <button class="btn btn-outline mt-2" data-confirm="<%= t('विजेतालाई समिति सदस्यमा रूपान्तरण गर्ने? मतदान बन्द हुनेछ।', 'Convert winners into committee members? Voting will close.') %>" <%= closed ? '' : 'disabled' %>><%- icon('users') %><%= t('रूपान्तरण गर्नुहोस्', 'Convert winners') %></button>
+    </form>
+  </div>
+</div>
+<% } %>
+<% if (recent.length) { %><div class="card mt-3"><h3><%= t('पछिल्ला मतदान / उपस्थिति', 'Latest ballots / attendance') %></h3><div class="table-wrap"><table class="table"><tbody><% recent.forEach(r => { %><tr><td><%= r.name || '' %></td><td class="small"><%= r.sadasyata_number || '' %></td><td><span class="badge"><%= r.source || '' %></span> <span class="badge <%= Number(r.is_ballot) ? 'badge-ok' : '' %>"><%= Number(r.is_ballot) ? t('मतपत्र', 'ballot') : t('उपस्थिति', 'attendance') %></span></td><td class="small faint"><%= fmtTime(r.submitted_at) %></td></tr><% }) %></tbody></table></div></div><% } %>

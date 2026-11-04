@@ -147,7 +147,7 @@ test('member can vote once per election', async () => {
   const auth = require('../src/lib/auth');
   await db.withSchema('tenant_' + A, async () => {
     await db.query("INSERT INTO members (name, phone, sadasyata_number, password_hash, approval_status, is_active) VALUES ('Voter', '9841999999', 'V-1', $1, 'approved', 1)", [await auth.hashPassword('Voter@1234')]);
-    const cy = await db.one("INSERT INTO election_cycles (title_np, is_published, date_from, date_to) VALUES ('निर्वाचन', 1, CURRENT_DATE - 1, CURRENT_DATE + 1) RETURNING id");
+    const cy = await db.one("INSERT INTO election_cycles (title_np, is_published, date_from, date_to, voting_enabled, vote_start_at, vote_end_at) VALUES ('निर्वाचन', 1, CURRENT_DATE - 1, CURRENT_DATE + 1, 1, now() - interval '1 hour', now() + interval '1 hour') RETURNING id");
     const pos = await db.one("INSERT INTO election_positions (cycle_id, title_np, seats, max_votes_per_voter, is_active) VALUES ($1, 'अध्यक्ष', 1, 1, 1) RETURNING id", [cy.id]);
     await db.query("INSERT INTO election_candidates (cycle_id, position_id, name, is_active) VALUES ($1, $2, 'क', 1), ($1, $2, 'ख', 1)", [cy.id, pos.id]);
   });
