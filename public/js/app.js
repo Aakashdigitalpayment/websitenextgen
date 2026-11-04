@@ -153,3 +153,8 @@ document.querySelectorAll('[data-print]').forEach(b => b.addEventListener('click
     catch (e) { b.textContent = '✗'; }
   }));
 })();
+
+/* Register the service worker on public pages (offline fallback). */
+if ('serviceWorker' in navigator && !/^\/(admin|platform)\b/.test(location.pathname)) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}));
+}

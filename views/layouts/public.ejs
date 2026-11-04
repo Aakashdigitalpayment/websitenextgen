@@ -13,6 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/app.css">
   <% if (settings.logo) { %><link rel="icon" href="<%= mediaUrl(settings.logo) %>"><% } %>
+  <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= brandColor %>">
   <style>:root{--brand:<%= brandColor %>}</style>
 </head>
 <body>

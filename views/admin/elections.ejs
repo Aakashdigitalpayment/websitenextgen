@@ -1,0 +1,3 @@
+<div class="content-head"><h1><%= title %></h1><a class="btn btn-outline btn-sm" href="/admin/r/election_cycles"><%- icon('edit') %><%= t('निर्वाचन व्यवस्थापन', 'Manage elections') %></a></div>
+<% if (!cycles.length) { %><div class="empty"><%= t('निर्वाचन छैन।', 'No elections yet.') %></div><% } %>
+<div class="grid grid-3"><% cycles.forEach(c => { %><a class="card card-link" href="/admin/elections/<%= c.id %>"><span class="icon-tile"><%- icon('vote') %></span><h3><%= f(c, 'title') %></h3><div class="small muted"><%= c.period_label || '' %> · <%= num(c.ballots) %> <%= t('मत', 'ballots') %></div></a><% }) %></div>

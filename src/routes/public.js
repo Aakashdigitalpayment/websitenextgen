@@ -11,8 +11,21 @@ const { isBot, flash } = require('../lib/security');
 const exchange = require('../lib/exchange-rate');
 const notify = require('../lib/notify');
 const aiChat = require('../lib/ai-chat');
+const notifyLater = fn => require('../lib/notify').later(fn);
 
 const router = express.Router();
+
+// daily visitor/page-view counter for the admin dashboard (no personal data stored)
+router.use((req, res, next) => {
+  if (req.method !== 'GET' || /\.(xml|txt|js|css|png|jpe?g|svg|ico|webmanifest)$/i.test(req.path) || req.path.startsWith('/api/')) return next();
+  if (/bot|crawl|spider|slurp|preview|monitor|curl|wget|headless/i.test(req.get('user-agent') || '')) return next();
+  const today = new Date(Date.now() + 345 * 60_000).toISOString().slice(0, 10);
+  const newVisitor = !(req.get('cookie') || '').includes('cv=' + today);
+  if (newVisitor) res.cookie('cv', today, { maxAge: 86400_000, httpOnly: true, sameSite: 'lax' });
+  notifyLater(() => db.query(`INSERT INTO visitor_stats (visit_date, visitor_count, page_views, created_at) VALUES ($1, $2, 1, now())
+                               ON CONFLICT (visit_date) DO UPDATE SET visitor_count = visitor_stats.visitor_count + EXCLUDED.visitor_count, page_views = visitor_stats.page_views + 1, updated_at = now()`, [today, newVisitor ? 1 : 0]));
+  next();
+});
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const ACTIVE = 'is_active = 1';
 const NOT_DELETED = 'deleted_at IS NULL';
@@ -461,6 +474,18 @@ router.get('/staff/:code', ah(async (req, res, next) => {
 
 // QR codes printed at programmes point here; members sign in and confirm
 router.get('/attend', (req, res) => res.redirect('/member/attend?t=' + encodeURIComponent(String(req.query.t || '').replace(/[^A-Za-z0-9_-]/g, ''))));
+
+// ---------------------------------------------------------------- PWA
+router.get('/manifest.webmanifest', (req, res) => {
+  const s = res.locals.settings;
+  const icon = s.logo ? require('../lib/uploads').mediaUrl(s.logo) : null;
+  res.type('application/manifest+json').send(JSON.stringify({
+    name: res.locals.siteName, short_name: (s.pwa_short_name || res.locals.siteName).slice(0, 24), start_url: '/', scope: '/', display: 'standalone',
+    background_color: '#fafaf9', theme_color: res.locals.brandColor, lang: 'ne',
+    icons: icon ? [{ src: icon, sizes: '512x512', type: /\.png$/i.test(icon) ? 'image/png' : 'image/jpeg', purpose: 'any' }] : [],
+  }));
+});
+router.get('/offline', (req, res) => res.render('public/error', { title: res.locals.t('इन्टरनेट छैन', 'You are offline'), code: '', message: res.locals.t('इन्टरनेट जडान जाँच गरेर फेरि प्रयास गर्नुहोस्।', 'Check your connection and try again.') }));
 
 // ---------------------------------------------------------------- SEO
 router.get('/robots.txt', (req, res) => {

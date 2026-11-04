@@ -1,0 +1,6 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<div class="card maxw-md">
+  <p><%= t('यस सहकारीको सम्पूर्ण डाटा (सबै तालिका) JSON फाइलमा डाउनलोड गर्नुहोस्।', "Download all of this cooperative's data (every table) as a JSON file.") %></p>
+  <p class="small muted"><%= t('सुरक्षाका लागि पासवर्ड hash, 2FA secret, गोप्य सेटिङ र पासवर्ड भण्डारको सामग्री समावेश हुँदैन। पूर्ण डाटाबेस ब्याकअप सर्भरमा scripts/backup.sh बाट दैनिक लिइन्छ।', 'For safety, password hashes, 2FA secrets, secret settings and vault contents are left out. Full database backups run daily on the server via scripts/backup.sh.') %></p>
+  <form method="post" action="/admin/backup"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary"><%- icon('download') %><%= t('JSON डाउनलोड', 'Download JSON') %></button></form>
+</div>

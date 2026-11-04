@@ -1,0 +1,20 @@
+<div class="content-head"><div><div class="crumbs"><a href="/admin/elections"><%= t('निर्वाचन नतिजा', 'Election results') %></a></div><h1><%= title %></h1></div><button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button></div>
+<div class="kpis">
+  <div class="kpi"><div class="l"><%= t('मतपत्र', 'Ballots cast') %></div><div class="v"><%= num(ballots) %></div></div>
+  <div class="kpi"><div class="l"><%= t('योग्य सदस्य', 'Eligible members') %></div><div class="v"><%= num(eligible) %></div></div>
+  <div class="kpi"><div class="l"><%= t('मतदान प्रतिशत', 'Turnout') %></div><div class="v"><%= num(eligible ? (ballots / eligible * 100).toFixed(1) : 0) %>%</div></div>
+  <div class="kpi"><div class="l"><%= t('पद', 'Positions') %></div><div class="v"><%= num(positions.length) %></div></div>
+</div>
+<% positions.forEach(p => { const list = tallies.filter(x => x.position_id === p.id); const top = Math.max(1, ...list.map(x => x.votes)); const seats = p.seats || 1; %>
+  <div class="card mb-2"><h3><%= f(p, 'title') %> <span class="badge"><%= num(seats) %> <%= t('पद', 'seats') %></span></h3>
+    <% if (!list.length) { %><p class="muted small"><%= t('उम्मेदवार छैन।', 'No candidates.') %></p><% } %>
+    <% list.forEach((c, i) => { const lead = i < seats && c.votes > 0; %>
+      <div class="flex gap-2 items-center mb-1">
+        <div style="width:200px" class="<%= lead ? '' : 'muted' %>"><%= f(c, 'name') %><%= c.symbol_no ? ' (' + num(c.symbol_no) + ')' : '' %> <% if (lead) { %><span class="badge badge-ok"><%= t('अग्रता', 'leading') %></span><% } %></div>
+        <div class="grow" style="height:10px;background:var(--surface-2);border-radius:5px"><div style="height:10px;width:<%= Math.round(c.votes / top * 100) %>%;background:<%= lead ? 'var(--brand)' : 'var(--line-strong)' %>;border-radius:5px"></div></div>
+        <div style="width:60px" class="text-right"><strong style="font-weight:600"><%= num(c.votes) %></strong></div>
+      </div>
+    <% }) %>
+  </div>
+<% }) %>
+<% if (recent.length) { %><div class="card"><h3><%= t('पछिल्ला मतदान', 'Latest ballots') %></h3><div class="table-wrap"><table class="table"><tbody><% recent.forEach(r => { %><tr><td><%= r.name || '' %></td><td class="small"><%= r.sadasyata_number || '' %></td><td><span class="badge"><%= r.source || '' %></span></td><td class="small faint"><%= bsDate(r.submitted_at) %> <%= new Date(r.submitted_at).toTimeString().slice(0,5) %></td></tr><% }) %></tbody></table></div></div><% } %>

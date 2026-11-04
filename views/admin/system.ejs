@@ -1,0 +1,15 @@
+<div class="content-head"><h1><%= title %></h1><a class="btn btn-outline btn-sm" href="/admin/backup"><%- icon('download') %><%= t('ब्याकअप', 'Backup') %></a></div>
+<div class="grid grid-2">
+  <div class="card"><h3><%= t('जाँच', 'Checks') %></h3><ul class="list">
+    <% checks.forEach(([label, ok, detail]) => { %><li class="list-item" style="align-items:center"><span class="icon-tile" style="margin:0;width:30px;height:30px;background:<%= ok ? 'var(--ok-soft)' : 'var(--warn-soft)' %>;color:<%= ok ? 'var(--ok)' : 'var(--warn)' %>"><%- icon(ok ? 'check' : 'alert') %></span><span class="grow"><%= label %></span><span class="small muted"><%= detail %></span></li><% }) %>
+  </ul></div>
+  <div class="card"><h3><%= t('सर्भर', 'Server') %></h3><div class="kv" style="grid-template-columns:150px 1fr">
+    <div>Node.js</div><div><%= info.node %></div><div>PostgreSQL</div><div><%= info.pg %></div><div>Schema</div><div><code><%= info.schema %></code></div>
+    <div><%= t('डाटाबेस आकार', 'Database size') %></div><div><%= info.dbSize %></div><div><%= t('अपलोड', 'Uploads') %></div><div><%= info.uploads %></div>
+    <div><%= t('चलेको समय', 'Uptime') %></div><div><%= num(info.uptime) %> min</div><div><%= t('मेमोरी', 'Memory') %></div><div><%= info.memory %></div>
+  </div></div>
+</div>
+<div class="grid grid-2 mt-3">
+  <div class="card"><h3><%= t('ठूला तालिका', 'Largest tables') %></h3><div class="table-wrap"><table class="table"><tbody><% tables.forEach(tb => { %><tr><td><code><%= tb.name %></code></td><td class="num"><%= num(tb.rows) %></td></tr><% }) %></tbody></table></div></div>
+  <div class="card"><h3><%= t('माइग्रेसन', 'Migrations') %></h3><div class="table-wrap"><table class="table"><tbody><% migrations.forEach(m => { %><tr><td><code><%= m.version %></code></td><td class="small faint"><%= m.applied_at ? bsDate(m.applied_at) : '' %></td></tr><% }) %></tbody></table></div></div>
+</div>
