@@ -1,0 +1,17 @@
+<!doctype html><html lang="ne"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>KYC — <%= k.full_name %></title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/app.css"><style>:root{--brand:<%= brandColor %>} body{background:#fff}.sheet{max-width:190mm;margin:8mm auto;font-size:10.5pt}
+.sheet h1{font-size:15pt;margin:0}.sheet h3{font-size:11pt;margin:5mm 0 2mm;border-bottom:1px solid #ddd;padding-bottom:1mm}.kv{grid-template-columns:55mm 1fr}.kv>div{padding:1.6mm 0}
+.photos{display:flex;gap:4mm;flex-wrap:wrap;margin-top:3mm}.photos figure{margin:0;text-align:center;font-size:8.5pt}.photos img{width:36mm;height:42mm;object-fit:cover;border:1px solid #ddd}
+@page{size:A4;margin:10mm}@media print{.no-print{display:none}.sheet{margin:0}}</style></head>
+<body><div class="sheet">
+  <div class="flex justify-between items-center"><div><div class="muted small"><%= siteName %></div><h1><%= t('KYC विवरण', 'KYC details') %></h1></div><div class="text-right small"><%= k.tracking_id || '' %><br><span class="badge"><%= statusLabel(k.status || 'pending') %></span><br><%= bsDate(k.created_at) %></div></div>
+  <% mod.sections.forEach(sec => { %>
+    <% const rows = sec.fields.filter(fl => !['image','file'].includes(fl.type) && k[fl.name] !== null && k[fl.name] !== undefined && k[fl.name] !== ''); if (!rows.length) return; %>
+    <h3><%= t(...sec.title) %></h3>
+    <div class="kv"><% rows.forEach(fl => { let v = k[fl.name]; const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); if (o) v = t(o[1], o[2]); %><div><%= t(fl.label[0], fl.label[1]) %></div><div><%= v %></div><% }) %></div>
+  <% }) %>
+  <div class="photos"><% mod.fileFields.filter(fl => k[fl.name]).forEach(fl => { %><figure><img src="<%= mediaUrl(k[fl.name]) %>" alt=""><figcaption><%= t(fl.label[0], fl.label[1]) %></figcaption></figure><% }) %></div>
+  <div class="flex justify-between mt-4 small"><div style="border-top:1px solid #999;padding-top:1mm;min-width:55mm"><%= t('सदस्यको हस्ताक्षर', 'Member signature') %></div><div style="border-top:1px solid #999;padding-top:1mm;min-width:55mm"><%= t('प्रमाणित गर्ने', 'Verified by') %></div></div>
+  <p class="text-center no-print mt-3"><button class="btn btn-primary" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button> <a class="btn btn-ghost" href="/member"><%= t('फर्कनुहोस्', 'Back') %></a></p>
+</div><script src="/static/js/app.js" defer></script></body></html>

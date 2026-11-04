@@ -1,0 +1,31 @@
+<!doctype html><html lang="ne"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><%= t('सदस्यता प्रमाणपत्र', 'Membership certificate') %> — <%= member.name_np || member.name %></title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/app.css"><style>:root{--brand:<%= brandColor %>} body{background:#f4f4f3}
+.cert{width:277mm;min-height:190mm;margin:10mm auto;background:#fff;border:1px solid #ddd;padding:12mm;position:relative;color:#1c1f23}
+.cert-inner{border:2px solid var(--brand);border-radius:4mm;height:100%;min-height:164mm;padding:12mm 16mm;text-align:center;position:relative}
+.cert h1{font-size:24pt;margin:2mm 0;color:var(--brand)} .cert .org{font-size:16pt;font-weight:600} .cert .name{font-size:20pt;font-weight:600;border-bottom:1px solid #ccc;display:inline-block;padding:0 12mm 1mm;margin:4mm 0}
+.cert .meta{display:flex;justify-content:space-between;align-items:flex-end;margin-top:14mm;text-align:left;font-size:10pt}
+.cert .sig{text-align:center;min-width:60mm;border-top:1px solid #999;padding-top:2mm}
+@page{size:A4 landscape;margin:0} @media print{body{background:#fff}.no-print{display:none}.cert{margin:0;border:0}}</style></head>
+<body>
+<div class="cert"><div class="cert-inner">
+  <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt="" style="height:22mm;margin:0 auto 2mm"><% } else { %><span class="brand-mark" style="margin:0 auto 2mm;width:18mm;height:18mm;font-size:16pt"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
+  <div class="org"><%= settings.site_name || siteName %></div>
+  <% if (settings.address) { %><div class="muted"><%= settings.address %><%= settings.registration_no ? ' · ' + t('दर्ता नं. ', 'Reg. no. ') + num(settings.registration_no) : '' %></div><% } %>
+  <h1><%= t('सदस्यता प्रमाणपत्र', 'Certificate of Membership') %></h1>
+  <p style="font-size:12pt;margin-top:6mm"><%= t('यो प्रमाणित गरिन्छ कि', 'This is to certify that') %></p>
+  <div class="name"><%= member.name_np || member.name %></div>
+  <% if (member.name_np && member.name) { %><div class="muted"><%= member.name %></div><% } %>
+  <p style="font-size:12pt;max-width:200mm;margin:5mm auto 0;line-height:1.8">
+    <%= t('यस संस्थाको सदस्यता नं. ', 'is a registered member of this cooperative, membership no. ') %><b><%= member.sadasyata_number || member.member_card_no || '—' %></b>
+    <%= t(' मा दर्ता भई ' + (since ? nd.formatBs(since, 'np') : '—') + ' देखि सदस्य हुनुहुन्छ।', ', since ' + (since ? nd.formatBs(since, 'en') : '—') + '.') %>
+  </p>
+  <div class="meta">
+    <div><img src="<%= qr %>" alt="QR" style="width:26mm;height:26mm"><div class="small muted"><%= t('प्रमाणीकरण', 'Verify') %>: <%= verifyCode %></div></div>
+    <div class="small muted text-center"><%= t('जारी मिति', 'Issued') %><br><b style="color:#1c1f23"><%= nd.formatBs(nd.todayBs(), lang) %></b></div>
+    <div class="sig"><%= settings.certificate_signatory || '' %><br><span class="muted small"><%= settings.certificate_signatory_title || t('अध्यक्ष', 'Chairperson') %></span></div>
+  </div>
+</div></div>
+<p class="text-center no-print"><button class="btn btn-primary" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट / PDF', 'Print / save PDF') %></button> <a class="btn btn-ghost" href="/member"><%= t('फर्कनुहोस्', 'Back') %></a></p>
+<script src="/static/js/app.js" defer></script>
+</body></html>

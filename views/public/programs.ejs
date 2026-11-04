@@ -1,0 +1,15 @@
+<%- include('../partials/page-head', { lead: t('सदस्य शिक्षा, तालिम, साधारण सभा लगायतका कार्यक्रम।', 'Member education, training, general meetings and more.') }) %>
+<section class="section"><div class="container">
+  <% if (!upcoming.length) { %><div class="empty"><%= t('आगामी कार्यक्रम छैन।', 'No upcoming programmes.') %></div><% } %>
+  <div class="grid grid-3"><% upcoming.forEach(p => { %>
+    <div class="card">
+      <div class="card-meta"><span class="badge badge-brand"><%= p.program_type || '' %></span><%= p.event_date ? bsDate(p.event_date) : '' %><%= p.event_time ? ' · ' + p.event_time : '' %></div>
+      <h3><%= p.title %></h3>
+      <% if (p.location) { %><div class="small muted flex gap-1"><%- icon('pin') %><%= p.location %></div><% } %>
+      <% if (p.description) { %><p class="small muted mt-1"><%= util.excerpt(p.description, 160) %></p><% } %>
+      <% if (Number(p.pre_registration_open)) { %><a class="btn btn-soft btn-sm mt-1" href="/member/programs"><%= t('पूर्व दर्ता (सदस्य)', 'Pre-register (members)') %></a><% } %>
+    </div>
+  <% }) %></div>
+  <% if (past.length) { %><h2 class="mt-4"><%= t('विगतका कार्यक्रम', 'Past programmes') %></h2>
+  <div class="table-wrap mt-2"><table class="table"><tbody><% past.forEach(p => { %><tr><td><%= p.title %></td><td class="small muted"><%= p.location || '' %></td><td class="small"><%= p.event_date ? bsDate(p.event_date) : '' %></td></tr><% }) %></tbody></table></div><% } %>
+</div></section>
