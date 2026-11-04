@@ -139,7 +139,7 @@ router.get('/quick-search', ah(async (req, res) => {
   if (lvl >= 2) {
     for (const key of ['kyc', 'loan', 'membership']) {
       const m = modules[key];
-      if (!m || !can('inbox:' + key)) continue;
+      if (!m || !can('inbox:' + key) || (m.adminOnly && lvl < 3)) continue;
       const cols = await db.columns(m.table);
       const search = [m.nameCol, m.phoneCol, 'tracking_id'].filter(c => c && cols.has(c));
       if (!search.length) continue;

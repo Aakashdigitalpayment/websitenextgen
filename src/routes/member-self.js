@@ -68,6 +68,10 @@ router.post('/profile', ah(async (req, res) => {
   const address = String(req.body.address || '').trim().slice(0, 500) || null;
   if (email && !util.isEmail(email)) errors.email = t('इमेल मिलेन', 'Invalid email');
   const data = { email, address };
+  const emailChanged = (email || '') !== String(req.member.email || '').trim().toLowerCase();
+  if (emailChanged && req.member.password_hash && !(await auth.checkPassword(req.body.current, req.member.password_hash))) {
+    errors.current = t('इमेल परिवर्तन गर्न हालको पासवर्ड चाहिन्छ', 'Enter your current password to change the email');
+  }
   const pw = String(req.body.password || '');
   if (pw) {
     const oauthOnly = !req.member.password_hash;

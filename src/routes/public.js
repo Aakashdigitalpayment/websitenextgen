@@ -263,7 +263,7 @@ router.get('/reports', ah(async (req, res) => {
 const unlockLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip),
   handler: (req, res) => { req.session.unlockError = res.locals.t('धेरै पटक प्रयास भयो। केही समयपछि फेरि प्रयास गर्नुहोस्।', 'Too many attempts. Please try again later.'); res.redirect('/reports'); } });
 router.post('/reports/unlock', unlockLimiter, ah(async (req, res) => {
-  const r = await memberAccess.tryUnlock(req, req.body.membership_no);
+  const r = await memberAccess.tryUnlock(req, req.body.membership_no, req.body.mobile);
   if (r.ok) flash(req, 'success', res.locals.t('सदस्य प्रतिवेदन खुला भयो।', 'Members-only reports unlocked.'));
   else req.session.unlockError = res.locals.t(...r.error);
   res.redirect('/reports');
@@ -541,7 +541,7 @@ router.post('/verify/service', serviceLimiter, ah(async (req, res) => {
     memberId: pv.mid, cardNo: pv.card, partnerId, serviceName: req.body.service_name, taken: req.body.service_taken !== 'no', note: req.body.service_note, pin: req.body.partner_pin, ip: req.ip,
   }) : { ok: false, error: 'partner' };
   const errors = {
-    pin: res.locals.t('साझेदार डेस्क PIN गलत भयो।', 'Partner desk PIN is incorrect.'), partner: res.locals.t('साझेदार संस्था छान्नुहोस्।', 'Please select a partner organisation.'),
+    pin: res.locals.t('साझेदार डेस्क PIN गलत भयो।', 'Partner desk PIN is incorrect.'), locked: res.locals.t('धेरै गलत PIN — यो साझेदार डेस्क १५ मिनेट रोकिएको छ।', 'Too many wrong PINs — this partner desk is locked for 15 minutes.'), partner: res.locals.t('साझेदार संस्था छान्नुहोस्।', 'Please select a partner organisation.'),
     duplicate: res.locals.t('यो साझेदारमा भर्खरै लग भइसकेको छ (९० सेकेन्ड)।', 'Already logged for this partner just now (90 s).'), invalid: res.locals.t('सेवा लग असफल।', 'Service log failed.'),
   };
   if (r.ok) pv.at = Date.now();

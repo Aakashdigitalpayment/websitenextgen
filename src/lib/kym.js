@@ -23,9 +23,10 @@ function normalizeMobile(p) {
   if (d.length > 10 && d.startsWith('977')) d = d.slice(-10);
   return d;
 }
+/** Exact match on the normalised 10-digit mobile (no partial/suffix matches). */
 function phonesMatch(a, b) {
   a = normalizeMobile(a); b = normalizeMobile(b);
-  return !!a && !!b && (a === b || a.endsWith(b) || b.endsWith(a));
+  return !!a && !!b && a.length >= 10 && a === b;
 }
 
 async function findMemberBySadasyata(id) {
@@ -97,7 +98,12 @@ const linkMember = (memberPk, kycId) => db.query('UPDATE members SET kyc_applica
  * memberSsotUpsertMemberFromKyc: ensure a members row exists for kyc.member_id. Existing member →
  * link + sync shared contact (non-empty KYM values win). Missing → stub without password (pending).
  */
-async function upsertMemberFromKyc(kyc) {
+/**
+ * @param {object} kyc
+ * @param {{syncContact?: boolean}} [opts] syncContact=false for untrusted (public) writes: the member is linked and
+ *   empty profile fields are filled, but name/email/phone/address already on the member are never changed.
+ */
+async function upsertMemberFromKyc(kyc, { syncContact = true } = {}) {
   const sid = normalizeId(kyc.member_id);
   if (!sid) return { ok: false, message: ['KYM मा सदस्यता नम्बर छैन — Member ID बिना सदस्य खाता बनाइँदैन।', 'This KYM has no Member ID — a member account is not created without one.'] };
   const nameNp = String(kyc.full_name || '').trim(), nameEn = String(kyc.full_name_en || '').trim();
@@ -108,6 +114,17 @@ async function upsertMemberFromKyc(kyc) {
   if (existing) {
     await linkMember(existing.id, kyc.id);
     const dob = /^\d{4}-\d{2}-\d{2}$/.test(String(kyc.dob_ad || '')) ? kyc.dob_ad : '';
+    if (!syncContact) {
+      // public form: only fill blanks; email/phone stay as the cooperative has them (they drive OTP reset + OAuth)
+      await db.query(`UPDATE members SET
+          name_np = CASE WHEN COALESCE(name_np, '') = '' AND $1 <> '' THEN $1 ELSE name_np END,
+          gender = CASE WHEN COALESCE(gender, '') = '' AND $2 <> '' THEN $2 ELSE gender END,
+          dob = CASE WHEN dob IS NULL AND $3 <> '' THEN $3::date ELSE dob END,
+          address = CASE WHEN COALESCE(address, '') = '' AND $4 <> '' THEN $4 ELSE address END,
+          updated_at = now()
+        WHERE id = $5`, [nameNp, String(kyc.gender || '').trim(), dob, String(kyc.permanent_address || '').trim(), existing.id]);
+      return { ok: true, memberId: existing.id, created: false };
+    }
     try {
       await db.query(`UPDATE members SET
           name = CASE WHEN $1 <> '' THEN $1 ELSE name END,
@@ -144,10 +161,10 @@ async function upsertMemberFromKyc(kyc) {
 }
 
 /** memberSsotAfterKycWrite: every KYM write keeps the linked member in sync. */
-async function afterKycWrite(kycId) {
+async function afterKycWrite(kycId, opts = {}) {
   try {
     const row = await db.one('SELECT * FROM kyc_applications WHERE id = $1', [kycId]);
-    if (row && normalizeId(row.member_id)) return await upsertMemberFromKyc(row);
+    if (row && normalizeId(row.member_id)) return await upsertMemberFromKyc(row, opts);
   } catch (e) { console.error('kym afterKycWrite:', e.message); }
   return null;
 }
@@ -261,7 +278,7 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
   if (!existing) {
     const ins = await db.pick('kyc_applications', { ...pii.encryptFields('kyc_applications', { ...row }, schema), tracking_id: require('./util').trackingId(mod.prefix), status: 'pending', created_at: new Date() });
     const saved = await db.insert('kyc_applications', ins);
-    await afterKycWrite(saved.id);
+    await afterKycWrite(saved.id, { syncContact: !!member }); // only the signed-in member may change their own contact details
     return { row: saved, updated: false };
   }
 
@@ -289,7 +306,7 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
   update.updated_at = new Date();
   if (!existing.tracking_id) update.tracking_id = require('./util').trackingId(mod.prefix);
   const saved = await db.update('kyc_applications', existing.id, await db.pick('kyc_applications', pii.encryptFields('kyc_applications', update, schema)));
-  await afterKycWrite(saved.id);
+  await afterKycWrite(saved.id, { syncContact: !!member });
   return { row: saved, updated: true };
 }
 

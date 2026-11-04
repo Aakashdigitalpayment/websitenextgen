@@ -100,7 +100,18 @@ async function submit({ cycle, memberId, picks, source, proofType = '', adminId 
     }
     // secret ballot: vote rows carry neither the voter nor the exact time, and are written in random order
     for (const [pos, cand] of [...picks].sort(() => Math.random() - 0.5)) {
-      await db.query('INSERT INTO election_votes (cycle_id, position_id, candidate_id, member_id, created_at) VALUES ($1, $2, $3, NULL, CURRENT_DATE)', [cycle.id, pos, cand]);
+      // random id (column default): retry on the rare collision
+      for (let tries = 0; ; tries++) {
+        try {
+          await db.query('SAVEPOINT vote_row');
+          await db.query('INSERT INTO election_votes (cycle_id, position_id, candidate_id, member_id, created_at) VALUES ($1, $2, $3, NULL, CURRENT_DATE)', [cycle.id, pos, cand]);
+          await db.query('RELEASE SAVEPOINT vote_row');
+          break;
+        } catch (e) {
+          await db.query('ROLLBACK TO SAVEPOINT vote_row');
+          if (e.code !== '23505' || tries > 4) throw e;
+        }
+      }
     }
     return { ok: true, kind };
   });

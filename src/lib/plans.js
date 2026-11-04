@@ -44,7 +44,7 @@ const matches = (path, prefix) => prefix.endsWith('-') ? path.startsWith(prefix)
 
 /** Feature that governs a URL path (or null = always available). */
 function featureFor(path) {
-  const p = String(path || '').split('?')[0].replace(/\/+$/, '') || '/';
+  const p = String(path || '').split('?')[0].replace(/\/+$/, '').toLowerCase() || '/';
   const m = p.match(/^\/admin\/r\/([a-z0-9_]+)/);
   if (m) { const f = FEATURES.find(x => (x.resources || []).some(re => re.test(m[1]))); if (f) return f; }
   for (const [prefix, f] of PATH_INDEX) if (matches(p, prefix)) return f;

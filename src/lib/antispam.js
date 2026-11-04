@@ -12,14 +12,17 @@ const honeypotTripped = body => HONEYPOTS.some(k => String((body && body[k]) || 
 
 /** True when text looks like link / promo spam. Email addresses alone never count. */
 function looksLikeSpam(...parts) {
-  const text = parts.map(p => String(p || '')).join('\n').toLowerCase();
+  const text = parts.map(p => String(p || '').slice(0, 5000)).join('\n').slice(0, 20000).toLowerCase();
   if (!text.trim()) return false;
   const scan = text.replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g, ' ');
   if (/https?:\/\//.test(scan) || /\bwww\./.test(scan)) return true;
   if (/\b(telegra\.ph|t\.me\/|bit\.ly|tinyurl\.com|goo\.gl|ow\.ly|rebrand\.ly)/.test(scan)) return true;
   if (/\$\s?\d[\d,]{2,}/.test(scan)) return true;
   if (/\b(jackpot|lottery|crypto\s?airdrop|forex\s?signal|prize\s?winner|you\s+won|claim\s+now|promo\s?code|double\s+your\s+money)\b/.test(scan)) return true;
-  if (/(?<![@\w])(?:[a-z0-9-]+\.)+(?:com|net|org|xyz|ru|cn|top|click|shop)\b/.test(scan) && /\b(click|visit|register|invest|earn|whatsapp|telegram)\b/.test(scan)) return true;
+  // bare domains (example.com) next to a call to action — token by token, so the check stays linear
+  const DOMAIN = /^(?:[a-z0-9-]{1,63}\.){1,10}(?:com|net|org|xyz|ru|cn|top|click|shop)$/;
+  const hasDomain = scan.split(/[\s,;:!?()<>"'\[\]{}]+/).some(tok => tok.length <= 253 && DOMAIN.test(tok.replace(/[./]+$/, '')));
+  if (hasDomain && /\b(click|visit|register|invest|earn|whatsapp|telegram)\b/.test(scan)) return true;
   return false;
 }
 
