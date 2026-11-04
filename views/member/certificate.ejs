@@ -1,6 +1,6 @@
 <!doctype html><html lang="ne"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><%= t('सदस्यता प्रमाणपत्र', 'Membership certificate') %> — <%= member.name_np || member.name %></title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/app.css"><style>:root{--brand:<%= brandColor %>} body{background:#f4f4f3}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css"><style>:root{--brand:<%= brandColor %>} body{background:#f4f4f3}
 .cert{width:277mm;min-height:190mm;margin:10mm auto;background:#fff;border:1px solid #ddd;padding:12mm;position:relative;color:#1c1f23}
 .cert-inner{border:2px solid var(--brand);border-radius:4mm;height:100%;min-height:164mm;padding:12mm 16mm;text-align:center;position:relative}
 .cert h1{font-size:24pt;margin:2mm 0;color:var(--brand)} .cert .org{font-size:16pt;font-weight:600} .cert .name{font-size:20pt;font-weight:600;border-bottom:1px solid #ccc;display:inline-block;padding:0 12mm 1mm;margin:4mm 0}

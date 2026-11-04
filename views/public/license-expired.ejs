@@ -1,7 +1,7 @@
 <!doctype html><html lang="<%= lang === 'en' ? 'en' : 'ne' %>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title><%= siteName %></title><meta name="robots" content="noindex">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/app.css"><style>:root{--brand:<%= brandColor %>}</style></head>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css"><style>:root{--brand:<%= brandColor %>}</style></head>
 <body><section class="section"><div class="container maxw-sm text-center">
   <span class="brand-mark" style="margin:0 auto 16px"><%= (siteName || 'C').trim().charAt(0) %></span>
   <h1 style="font-size:1.5rem"><%= siteName %></h1>

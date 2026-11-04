@@ -10,8 +10,8 @@
   <% if (locals.ogImage) { %><meta property="og:image" content="<%= ogImage %>"><% } %>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css">
   <% if (settings.logo) { %><link rel="icon" href="<%= mediaUrl(settings.logo) %>"><% } %>
   <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= locals.theme ? theme.brand : brandColor %>">
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
