@@ -395,6 +395,8 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
     if (req.member) {
       await notify.notifyMember(req.member.id, res.locals.t(...mod.title), res.locals.t('तपाईंको आवेदन प्राप्त भयो। ट्र्याकिङ नं: ', 'Application received. Tracking no: ') + (row.tracking_id || row.id), '/track?id=' + encodeURIComponent(row.tracking_id || ''));
     }
+    notify.later(() => require('../lib/webhooks').emit('application.submitted', { type: mod.key, id: row.id, tracking_id: row.tracking_id || null, status: row.status || null,
+      applicant: { name: row[mod.nameCol] || null, phone: row[mod.phoneCol] || null, email: row.email || null }, created_at: row.created_at }));
     if (row.tracking_id) {
       notify.later(() => notify.applicationEvent('submitted', { name: row[mod.nameCol], tracking_id: row.tracking_id, module: mod.title[0] }, { phone: row[mod.phoneCol], email: row.email || row.bidder_email }));
     }

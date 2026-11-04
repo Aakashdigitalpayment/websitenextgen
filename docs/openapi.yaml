@@ -1,0 +1,293 @@
+openapi: 3.1.0
+info:
+  title: Cooperative portal — Integration API (CBS / DMS)
+  version: 1.0.0
+  description: |
+    Push members, accounts, transactions and documents into the cooperative portal, and pull
+    applications and member changes. See docs/API.md for conventions, webhooks and examples.
+servers:
+  - url: https://{tenantDomain}/api/v1
+    variables:
+      tenantDomain:
+        default: aakash.coopcloud.com.np
+security:
+  - apiKey: []
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: "cbk_<12 hex>.<43 base64url>"
+  parameters:
+    memberNo: { name: member_no, in: path, required: true, schema: { type: string }, description: Membership number (सदस्यता नं.) or external_id }
+    appType:
+      name: type
+      in: path
+      required: true
+      schema: { type: string, enum: [loan, account, kyc, grievance, appointment, feedback, welfare, digital, vendor, survey, membership, honor, job, bid, contact] }
+    appRef: { name: ref, in: path, required: true, schema: { type: string }, description: tracking_id (or numeric id for types without tracking) }
+    limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+    cursor: { name: cursor, in: query, schema: { type: string } }
+    updatedSince: { name: updated_since, in: query, schema: { type: string, format: date-time } }
+    idempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, minLength: 8, maxLength: 100 } }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [validation_failed, unauthorized, insufficient_scope, member_not_found, rate_limited] }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+    MemberInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 255 }
+        name_np: { type: string, maxLength: 255 }
+        phone: { type: string }
+        email: { type: string, format: email }
+        address: { type: string }
+        dob: { type: string, format: date, description: AD date }
+        dob_bs: { type: string, description: BS date YYYY-MM-DD }
+        gender: { type: string, enum: [male, female, other] }
+        card_no: { type: string }
+        external_id: { type: string, description: CBS customer id (CIF) }
+        active: { type: boolean }
+        approval_status: { type: string, enum: [pending, approved, rejected] }
+    Member:
+      type: object
+      properties:
+        id: { type: integer }
+        member_no: { type: [string, 'null'] }
+        card_no: { type: [string, 'null'] }
+        external_id: { type: [string, 'null'] }
+        name: { type: string }
+        name_np: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        dob: { type: [string, 'null'], format: date }
+        gender: { type: [string, 'null'] }
+        approval_status: { type: string }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        accounts: { type: array, items: { $ref: '#/components/schemas/Account' } }
+    Account:
+      type: object
+      required: [account_no, kind]
+      properties:
+        account_no: { type: string }
+        kind: { type: string, enum: [saving, fixed, loan, share, other] }
+        product_name: { type: string }
+        balance: { type: number }
+        interest_rate: { type: number }
+        opened_on: { type: string, format: date }
+        maturity_date: { type: string, format: date }
+        installment_amount: { type: number }
+        next_due_date: { type: string, format: date }
+        overdue_amount: { type: number }
+        status: { type: string, default: active }
+        as_of: { type: string, format: date-time }
+    Transaction:
+      type: object
+      required: [account_no, txn_id, txn_date]
+      properties:
+        account_no: { type: string }
+        txn_id: { type: string }
+        txn_date: { type: string, format: date-time }
+        description: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        balance_after: { type: number }
+    Application:
+      type: object
+      properties:
+        id: { type: integer }
+        tracking_id: { type: [string, 'null'] }
+        type: { type: string }
+        status: { type: [string, 'null'] }
+        remarks: { type: [string, 'null'] }
+        applicant:
+          type: object
+          properties: { name: { type: string }, phone: { type: string }, email: { type: string }, member_no: { type: string } }
+        fields: { type: object, additionalProperties: true }
+        files:
+          type: array
+          items: { type: object, properties: { field: { type: string }, label: { type: string }, url: { type: string, format: uri } } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Document:
+      type: object
+      properties:
+        id: { type: integer }
+        doc_type: { type: string }
+        title: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        external_ref: { type: [string, 'null'] }
+        visible_to_member: { type: boolean }
+        source: { type: string }
+        created_at: { type: string, format: date-time }
+        url: { type: string, format: uri }
+    WebhookEvent:
+      type: object
+      description: "POSTed to your webhook URL. Verify X-Coop-Signature: t=<unix>,v1=hex(HMAC-SHA256(secret, '<t>.<raw body>'))"
+      properties:
+        id: { type: string }
+        event: { type: string, enum: [application.submitted, application.status_changed, member.created, member.updated] }
+        created_at: { type: string, format: date-time }
+        tenant: { type: string }
+        data: { type: object, additionalProperties: true }
+paths:
+  /ping:
+    get:
+      summary: Check the key and see its scopes
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean }, tenant: { type: string }, client: { type: string }, scopes: { type: array, items: { type: string } }, server_time: { type: string } } } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /members:
+    get:
+      summary: List members / change feed (scope members:read)
+      parameters: [{ $ref: '#/components/parameters/updatedSince' }, { $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/cursor' }, { name: q, in: query, schema: { type: string } }]
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Member' } }, next_cursor: { type: [string, 'null'] } } } } } }
+  /members/{member_no}:
+    parameters: [{ $ref: '#/components/parameters/memberNo' }]
+    get:
+      summary: Get a member with accounts (scope members:read)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Member' } } } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Create or update a member (scope members:write)
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MemberInput' } } } }
+      responses:
+        '200': { description: Updated }
+        '201': { description: Created }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /members/bulk:
+    post:
+      summary: Upsert up to 500 members (scope members:write)
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { members: { type: array, maxItems: 500, items: { allOf: [{ $ref: '#/components/schemas/MemberInput' }, { type: object, required: [member_no], properties: { member_no: { type: string } } }] } } } } } }
+      responses:
+        '200': { description: Per-row results }
+  /members/{member_no}/accounts:
+    parameters: [{ $ref: '#/components/parameters/memberNo' }]
+    put:
+      summary: Replace / upsert a member's accounts (scope accounts:write)
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { replace: { type: boolean, default: true }, accounts: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/Account' } } } } } }
+      responses:
+        '200': { description: OK }
+        '422': { $ref: '#/components/responses/Error' }
+  /accounts/bulk:
+    post:
+      summary: Accounts for up to 500 members (scope accounts:write)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { members: { type: array, maxItems: 500, items: { type: object, properties: { member_no: { type: string }, replace: { type: boolean }, accounts: { type: array, items: { $ref: '#/components/schemas/Account' } } } } } } } } }
+      responses:
+        '200': { description: Per-member results }
+  /members/{member_no}/transactions:
+    parameters: [{ $ref: '#/components/parameters/memberNo' }]
+    post:
+      summary: Add / update statement lines (scope accounts:write)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { transactions: { type: array, maxItems: 1000, items: { $ref: '#/components/schemas/Transaction' } } } } } }
+      responses:
+        '200': { description: OK }
+  /applications:
+    get:
+      summary: Application types (scope applications:read)
+      responses:
+        '200': { description: OK }
+  /applications/{type}:
+    parameters: [{ $ref: '#/components/parameters/appType' }]
+    get:
+      summary: Pull applications (scope applications:read)
+      parameters: [{ name: status, in: query, schema: { type: string } }, { $ref: '#/components/parameters/updatedSince' }, { $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/cursor' }]
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Application' } }, next_cursor: { type: [string, 'null'] } } } } } }
+  /applications/{type}/{ref}:
+    parameters: [{ $ref: '#/components/parameters/appType' }, { $ref: '#/components/parameters/appRef' }]
+    get:
+      summary: One application with status history (scope applications:read)
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Update status / remarks (scope applications:write)
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { status: { type: string }, remarks: { type: string }, notify: { type: boolean, description: Send SMS/email to the applicant } } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Application' } } } } } }
+        '422': { $ref: '#/components/responses/Error' }
+  /applications/{type}/{ref}/files/{field}:
+    parameters: [{ $ref: '#/components/parameters/appType' }, { $ref: '#/components/parameters/appRef' }, { name: field, in: path, required: true, schema: { type: string } }]
+    get:
+      summary: Download an application file (scope documents:read)
+      responses:
+        '200': { description: File, content: { application/octet-stream: {} } }
+        '404': { $ref: '#/components/responses/Error' }
+  /members/{member_no}/documents:
+    parameters: [{ $ref: '#/components/parameters/memberNo' }]
+    get:
+      summary: List member documents (scope documents:read)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Document' } } } } } } }
+    post:
+      summary: Upload a document (scope documents:write)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                title: { type: string }
+                doc_type: { type: string }
+                external_ref: { type: string }
+                visible_to_member: { type: string, enum: ['0', '1'] }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Document' } } } } } }
+        '422': { $ref: '#/components/responses/Error' }
+  /members/{member_no}/documents/{id}/file:
+    parameters: [{ $ref: '#/components/parameters/memberNo' }, { name: id, in: path, required: true, schema: { type: integer } }]
+    get:
+      summary: Download a document (scope documents:read)
+      responses:
+        '200': { description: File, content: { application/octet-stream: {} } }
+  /members/{member_no}/documents/{id}:
+    parameters: [{ $ref: '#/components/parameters/memberNo' }, { name: id, in: path, required: true, schema: { type: integer } }]
+    delete:
+      summary: Delete a document (scope documents:write)
+      responses:
+        '204': { description: Deleted }
+webhooks:
+  portalEvent:
+    post:
+      summary: Event from the portal (application.submitted, application.status_changed, member.created, member.updated)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEvent' } } } }
+      responses:
+        '200': { description: Return any 2xx within 10 s }

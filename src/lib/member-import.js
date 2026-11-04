@@ -157,6 +157,7 @@ async function commit(jobId, adminId) {
           id = row.id;
         }
         await db.query("UPDATE member_import_rows SET status = $1, message = '', member_id = $2 WHERE id = $3", [existing ? 'updated' : 'created', id, r.id]);
+        await require('./webhooks').emit(existing ? 'member.updated' : 'member.created', { id, member_no: data.sadasyata_number || null, name: data.name, name_np: data.name_np || null, phone: data.phone, email: data.email, source: 'csv_import' });
         ok++;
       });
     } catch (e) {

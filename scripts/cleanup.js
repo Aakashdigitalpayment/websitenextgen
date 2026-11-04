@@ -18,6 +18,9 @@ const RULES = [
   ['visitor_counter', "created_at < now() - interval '90 days'"],
   ['member_import_rows', "job_id IN (SELECT id FROM member_import_jobs WHERE created_at < now() - interval '90 days')"],
   ['member_password_reset_requests', "status <> 'pending' AND resolved_at < now() - interval '180 days'"],
+  ['api_request_log', "created_at < now() - interval '90 days'"],
+  ['api_idempotency', "created_at < now() - interval '2 days'"],
+  ['api_webhook_deliveries', "status = 'delivered' AND delivered_at < now() - interval '30 days'"],
 ];
 
 (async () => {

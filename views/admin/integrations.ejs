@@ -1,0 +1,66 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('कोर बैंकिङ (CBS) र कागजात व्यवस्थापन (DMS) प्रणालीसँग सदस्य विवरण, खाता र आवेदन आदानप्रदान।', 'Exchange members, accounts and applications with your core banking (CBS) and document management (DMS) systems.') %></div></div>
+  <div class="small"><span class="muted">API base:</span> <code><%= apiBase %></code></div></div>
+
+<% if (newKey) { %>
+<div class="alert alert-success" style="display:block">
+  <strong><%= newKey.name %></strong> — <%= t('यी गोप्य मान अहिले मात्र देखिन्छ। सुरक्षित ठाउँमा राख्नुहोस्।', 'These secrets are shown only once. Store them safely now.') %>
+  <% if (newKey.key) { %><div class="mt-1">API key: <code style="user-select:all;word-break:break-all"><%= newKey.key %></code></div><% } %>
+  <% if (newKey.webhookSecret) { %><div class="mt-1">Webhook signing secret: <code style="user-select:all;word-break:break-all"><%= newKey.webhookSecret %></code></div><% } %>
+</div>
+<% } %>
+<% if (!vaultEnabled) { %><div class="alert alert-warn"><%= t('Webhook प्रयोग गर्न सर्भरमा CREDENTIALS_KEY चाहिन्छ।', 'Webhooks need CREDENTIALS_KEY on the server.') %></div><% } %>
+
+<div class="grid" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px">
+  <div class="stack">
+    <% if (!clients.length) { %><div class="empty"><%= t('अहिलेसम्म API क्लाइन्ट छैन।', 'No API clients yet.') %></div><% } %>
+    <% clients.forEach(c => { %>
+      <div class="card" style="<%= c.is_active ? '' : 'opacity:.6' %>">
+        <div class="flex justify-between items-center wrap gap-1">
+          <div><h3 class="mb-0"><%= c.name %> <span class="badge badge-brand"><%= c.system_type.toUpperCase() %></span> <% if (!c.is_active) { %><span class="badge badge-bad"><%= t('बन्द', 'disabled') %></span><% } %></h3>
+            <div class="small faint"><code><%= c.key_prefix %>.…</code> · <%= t('पछिल्लो प्रयोग', 'last used') %> <%= c.last_used_at ? bsDate(c.last_used_at) + ' ' + new Date(c.last_used_at).toTimeString().slice(0,5) : '—' %> · <%= num(c.calls_24h) %> <%= t('कल / २४ घण्टा', 'calls / 24h') %></div></div>
+          <div class="flex gap-1 wrap">
+            <a class="btn btn-ghost btn-sm" href="/admin/integrations/<%= c.id %>/edit"><%- icon('edit') %></a>
+            <% [['rotate', t('नयाँ key', 'New key'), t('पुरानो key तुरुन्त बन्द हुन्छ। जारी राख्ने?', 'The old key stops working immediately. Continue?')], [c.is_active ? 'disable' : 'enable', c.is_active ? t('बन्द', 'Disable') : t('खोल्नुहोस्', 'Enable'), ''], ['delete', t('हटाउने', 'Delete'), t('पक्का?', 'Sure?')]].forEach(([a, l, conf]) => { %>
+              <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button class="btn btn-ghost btn-sm" <% if (conf) { %>data-confirm="<%= conf %>"<% } %>><%= l %></button></form>
+            <% }) %>
+          </div>
+        </div>
+        <div class="flex gap-1 wrap mt-1"><% c.scopes.forEach(s => { %><span class="badge"><%= s %></span><% }) %></div>
+        <div class="small muted mt-1"><%= t('IP', 'IPs') %>: <%= c.allowed_ips || t('कुनै पनि', 'any') %><% if (c.webhook_url) { %> · webhook: <code><%= c.webhook_url %></code> (<%= c.webhook_events.join(', ') || '—' %>)<% } %></div>
+        <% if (c.webhook_url) { %><div class="flex gap-1 mt-1">
+          <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="test_webhook"><button class="btn btn-soft btn-sm"><%= t('webhook परीक्षण', 'Test webhook') %></button></form>
+          <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="rotate_webhook"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('नयाँ signing secret?', 'New signing secret?') %>"><%= t('नयाँ secret', 'New secret') %></button></form>
+          <% if (c.failed_hooks > 0) { %><form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="retry_failed"><button class="btn btn-ghost btn-sm"><%= t('असफल पुनः पठाउने', 'Retry failed') %> (<%= num(c.failed_hooks) %>)</button></form><% } %>
+        </div><% } %>
+      </div>
+    <% }) %>
+  </div>
+  <% const e = edit || { scopes: [], webhook_events: [], system_type: 'cbs' }; %>
+  <form class="form-card" method="post" action="/admin/integrations<%= edit ? '/' + edit.id : '' %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><% if (edit) { %><input type="hidden" name="action" value="save"><% } %>
+    <h3><%= edit ? t('सम्पादन', 'Edit') + ': ' + edit.name : t('नयाँ API क्लाइन्ट', 'New API client') %></h3>
+    <div class="stack">
+      <div class="field"><label><%= t('नाम', 'Name') %></label><input class="input" name="name" value="<%= e.name || '' %>" placeholder="e.g. Core banking (Finacle / Pumori / NCBS)" required></div>
+      <div class="field"><label><%= t('प्रणाली', 'System') %></label><select class="select" name="system_type"><% [['cbs', 'Core banking (CBS)'], ['dms', 'Document management (DMS)'], ['other', 'Other']].forEach(([v, l]) => { %><option value="<%= v %>" <%= e.system_type === v ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+      <div class="field"><label><%= t('अनुमति (scopes)', 'Permissions (scopes)') %></label>
+        <div class="stack" style="gap:6px"><% Object.entries(SCOPES).forEach(([s, l]) => { %><label class="choice" style="padding:6px 10px"><input type="checkbox" name="scopes" value="<%= s %>" <%= e.scopes.includes(s) ? 'checked' : '' %>> <code><%= s %></code> <span class="small muted"><%= t(...l) %></span></label><% }) %></div></div>
+      <div class="field"><label><%= t('अनुमति प्राप्त IP (ऐच्छिक)', 'Allowed IPs (optional)') %></label><input class="input" name="allowed_ips" value="<%= e.allowed_ips || '' %>" placeholder="203.0.113.10, 10.20.0.0/16"><div class="field-hint"><%= t('खाली = जुनसुकै IP। उत्पादनमा CBS सर्भरको IP राख्नुहोस्।', 'Empty = any IP. In production, restrict to your CBS server.') %></div></div>
+      <div class="field"><label>Webhook URL (<%= t('ऐच्छिक', 'optional') %>)</label><input class="input" name="webhook_url" value="<%= e.webhook_url || '' %>" placeholder="https://cbs.example.com.np/hooks/portal" <%= vaultEnabled ? '' : 'disabled' %>></div>
+      <div class="field"><label><%= t('पठाउने घटना', 'Events to send') %></label>
+        <div class="choices"><% Object.entries(EVENTS).forEach(([ev, l]) => { %><label class="choice"><input type="checkbox" name="events" value="<%= ev %>" <%= e.webhook_events.includes(ev) ? 'checked' : '' %>> <%= t(...l) %></label><% }) %></div></div>
+      <button class="btn btn-primary"><%= edit ? t('सुरक्षित गर्नुहोस्', 'Save') : t('API key बनाउनुहोस्', 'Create API key') %></button>
+      <% if (edit) { %><a class="btn btn-ghost" href="/admin/integrations"><%= t('रद्द', 'Cancel') %></a><% } %>
+      <a class="small" href="https://github.com/Aakashdigitalpayment/websitenextgen/blob/main/docs/API.md" target="_blank" rel="noopener"><%= t('API कागजात (docs/API.md)', 'API documentation (docs/API.md)') %></a>
+    </div>
+  </form>
+</div>
+
+<% if (deliveries.length) { %><h2 class="mt-4"><%= t('Webhook पठाइएको', 'Webhook deliveries') %></h2>
+<div class="table-wrap mt-2"><table class="table"><thead><tr><th>#</th><th><%= t('क्लाइन्ट', 'Client') %></th><th><%= t('घटना', 'Event') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('प्रयास', 'Attempts') %></th><th><%= t('समय', 'When') %></th></tr></thead><tbody>
+  <% deliveries.forEach(d => { %><tr><td class="small"><%= d.id %></td><td><%= d.name %></td><td><code><%= d.event %></code></td><td><span class="badge <%= d.status === 'delivered' ? 'badge-ok' : d.status === 'failed' ? 'badge-bad' : 'badge-warn' %>"><%= d.status %></span><% if (d.last_error) { %><div class="small faint"><%= d.last_http_status || '' %> <%= d.last_error %></div><% } %></td><td class="num"><%= d.attempts %></td><td class="small faint"><%= bsDate(d.created_at) %> <%= new Date(d.created_at).toTimeString().slice(0,5) %></td></tr><% }) %>
+</tbody></table></div><% } %>
+
+<% if (requests.length) { %><h2 class="mt-4"><%= t('पछिल्ला API अनुरोध', 'Recent API requests') %></h2>
+<div class="table-wrap mt-2"><table class="table"><tbody>
+  <% requests.forEach(r => { %><tr><td class="small faint"><%= bsDate(r.created_at) %> <%= new Date(r.created_at).toTimeString().slice(0,8) %></td><td><%= r.name || '—' %></td><td><code><%= r.method %> <%= r.path %></code></td><td><span class="badge <%= r.status < 300 ? 'badge-ok' : r.status < 500 ? 'badge-warn' : 'badge-bad' %>"><%= r.status %></span></td><td class="small faint"><%= r.ip_address %> · <%= r.duration_ms %>ms</td></tr><% }) %>
+</tbody></table></div><% } %>

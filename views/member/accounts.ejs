@@ -1,0 +1,26 @@
+<div class="content-head"><h1><%= title %></h1><% if (asOf) { %><span class="small muted"><%= t('अद्यावधिक: ', 'Updated: ') %><%= bsDate(asOf) %> <%= new Date(asOf).toTimeString().slice(0,5) %></span><% } %></div>
+<% if (!accounts.length) { %><div class="empty"><%= t('तपाईंको खाता विवरण अहिले उपलब्ध छैन। केही समयपछि हेर्नुहोस् वा कार्यालयमा सम्पर्क गर्नुहोस्।', 'Your account details are not available yet. Please check later or contact the office.') %></div><% } else { %>
+<% const groups = [['saving', t('बचत खाता', 'Savings')], ['fixed', t('मुद्दती', 'Fixed deposits')], ['share', t('शेयर', 'Shares')], ['loan', t('ऋण', 'Loans')], ['other', t('अन्य', 'Other')]]; %>
+<div class="kpis">
+  <div class="kpi"><div class="l"><%= t('कुल बचत', 'Total savings') %></div><div class="v" style="font-size:1.3rem">रु. <%= money(accounts.filter(a => ['saving','fixed'].includes(a.kind)).reduce((s, a) => s + Number(a.balance), 0)) %></div></div>
+  <div class="kpi"><div class="l"><%= t('शेयर', 'Shares') %></div><div class="v" style="font-size:1.3rem">रु. <%= money(accounts.filter(a => a.kind === 'share').reduce((s, a) => s + Number(a.balance), 0)) %></div></div>
+  <div class="kpi"><div class="l"><%= t('बाँकी ऋण', 'Loan outstanding') %></div><div class="v" style="font-size:1.3rem">रु. <%= money(accounts.filter(a => a.kind === 'loan').reduce((s, a) => s + Number(a.balance), 0)) %></div></div>
+  <% const nextDue = accounts.filter(a => a.kind === 'loan' && a.next_due_date).sort((a, b) => String(a.next_due_date).localeCompare(String(b.next_due_date)))[0]; %>
+  <div class="kpi"><div class="l"><%= t('अर्को किस्ता', 'Next instalment') %></div><div class="v" style="font-size:1.1rem"><%= nextDue ? bsDate(nextDue.next_due_date) : '—' %></div><% if (nextDue && nextDue.installment_amount) { %><div class="small muted">रु. <%= money(nextDue.installment_amount) %></div><% } %></div>
+</div>
+<% groups.forEach(([kind, label]) => { const list = accounts.filter(a => a.kind === kind); if (!list.length) return; %>
+  <h2 class="mt-3"><%= label %></h2>
+  <div class="table-wrap mt-1"><table class="table"><thead><tr><th><%= t('खाता नं.', 'Account no.') %></th><th><%= t('योजना', 'Product') %></th><th class="num"><%= kind === 'loan' ? t('बाँकी', 'Outstanding') : t('मौज्दात', 'Balance') %></th><th class="num"><%= t('ब्याजदर', 'Rate') %></th><th><%= kind === 'loan' ? t('अर्को किस्ता', 'Next due') : t('परिपक्व', 'Maturity') %></th></tr></thead><tbody>
+    <% list.forEach(a => { %><tr><td><code><%= a.account_no %></code><% if (a.status !== 'active') { %> <span class="badge"><%= a.status %></span><% } %></td><td><%= a.product_name || '' %></td><td class="num" style="font-weight:500">रु. <%= money(a.balance) %><% if (a.overdue_amount > 0) { %><div class="small" style="color:var(--bad)"><%= t('भाखा नाघेको', 'Overdue') %>: रु. <%= money(a.overdue_amount) %></div><% } %></td><td class="num"><%= a.interest_rate !== null ? num(a.interest_rate) + '%' : '' %></td><td class="small"><%= kind === 'loan' ? (a.next_due_date ? bsDate(a.next_due_date) + (a.installment_amount ? ' · रु. ' + money(a.installment_amount) : '') : '') : (a.maturity_date ? bsDate(a.maturity_date) : '') %></td></tr><% }) %>
+  </tbody></table></div>
+<% }) %>
+<% if (txns.length) { %>
+  <h2 class="mt-4"><%= t('पछिल्ला कारोबार', 'Recent transactions') %></h2>
+  <div class="table-wrap mt-1"><table class="table"><thead><tr><th><%= t('मिति', 'Date') %></th><th><%= t('खाता', 'Account') %></th><th><%= t('विवरण', 'Description') %></th><th class="num"><%= t('डेबिट', 'Debit') %></th><th class="num"><%= t('क्रेडिट', 'Credit') %></th><th class="num"><%= t('मौज्दात', 'Balance') %></th></tr></thead><tbody>
+    <% txns.forEach(x => { %><tr><td class="small"><%= bsDate(x.txn_date) %></td><td class="small"><code><%= x.account_no %></code></td><td><%= x.description || '' %></td><td class="num"><%= Number(x.debit) ? money(x.debit) : '' %></td><td class="num"><%= Number(x.credit) ? money(x.credit) : '' %></td><td class="num"><%= x.balance_after !== null ? money(x.balance_after) : '' %></td></tr><% }) %>
+  </tbody></table></div>
+<% } %>
+<p class="small faint mt-3"><%= t('यो विवरण कोर बैंकिङ प्रणालीबाट आएको हो। कुनै फरक भए कार्यालयमा सम्पर्क गर्नुहोस्।', 'These figures come from the core banking system. Please contact the office if anything looks wrong.') %></p>
+<% } %>
+<% if (docs.length) { %><h2 class="mt-4"><%= t('मेरा कागजात', 'My documents') %></h2>
+<div class="card" style="padding:4px 22px"><ul class="list"><% docs.forEach(d => { %><li class="list-item"><%- icon('file') %><div class="grow"><a href="/member/documents/<%= d.id %>" target="_blank" rel="noopener"><%= d.title %></a> <span class="badge"><%= d.doc_type %></span></div><span class="small faint"><%= bsDate(d.created_at) %></span></li><% }) %></ul></div><% } %>

@@ -103,7 +103,8 @@ function createApp() {
   });
 
   app.use(express.urlencoded({ extended: false, limit: '256kb', parameterLimit: 500 }));
-  app.use(express.json({ limit: '64kb' }));
+  const jsonBody = express.json({ limit: '64kb' });
+  app.use((req, res, next) => (req.path.startsWith('/api/v1') ? next() : jsonBody(req, res, next))); // the API parses its own (larger) bodies
 
   // ---------- platform console (operators manage tenants) ----------
   // separate cookie, store table and signing secret from tenant sessions
@@ -132,6 +133,9 @@ function createApp() {
       db.withSchema(tenant.schema_name, () => next());
     } catch (e) { next(e); }
   });
+
+  // integration API (API keys, no cookies/CSRF) — before sessions
+  app.use('/api/v1', require('./routes/api-v1'));
 
   // tenant-isolated uploaded files
   app.use('/uploads', (req, res, next) => {

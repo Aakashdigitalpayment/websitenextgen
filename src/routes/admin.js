@@ -376,6 +376,9 @@ router.post('/inbox/:module/:id/status', getModule, ah(async (req, res, next) =>
       if (member) await notify.notifyMember(member.id, m.title[0] + ': ' + forms.statusLabel(data.status || row.status), comment || null, row.tracking_id ? '/track?id=' + encodeURIComponent(row.tracking_id) : null, 'status');
     }
   });
+  if (data.status && data.status !== row.status) {
+    notify.later(() => require('../lib/webhooks').emit('application.status_changed', { type: m.key, id: row.id, tracking_id: row.tracking_id || null, status: data.status, previous_status: row.status || null, remarks: comment || null, changed_by: req.admin.username }));
+  }
   const notifyApplicant = req.body.notify === '1' && data.status && data.status !== row.status;
   if (notifyApplicant && row.tracking_id) {
     notify.later(() => notify.applicationEvent('status_changed', { name: row[m.nameCol], tracking_id: row.tracking_id, module: m.title[0], status: forms.statusLabel(data.status), remarks: comment }, { phone: row[m.phoneCol], email: row.email }));
@@ -409,6 +412,7 @@ router.get('/files/*rest', requireAdmin('staff'), (req, res, next) => {
 router.use('/programs', require('./admin-programs'));
 router.use('/marketplace', require('./marketplace').admin);
 router.use('/credentials', require('./admin-credentials'));
+router.use('/integrations', require('./admin-integrations'));
 router.use('/', require('./admin-system'));
 
 // ---------------------------------------------------------------- members
@@ -471,7 +475,11 @@ router.get('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
   const item = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [util.int(req.params.id)]);
   if (!item) return next();
   const cards = await db.many('SELECT * FROM member_id_cards WHERE member_id IN ($1, $2, $3) ORDER BY id DESC', [String(item.id), item.sadasyata_number || '-', item.member_card_no || '-']);
-  res.render('admin/member-form', { title: item.name_np || item.name, item, values: item, errors: {}, cards });
+  const [accounts, docs] = await Promise.all([
+    db.many('SELECT * FROM member_accounts WHERE member_id = $1 ORDER BY kind, account_no', [item.id]),
+    db.many('SELECT id, title, doc_type, file_path, source, visible_to_member, created_at FROM member_documents WHERE member_id = $1 ORDER BY created_at DESC', [item.id]),
+  ]);
+  res.render('admin/member-form', { title: item.name_np || item.name, item, values: item, errors: {}, cards, accounts, docs });
 }));
 
 async function saveMember(req, res, item) {
@@ -494,6 +502,7 @@ async function saveMember(req, res, item) {
   try {
     const row = item ? await db.update('members', item.id, data) : await db.insert('members', { ...data, created_by: req.admin.id, is_verified: 1 });
     if (item && (pw || !data.is_active)) await auth.bumpSessionVersion('members', item.id);
+    notify.later(() => require('../lib/webhooks').emit(item ? 'member.updated' : 'member.created', { id: row.id, member_no: row.sadasyata_number || null, name: row.name, name_np: row.name_np || null, phone: row.phone || null, email: row.email || null, active: !!Number(row.is_active), approval_status: row.approval_status, changed_by: req.admin.username }));
     await auth.audit(req, item ? 'update' : 'create', 'members', row.id, `Member ${row.name}`);
     flash(req, 'success', res.locals.t('सदस्य विवरण सुरक्षित भयो।', 'Member saved.'));
     res.redirect('/admin/members/' + row.id);

@@ -223,6 +223,21 @@ router.get('/kyc-print', ah(async (req, res) => {
   res.render('member/kyc-print', { layout: false, k, mod, options: await require('../lib/forms').resolveOptions(mod) });
 }));
 
+router.get('/accounts', ah(async (req, res) => {
+  const [accounts, txns, docs] = await Promise.all([
+    db.many("SELECT * FROM member_accounts WHERE member_id = $1 ORDER BY kind, account_no", [req.member.id]),
+    db.many('SELECT * FROM member_transactions WHERE member_id = $1 ORDER BY txn_date DESC, id DESC LIMIT 50', [req.member.id]),
+    db.many('SELECT id, title, doc_type, created_at FROM member_documents WHERE member_id = $1 AND visible_to_member = 1 ORDER BY created_at DESC', [req.member.id]),
+  ]);
+  const asOf = accounts.reduce((a, x) => (!a || x.as_of > a ? x.as_of : a), null);
+  res.render('member/accounts', { title: res.locals.t('मेरो खाता', 'My accounts'), accounts, txns, docs, asOf });
+}));
+router.get('/documents/:id', ah(async (req, res, next) => {
+  const d = await db.one('SELECT * FROM member_documents WHERE id = $1 AND member_id = $2 AND visible_to_member = 1', [util.int(req.params.id), req.member.id]);
+  if (!d) return next();
+  require('../lib/uploads').sendStored(req, res, next, d.file_path);
+}));
+
 router.get('/id-card', ah(async (req, res) => {
   const card = await db.one("SELECT * FROM member_id_cards WHERE member_id = $1 AND status = 'active' ORDER BY id DESC LIMIT 1", [String(req.member.id)]);
   res.render('member/id-card', { title: res.locals.t('सदस्य परिचयपत्र', 'Member ID card'), card });

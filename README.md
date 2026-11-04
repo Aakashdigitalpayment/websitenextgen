@@ -44,6 +44,8 @@ npm start                       # http://aakash.localhost:3000  (admin: /admin)
 
 `*.localhost` resolves to 127.0.0.1 in most browsers. For local development you can also set `DEFAULT_TENANT=aakash` so that plain `http://localhost:3000` serves that tenant.
 
+**CBS / DMS integration:** see **[docs/API.md](docs/API.md)** ([OpenAPI spec](docs/openapi.yaml)). It covers pushing members, balances, loans, transactions and documents into the portal, pulling applications, writing decisions back, and signed webhooks.
+
 **Production:** see **[docs/DEPLOY.md](docs/DEPLOY.md)**. It covers Docker Compose (app, PostgreSQL, Caddy with automatic HTTPS for every cooperative domain, and nightly backups) or systemd with Caddy/Nginx, plus DNS, tenant setup, moving the PHP sites, backup/restore, updates and a go-live checklist.
 
 ## Moving an existing PHP site over
