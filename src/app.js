@@ -252,7 +252,8 @@ function createApp() {
     res.locals.nav = (res.locals.nav || []).filter(ok).map(i => (i.children ? { ...i, children: i.children.filter(ok) } : i)).filter(i => !i.children || i.children.length || !i.href || i.href !== '#');
     next();
   };
-  app.use('/', navigation.middleware, navByPlan, require('./routes/public'));
+  const sector = require('./routes/sector');
+  app.use('/', navigation.middleware, navByPlan, sector.navMiddleware, sector.pub, require('./routes/public'));
 
   // 404
   app.use((req, res) => {

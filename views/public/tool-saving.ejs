@@ -1,0 +1,21 @@
+<%- include('../partials/page-head', { lead: t('हरेक महिना बचत गर्दा कति रकम जम्मा हुन्छ हेर्नुहोस्।', 'See what a monthly saving grows to.') }) %>
+<section class="section"><div class="container layout-side" style="grid-template-columns:360px 1fr">
+  <form class="form-card" method="get"><div class="stack">
+    <div class="field"><label for="deposit"><%= t('मासिक बचत (रु.)', 'Monthly saving (Rs.)') %></label><input class="input" id="deposit" name="deposit" inputmode="decimal" value="<%= input.deposit %>"></div>
+    <div class="field"><label for="rate"><%= t('वार्षिक ब्याजदर (%)', 'Annual rate (%)') %></label><input class="input" id="rate" name="rate" inputmode="decimal" value="<%= input.rate %>"></div>
+    <div class="field"><label for="months"><%= t('अवधि (महिना)', 'Period (months)') %></label><input class="input" id="months" name="months" inputmode="numeric" value="<%= input.months %>"></div>
+    <div class="field"><label for="tax"><%= t('ब्याजमा कर (%)', 'Tax on interest (%)') %></label><input class="input" id="tax" name="tax" inputmode="decimal" value="<%= input.tax %>"></div>
+    <button class="btn btn-primary btn-block"><%= t('हिसाब गर्नुहोस्', 'Calculate') %></button>
+  </div></form>
+  <div>
+    <div class="grid grid-3">
+      <div class="card card-flat"><div class="small muted"><%= t('जम्मा गरेको', 'You pay in') %></div><div class="stat-value">Rs. <%= Math.round(out.paid).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('खुद ब्याज', 'Net interest') %></div><div class="stat-value">Rs. <%= Math.round(out.interest).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('अन्तिम रकम', 'Final balance') %></div><div class="stat-value">Rs. <%= Math.round(out.maturity).toLocaleString('en-IN') %></div></div>
+    </div>
+    <div class="table-wrap mt-3"><table class="table"><thead><tr><th><%= t('महिना', 'Month') %></th><th class="num"><%= t('जम्मा', 'Paid in') %></th><th class="num"><%= t('ब्याज', 'Interest') %></th><th class="num"><%= t('मौज्दात', 'Balance') %></th></tr></thead><tbody>
+      <% out.rows.forEach(r => { %><tr><td><%= num(r.month) %></td><td class="num"><%= Math.round(r.paid).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.interest).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.balance).toLocaleString('en-IN') %></td></tr><% }) %>
+    </tbody></table></div>
+    <p class="small faint mt-1"><%= t('मासिक मौज्दातमा ब्याज गणना गरी त्रैमासिक रूपमा जोडिएको मानिएको छ।', 'Interest is calculated on the monthly balance and credited quarterly.') %></p>
+  </div>
+</div></section>

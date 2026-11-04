@@ -1,0 +1,34 @@
+<%- include('../partials/page-head', { lead: t('सदस्य/ग्राहकको अधिकार, पारदर्शिता र गुनासो सुनुवाइ।', 'Your rights as a member/client, transparency and how grievances are handled.') }) %>
+<% const nrb = settings.protection_regulator === 'nrb'; %>
+<section class="section"><div class="container layout-side" style="grid-template-columns:1fr 340px">
+  <div class="prose">
+    <h2><%= t('तपाईंका अधिकार', 'Your rights') %></h2>
+    <ul>
+      <li><%= t('ब्याजदर, सेवा शुल्क र हर्जानाबारे स्पष्ट र लिखित जानकारी पाउने।', 'Clear, written information on interest rates, fees and penalties.') %></li>
+      <li><%= t('ऋण सम्झौता, किस्ता तालिका र भुक्तानी रसिदको प्रतिलिपि पाउने।', 'A copy of the loan agreement, instalment schedule and every receipt.') %></li>
+      <li><%= t('आफ्नो खाता र कारोबारको विवरण नियमित हेर्न पाउने।', 'Regular access to your account and transaction statements.') %></li>
+      <li><%= t('व्यक्तिगत विवरण गोप्य राखिने र स्वीकृति बिना अरूलाई नदिइने।', 'Your personal data kept confidential and not shared without consent, except as required by law.') %></li>
+      <li><%= t('असुलीका क्रममा मर्यादित व्यवहार — धम्की, अपमान वा अनुचित दबाब नगरिने।', 'Respectful conduct during collection — no threats, humiliation or undue pressure.') %></li>
+      <li><%= t('अतिरिक्त धितो, जबरजस्ती बचत वा नचाहेको बिमा लिन बाध्य नपारिने।', 'Not forced into extra collateral, compulsory savings or unwanted insurance beyond the stated terms.') %></li>
+      <li><%= t('गुनासो दिन पाउने र तोकिएको समयभित्र जवाफ पाउने।', 'The right to complain and get a response within the stated time.') %></li>
+    </ul>
+    <h2><%= t('गुनासो कसरी दिने?', 'How to complain') %></h2>
+    <ol>
+      <li><% if (!locals.plan || plan.allows('/apply/grievance')) { %><a href="/apply/grievance"><%= t('अनलाइन गुनासो फारम', 'Online grievance form') %></a><% } else { %><%= t('कार्यालयको गुनासो पेटिका', 'The complaint box at the office') %><% } %> <%= t('वा कार्यालयमा लिखित निवेदन।', 'or a written application at the office.') %></li>
+      <li><%= t('गुनासो सुनुवाइ अधिकारीलाई सिधै सम्पर्क (दायाँ हेर्नुहोस्)।', 'Contact the grievance officer directly (see right).') %></li>
+      <li><%= t('सन्तोषजनक जवाफ नपाएमा:', 'If you are not satisfied:') %>
+        <% if (nrb) { %><%= t('नेपाल राष्ट्र बैंकको ग्राहक संरक्षण तथा वित्तीय साक्षरता महाशाखा (gunaso.nrb.org.np) मा गुनासो दिन सक्नुहुन्छ।', 'you can complain to Nepal Rastra Bank\'s grievance portal (gunaso.nrb.org.np).') %>
+        <% } else { %><%= t('सम्बन्धित स्थानीय तह / प्रदेश सहकारी निकाय वा सहकारी विभाग, अथवा राष्ट्रिय सहकारी नियमन प्राधिकरणमा उजुरी दिन सक्नुहुन्छ।', 'you can complain to the local government / provincial cooperative office, the Department of Cooperatives or the national cooperative regulator.') %><% } %></li>
+    </ol>
+    <% if (settings.protection_extra_np) { %><div class="mt-2"><%- util.nl2br ? util.nl2br(settings.protection_extra_np) : settings.protection_extra_np.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])).replace(/\n/g, '<br>') %></div><% } %>
+  </div>
+  <aside class="card" style="align-self:start">
+    <h3><%= t('गुनासो सुनुवाइ अधिकारी', 'Grievance officer') %></h3>
+    <% if (settings.protection_officer_name) { %><p class="mb-1"><b style="font-weight:500"><%= settings.protection_officer_name %></b></p><% } %>
+    <% const ph = settings.protection_officer_phone || settings.phone, em = settings.protection_officer_email || settings.email; %>
+    <% if (ph) { %><p class="mb-1"><%- icon('phone') %> <a href="tel:<%= ph %>"><%= ph %></a></p><% } %>
+    <% if (em) { %><p class="mb-1"><%- icon('mail') %> <a href="mailto:<%= em %>"><%= em %></a></p><% } %>
+    <% if (settings.address) { %><p class="small muted mb-0"><%= settings.address %></p><% } %>
+    <% if (!locals.plan || plan.allows('/apply/grievance')) { %><a class="btn btn-primary btn-block mt-2" href="/apply/grievance"><%= t('गुनासो दर्ता गर्नुहोस्', 'File a grievance') %></a><% } %>
+  </aside>
+</div></section>

@@ -1,0 +1,14 @@
+<%- include('../partials/page-head', { lead: t('नियामक निकायको निर्देशन अनुसार मासिक रूपमा प्रकाशित आधार दर, औसत ब्याजदर र ब्याजदर अन्तर।', 'Base rate, average rates and interest spread published monthly as required by the regulator.') }) %>
+<section class="section"><div class="container">
+  <% if (!rows.length) { %><div class="empty"><%= t('विवरण प्रकाशित भएको छैन।', 'Nothing published yet.') %></div><% } else { %>
+  <div class="table-wrap card" style="padding:0"><table class="table"><thead><tr>
+    <th><%= t('आर्थिक वर्ष', 'Fiscal year') %></th><th><%= t('महिना', 'Month') %></th><th class="num"><%= t('आधार दर', 'Base rate') %></th>
+    <th class="num"><%= t('औसत निक्षेप दर', 'Avg deposit rate') %></th><th class="num"><%= t('औसत कर्जा दर', 'Avg lending rate') %></th><th class="num"><%= t('ब्याजदर अन्तर', 'Spread') %></th><th class="num"><%= t('कोषको लागत', 'Cost of fund') %></th></tr></thead><tbody>
+    <% rows.forEach(r => { const pc = v => v === null || v === undefined ? '—' : num(Number(v).toFixed(2)) + '%'; %>
+      <tr><td><%= num(r.fiscal_year) %></td><td><%= lang === 'en' ? BS_MONTHS_EN[r.month_bs - 1] : BS_MONTHS[r.month_bs - 1] %></td>
+        <td class="num"><b><%= pc(r.base_rate) %></b></td><td class="num"><%= pc(r.avg_deposit_rate) %></td><td class="num"><%= pc(r.avg_lending_rate) %></td><td class="num"><%= pc(r.spread) %></td><td class="num"><%= pc(r.cost_of_fund) %></td></tr>
+      <% if (r.note) { %><tr><td colspan="7" class="small muted"><%= r.note %></td></tr><% } %>
+    <% }) %>
+  </tbody></table></div>
+  <% } %>
+</div></section>

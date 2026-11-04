@@ -422,6 +422,7 @@ router.use('/programs', require('./admin-programs'));
 router.use('/marketplace', require('./marketplace').admin);
 router.use('/credentials', require('./admin-credentials'));
 router.use('/integrations', require('./admin-integrations'));
+router.use('/', require('./sector').admin);
 
 // own website domains (CNAME to the generated target)
 router.get('/domains', requireAdmin('superadmin'), ah(async (req, res) => {

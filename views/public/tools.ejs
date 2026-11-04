@@ -1,0 +1,12 @@
+<%- include('../partials/page-head', { lead: t('बचत र ऋणको हिसाब घरमै गर्नुहोस्।', 'Work out savings and loans at home.') }) %>
+<section class="section"><div class="container"><div class="grid grid-2">
+  <% [['/emi-calculator', 'calculator', t('EMI गणना', 'EMI calculator'), t('मासिक किस्ता र भुक्तानी तालिका', 'Monthly instalment and schedule')],
+      ['/tools/loan-eligibility', 'banknote', t('ऋण योग्यता', 'Loan eligibility'), t('आम्दानी अनुसार कति ऋण पाइन्छ?', 'How much can you borrow on your income?')],
+      ['/tools/fixed-deposit', 'wallet', t('मुद्दती बचत', 'Fixed deposit'), t('परिपक्व रकम, ब्याज र कर', 'Maturity amount, interest and tax')],
+      ['/tools/saving', 'chart', t('मासिक बचत', 'Recurring saving'), t('हरेक महिना बचत गर्दा कति जम्मा हुन्छ?', 'What monthly saving grows to')],
+      ['/interest-rates', 'percent', t('ब्याजदर', 'Interest rates'), t('हालका बचत तथा ऋण ब्याजदर', 'Current saving and loan rates')],
+      ['/date-converter', 'calendar', t('मिति परिवर्तन', 'Date converter'), t('बि.सं. ↔ ई.सं.', 'BS ↔ AD')]].forEach(c => { %>
+    <a class="card tool-card" href="<%= c[0] %>"><span class="icon-tile"><%- icon(c[1]) %></span><span><b><%= c[2] %></b><span class="small muted" style="display:block"><%= c[3] %></span></span></a>
+  <% }) %>
+</div></div></section>
+<style>.tool-card{display:flex;gap:14px;align-items:center;color:var(--text)}.tool-card:hover{text-decoration:none;border-color:var(--brand-line)}.tool-card b{font-weight:500}</style>

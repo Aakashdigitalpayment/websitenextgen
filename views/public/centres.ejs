@@ -1,0 +1,15 @@
+<%- include('../partials/page-head', { lead: t('आफ्नो केन्द्रको बैठक दिन, समय र सहजकर्ता हेर्नुहोस्।', 'Find your centre\'s meeting day, time and facilitator.') }) %>
+<section class="section"><div class="container">
+  <form class="flex gap-1 wrap mb-2" method="get"><input class="input" name="q" value="<%= q %>" placeholder="<%= t('केन्द्र, ठाउँ वा वडा खोज्नुहोस्', 'Search centre, place or ward') %>" style="max-width:340px"><button class="btn btn-outline"><%- icon('search') %></button></form>
+  <% if (!rows.length) { %><div class="empty"><%= t('केन्द्र भेटिएन।', 'No centres found.') %></div><% } else { %>
+  <div class="table-wrap card" style="padding:0"><table class="table"><thead><tr><th><%= t('केन्द्र', 'Centre') %></th><th><%= t('ठाउँ', 'Place') %></th><th><%= t('बैठक', 'Meeting') %></th><th><%= t('सहजकर्ता', 'Facilitator') %></th><th class="num"><%= t('सदस्य', 'Members') %></th></tr></thead><tbody>
+    <% rows.forEach(r => { const freq = { weekly: t('हरेक', 'Every'), fortnightly: t('हरेक दुई हप्ता', 'Every other'), monthly: t('हरेक महिना', 'Monthly') }[r.meeting_frequency] || ''; %>
+      <tr><td><b style="font-weight:500"><%= lang === 'en' ? r.name : (r.name_np || r.name) %></b><% if (r.code) { %><div class="small faint"><%= r.code %></div><% } %></td>
+        <td><%= r.address || '' %><% if (r.ward) { %> <span class="small faint"><%= t('वडा', 'Ward') %> <%= num(r.ward) %></span><% } %></td>
+        <td><%= freq %> <%= r.meeting_frequency === 'monthly' ? (r.meeting_date ? num(r.meeting_date) + ' ' + t('गते', '') : '') : (r.meeting_day !== null && DAYS[r.meeting_day] ? t(...DAYS[r.meeting_day]) : '') %><% if (r.meeting_time) { %> · <%= r.meeting_time %><% } %></td>
+        <td><%= r.facilitator || '' %><% if (r.phone) { %><div class="small"><a href="tel:<%= r.phone %>"><%= r.phone %></a></div><% } %></td>
+        <td class="num"><%= r.members_count ? num(r.members_count) : '' %></td></tr>
+    <% }) %>
+  </tbody></table></div>
+  <% } %>
+</div></section>

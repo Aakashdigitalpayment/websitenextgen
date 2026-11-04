@@ -1,0 +1,21 @@
+<%- include('../partials/page-head', { lead: t('मुद्दती बचतको परिपक्व रकम, ब्याज र कर हेर्नुहोस्।', 'See the maturity amount, interest and tax on a fixed deposit.') }) %>
+<section class="section"><div class="container layout-side" style="grid-template-columns:360px 1fr">
+  <form class="form-card" method="get"><div class="stack">
+    <div class="field"><label for="principal"><%= t('रकम (रु.)', 'Amount (Rs.)') %></label><input class="input" id="principal" name="principal" inputmode="decimal" value="<%= input.principal %>"></div>
+    <div class="field"><label for="rate"><%= t('वार्षिक ब्याजदर (%)', 'Annual rate (%)') %></label><input class="input" id="rate" name="rate" inputmode="decimal" value="<%= input.rate %>"></div>
+    <div class="field"><label for="months"><%= t('अवधि (महिना)', 'Term (months)') %></label><input class="input" id="months" name="months" inputmode="numeric" value="<%= input.months %>"></div>
+    <div class="field"><label for="compounding"><%= t('ब्याज जोडिने', 'Interest compounding') %></label><select class="select" id="compounding" name="compounding">
+      <% [['quarterly', t('त्रैमासिक', 'Quarterly')], ['monthly', t('मासिक', 'Monthly')], ['yearly', t('वार्षिक', 'Yearly')], ['simple', t('अन्तमा (साधारण)', 'At maturity (simple)')]].forEach(([k, l]) => { %><option value="<%= k %>" <%= input.compounding === k ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+    <div class="field"><label for="tax"><%= t('ब्याजमा कर (%)', 'Tax on interest (%)') %></label><input class="input" id="tax" name="tax" inputmode="decimal" value="<%= input.tax %>"></div>
+    <button class="btn btn-primary btn-block"><%= t('हिसाब गर्नुहोस्', 'Calculate') %></button>
+  </div></form>
+  <div>
+    <div class="grid grid-3">
+      <div class="card card-flat"><div class="small muted"><%= t('परिपक्व रकम', 'Maturity amount') %></div><div class="stat-value">Rs. <%= Math.round(out.maturity).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('खुद ब्याज', 'Net interest') %></div><div class="stat-value">Rs. <%= Math.round(out.net).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('कर कट्टी', 'Tax deducted') %></div><div class="stat-value">Rs. <%= Math.round(out.tax).toLocaleString('en-IN') %></div></div>
+    </div>
+    <div class="card mt-3"><div class="small muted"><%= t('वार्षिक प्रभावकारी प्रतिफल (कर पछि)', 'Effective yearly return (after tax)') %></div><div class="stat-value"><%= out.effective %>%</div>
+      <p class="small faint mb-0 mt-1"><%= t('यो अनुमान मात्र हो। वास्तविक ब्याज संस्थाको नियम, ब्याज गणना विधि र कर कानुन अनुसार फरक पर्न सक्छ।', 'This is an estimate. Actual interest depends on the institution\'s rules, calculation method and tax law.') %></p></div>
+  </div>
+</div></section>

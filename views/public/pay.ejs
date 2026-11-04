@@ -1,0 +1,21 @@
+<%- include('../partials/page-head', { lead: t('बचत जम्मा, किस्ता वा शेयर रकम यी माध्यमबाट तिर्न सकिन्छ। भुक्तानी गर्दा आफ्नो सदस्यता नं. र नाम अनिवार्य उल्लेख गर्नुहोस्।', 'Pay savings, instalments or share capital through these channels. Always write your membership number and name in the remarks.') }) %>
+<section class="section"><div class="container">
+  <% if (!rows.length) { %><div class="empty"><%= t('भुक्तानी माध्यम थपिएको छैन।', 'No payment channels yet.') %></div><% } else { %>
+  <div class="grid grid-3">
+    <% rows.forEach(r => { %>
+      <div class="card pay-card">
+        <div class="flex items-center gap-1 mb-1"><span class="icon-tile"><%- icon(r.kind === 'qr' ? 'qr' : r.kind === 'wallet' ? 'phone' : 'building') %></span><div><b style="font-weight:500"><%= lang === 'en' ? r.name : (r.name_np || r.name) %></b><div class="small faint"><%= r.kind === 'qr' ? 'QR' : r.kind === 'wallet' ? t('वालेट', 'Wallet') : t('बैंक खाता', 'Bank account') %></div></div></div>
+        <% if (r.qr_image) { %><img src="<%= mediaUrl(r.qr_image) %>" alt="QR" style="width:100%;max-width:240px;margin:8px auto;border-radius:12px;border:1px solid var(--line)"><% } %>
+        <dl class="kv small">
+          <% if (r.account_name) { %><dt><%= t('खातावाला', 'Account name') %></dt><dd><%= r.account_name %></dd><% } %>
+          <% if (r.account_number) { %><dt><%= t('खाता / ID नं.', 'Account / ID') %></dt><dd><b style="user-select:all;font-weight:500"><%= r.account_number %></b></dd><% } %>
+          <% if (r.branch) { %><dt><%= t('शाखा', 'Branch') %></dt><dd><%= r.branch %></dd><% } %>
+        </dl>
+        <% if (r.note) { %><p class="small muted mb-0"><%= r.note %></p><% } %>
+      </div>
+    <% }) %>
+  </div>
+  <% } %>
+  <div class="alert alert-info mt-3"><%- icon('info') %><span><%= t('भुक्तानी पछि रसिद/स्क्रिनसट सुरक्षित राख्नुहोस्। कुनै समस्या भए कार्यालयमा सम्पर्क गर्नुहोस्।', 'Keep the receipt or a screenshot after paying. Contact the office if anything goes wrong.') %><% if (settings.phone) { %> <a href="tel:<%= settings.phone %>"><%= settings.phone %></a><% } %></span></div>
+</div></section>
+<style>.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:8px 0}.kv dt{color:var(--muted)}.kv dd{margin:0}</style>

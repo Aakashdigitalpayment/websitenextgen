@@ -180,6 +180,8 @@ async function apply(key, { content = true } = {}) {
   await set('layout_home', d.layout.home, { group: 'appearance', label: 'Home page style' });
   await set('layout_corners', d.layout.corners, { group: 'appearance', label: 'Corner style' });
   await set('lang_default', d.layout.lang, { group: 'appearance', label: 'Default language' });
+  // microfinance institutions are regulated by Nepal Rastra Bank; cooperatives by the cooperative regulator
+  await set('protection_regulator', key === 'microfinance' ? 'nrb' : 'coop', { group: 'protection', label: 'Regulator (coop | nrb)' });
   if (!content) return;
 
   const s = await settings.all();

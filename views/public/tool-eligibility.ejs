@@ -1,0 +1,22 @@
+<%- include('../partials/page-head', { lead: t('मासिक आम्दानी अनुसार कति ऋण लिन सकिन्छ अनुमान गर्नुहोस्।', 'Estimate how much you can borrow on your monthly income.') }) %>
+<section class="section"><div class="container layout-side" style="grid-template-columns:360px 1fr">
+  <form class="form-card" method="get"><div class="stack">
+    <div class="field"><label for="income"><%= t('मासिक खुद आम्दानी (रु.)', 'Monthly net income (Rs.)') %></label><input class="input" id="income" name="income" inputmode="decimal" value="<%= input.income %>"></div>
+    <div class="field"><label for="existing"><%= t('हाल तिरिरहेको किस्ता (रु.)', 'Existing instalments (Rs.)') %></label><input class="input" id="existing" name="existing" inputmode="decimal" value="<%= input.existing %>"></div>
+    <div class="field"><label for="rate"><%= t('वार्षिक ब्याजदर (%)', 'Annual rate (%)') %></label><input class="input" id="rate" name="rate" inputmode="decimal" value="<%= input.rate %>"></div>
+    <div class="field"><label for="months"><%= t('अवधि (महिना)', 'Tenure (months)') %></label><input class="input" id="months" name="months" inputmode="numeric" value="<%= input.months %>"></div>
+    <div class="field"><label for="ratio"><%= t('आम्दानीको बढीमा कति % किस्ता', 'Max share of income for instalments (%)') %></label><input class="input" id="ratio" name="ratio" inputmode="decimal" value="<%= input.ratio %>"></div>
+    <button class="btn btn-primary btn-block"><%= t('हिसाब गर्नुहोस्', 'Calculate') %></button>
+  </div></form>
+  <div>
+    <div class="grid grid-2">
+      <div class="card card-flat"><div class="small muted"><%= t('अनुमानित ऋण रकम', 'Estimated loan amount') %></div><div class="stat-value">Rs. <%= Math.round(out.amount).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('मासिक किस्ता', 'Monthly instalment') %></div><div class="stat-value">Rs. <%= Math.round(out.maxEmi).toLocaleString('en-IN') %></div></div>
+    </div>
+    <div class="card mt-3">
+      <p class="mb-1"><%= t('अनुमानित कुल ब्याज', 'Estimated total interest') %>: <b>Rs. <%= Math.round(Math.max(0, out.totalInterest)).toLocaleString('en-IN') %></b></p>
+      <p class="small faint mb-0"><%= t('अन्तिम ऋण रकम धितो, आम्दानीको प्रमाण, कर्जा सूचना केन्द्रको विवरण र संस्थाको कर्जा नीति अनुसार निर्धारण हुन्छ।', 'The final amount depends on collateral, proof of income, credit bureau checks and the lending policy.') %></p>
+      <% if (!locals.plan || plan.allows('/apply/loan')) { %><a class="btn btn-primary mt-2" href="/apply/loan"><%= t('ऋण आवेदन दिनुहोस्', 'Apply for a loan') %><%- icon('right') %></a><% } %>
+    </div>
+  </div>
+</div></section>

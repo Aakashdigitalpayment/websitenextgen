@@ -1,0 +1,15 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('सार्वजनिक "ग्राहक संरक्षण" पृष्ठ र बचत गणकमा प्रयोग हुने विवरण।', 'Shown on the public Client protection page and used by the savings calculators.') %> <a href="/client-protection" target="_blank" rel="noopener"><%= t('पृष्ठ हेर्नुहोस्', 'View page') %> ↗</a></div></div></div>
+<form class="form-card" method="post" action="/admin/client-protection">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="form-grid">
+    <div class="field"><label><%= t('गुनासो सुनुवाइ अधिकारी', 'Grievance officer') %></label><input class="input" name="protection_officer_name" value="<%= settings.protection_officer_name || '' %>"></div>
+    <div class="field"><label><%= t('फोन', 'Phone') %></label><input class="input" name="protection_officer_phone" value="<%= settings.protection_officer_phone || '' %>"></div>
+    <div class="field"><label><%= t('इमेल', 'Email') %></label><input class="input" type="email" name="protection_officer_email" value="<%= settings.protection_officer_email || '' %>"></div>
+    <div class="field"><label><%= t('नियमनकारी निकाय', 'Regulator') %></label><select class="select" name="protection_regulator">
+      <option value="coop" <%= settings.protection_regulator !== 'nrb' ? 'selected' : '' %>><%= t('सहकारी (सहकारी विभाग / प्राधिकरण)', 'Cooperative (Department / regulator)') %></option>
+      <option value="nrb" <%= settings.protection_regulator === 'nrb' ? 'selected' : '' %>><%= t('नेपाल राष्ट्र बैंक (लघुवित्त)', 'Nepal Rastra Bank (microfinance)') %></option></select></div>
+    <div class="field"><label><%= t('बचतको ब्याजमा कर (%)', 'Tax on deposit interest (%)') %></label><input class="input" name="deposit_tax_rate" inputmode="decimal" value="<%= settings.deposit_tax_rate || '5' %>"><div class="field-hint"><%= t('गणकमा पूर्वनिर्धारित रूपमा प्रयोग हुन्छ।', 'Default for the calculators.') %></div></div>
+    <div class="field span-2"><label><%= t('थप विवरण (नेपाली)', 'Additional text (Nepali)') %></label><textarea class="textarea" name="protection_extra_np" rows="5"><%= settings.protection_extra_np || '' %></textarea></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+</form>

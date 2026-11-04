@@ -41,6 +41,7 @@
     <% }) %>
     <div class="side-group"><div class="side-title"><%= t('प्रणाली', 'System') %></div>
       <% if (lvl >= 3) { %><a class="side-link <%= cur.startsWith('/admin/settings') ? 'active' : '' %>" href="/admin/settings"><%- icon('settings') %><%= t('सेटिङ', 'Settings') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/client-protection') ? 'active' : '' %>" href="/admin/client-protection"><%- icon('shield') %><%= t('ग्राहक संरक्षण', 'Client protection') %></a>
       <a class="side-link <%= cur.startsWith('/admin/theme') ? 'active' : '' %>" href="/admin/theme"><%- icon('sun') %><%= t('रूप / थिम', 'Theme') %></a>
       <a class="side-link <%= cur.startsWith('/admin/notifications') ? 'active' : '' %>" href="/admin/notifications"><%- icon('bell') %><%= t('SMS/इमेल/Push', 'SMS / email / push') %></a>
       <a class="side-link <%= cur.startsWith('/admin/plan') ? 'active' : '' %>" href="/admin/plan"><%- icon('layers') %><%= t('सेवा प्लान', 'Service plan') %></a>
