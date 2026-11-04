@@ -12,6 +12,21 @@
             <form method="post" action="/platform/tenants/<%= tn.id %>/status"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="status" value="<%= tn.status === 'active' ? 'suspended' : 'active' %>"><button class="btn btn-sm <%= tn.status === 'active' ? 'btn-ghost' : 'btn-soft' %>" data-confirm="<%= tn.status === 'active' ? 'Suspend' : 'Activate' %> <%= tn.slug %>?"><%= tn.status === 'active' ? 'Suspend' : 'Activate' %></button></form>
           </div>
         </div>
+        <form method="post" action="/platform/tenants/<%= tn.id %>/license" class="flex gap-1 wrap items-center mt-2">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <span class="small muted">Licence until</span><input class="input" type="date" name="until" value="<%= tn.license.until || '' %>" style="max-width:170px;padding:5px 10px">
+          <span class="badge <%= !tn.license.configured ? '' : tn.license.expired ? 'badge-bad' : tn.license.daysLeft <= 30 ? 'badge-warn' : 'badge-ok' %>"><%= !tn.license.configured ? 'no expiry' : tn.license.expired ? 'expired' : tn.license.daysLeft + ' days left' %></span>
+          <button class="btn btn-ghost btn-sm">Save</button>
+        </form>
+        <% (tn.stats.notices || []).forEach(n => { %>
+          <form method="post" action="/platform/tenants/<%= tn.id %>/license" class="alert alert-info mt-1 flex gap-1 wrap items-center" style="margin-bottom:0">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="notice_id" value="<%= n.id %>">
+            <span class="grow small">Renewal notice: <b><%= n.gateway %></b> · txn <code><%= n.txn_reference %></code> · Rs. <%= n.amount_reported %> · by <%= n.submitted_by_username %><%= n.note ? ' — ' + n.note : '' %></span>
+            <input class="input" type="date" name="until" value="<%= tn.license.until || '' %>" style="max-width:170px;padding:5px 10px" required>
+            <button class="btn btn-soft btn-sm" name="notice_action" value="clear">Verify &amp; set date</button>
+            <button class="btn btn-ghost btn-sm" name="notice_action" value="cancel" formnovalidate>Reject</button>
+          </form>
+        <% }) %>
         <div class="flex gap-1 wrap mt-2">
           <% tn.domains.forEach(d => { %><form method="post" action="/platform/tenants/<%= tn.id %>/domains" class="badge badge-brand" style="gap:6px"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="remove"><input type="hidden" name="domain" value="<%= d %>"><a href="http://<%= d %>" target="_blank" rel="noopener" style="color:inherit"><%= d %></a><button style="border:0;background:none;color:inherit;cursor:pointer;padding:0" aria-label="Remove" data-confirm="Remove <%= d %>?">×</button></form><% }) %>
           <form method="post" action="/platform/tenants/<%= tn.id %>/domains" class="flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="domain" placeholder="www.example.com.np" style="padding:5px 10px;width:200px"><button class="btn btn-ghost btn-sm">Add domain</button></form>

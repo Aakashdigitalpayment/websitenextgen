@@ -392,6 +392,7 @@ router.post('/inbox/:module/:id/delete', getModule, ah(async (req, res) => {
 
 router.use('/programs', require('./admin-programs'));
 router.use('/marketplace', require('./marketplace').admin);
+router.use('/credentials', require('./admin-credentials'));
 
 // ---------------------------------------------------------------- members
 router.get('/members', requireAdmin('staff'), ah(async (req, res) => {
@@ -702,6 +703,22 @@ router.post('/2fa/disable', ah(async (req, res) => {
   await auth.audit(req, '2fa_disable', 'admin_users', user.id, '2FA disabled');
   flash(req, 'success', res.locals.t('2FA बन्द गरियो।', '2FA turned off.'));
   res.redirect('/admin/2fa');
+}));
+
+// ---------------------------------------------------------------- site licence (tenant side)
+router.get('/license', requireAdmin('admin'), ah(async (req, res) => {
+  const notices = await db.many('SELECT * FROM site_license_renewal_notices ORDER BY id DESC LIMIT 20');
+  res.render('admin/license', { title: res.locals.t('वेबसाइट सेवा नवीकरण', 'Website licence'), notices });
+}));
+router.post('/license', requireAdmin('admin'), ah(async (req, res) => {
+  const b = req.body;
+  const txn = String(b.txn_reference || '').trim().slice(0, 120);
+  if (!txn) { flash(req, 'error', res.locals.t('कारोबार नम्बर चाहिन्छ।', 'Transaction reference is required.')); return res.redirect('/admin/license'); }
+  await db.query(`INSERT INTO site_license_renewal_notices (status, gateway, txn_reference, amount_reported, note, submitted_by_admin_id, submitted_by_username, created_at) VALUES ('pending', $1, $2, $3, $4, $5, $6, now())`,
+    [['esewa', 'khalti', 'bank', 'cash', 'other'].includes(b.gateway) ? b.gateway : 'other', txn, String(b.amount || '').slice(0, 40), String(b.note || '').slice(0, 1000) || null, req.admin.id, req.admin.username]);
+  await auth.audit(req, 'license_notice', 'site_license_renewal_notices', null, `Renewal notice ${txn}`);
+  flash(req, 'success', res.locals.t('भुक्तानी सूचना पठाइयो। प्लेटफर्मले प्रमाणित गरेपछि म्याद थपिनेछ।', 'Payment notice sent. The licence is extended once the platform verifies it.'));
+  res.redirect('/admin/license');
 }));
 
 // ---------------------------------------------------------------- audit log

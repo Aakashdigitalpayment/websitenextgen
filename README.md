@@ -76,7 +76,7 @@ Tested against the legacy `install.sql` loaded into MariaDB.
 
 **Admin** (`/admin`):
 - dashboard
-- generic CRUD for 46 content tables (`src/modules/resources.js`)
+- generic CRUD for 48 content tables (`src/modules/resources.js`)
 - application inboxes with status changes, remarks, status history, member notification, CSV export and print
 - members, with ID card issue (verification code + CVV)
 - password-reset requests, settings with logo upload, admin users, audit log
@@ -93,15 +93,35 @@ Tested against the legacy `install.sql` loaded into MariaDB.
 - Rate limits on public forms and ID-card verification, plus failed-login throttling via `login_attempts`.
 - Admin rich text is sanitised. Helmet with a strict CSP (no inline scripts).
 
-## Not ported yet
+## Add-on modules
 
-These PHP features still need work: HRM (employees, contracts, messenger), programme attendance with QR and registration desks, member marketplace, SMS/email/web-push notifications, AI chat, admin 2FA (TOTP), office credential manager, bulk member CSV import, and site-licence renewal. Their tables already exist in every tenant schema, and data is preserved by the importer.
+| Module | Where | Notes |
+|---|---|---|
+| **SMS / email / web push** | Admin → SMS / email / push; Settings → SMS / email | Sparrow, Aakash or a custom webhook for SMS; SMTP for email; editable templates (`{{name}} {{tracking_id}} {{module}} {{status}} {{remarks}} {{site}}`); delivery log; test send. The applicant and office are notified on submit, and the applicant on status change. Members can turn on browser push (VAPID keys per tenant); admins can broadcast to all members. Webhook URLs must be public https. |
+| **Admin 2FA** | Admin → 2-step login | TOTP (Google/Microsoft Authenticator, Authy) with 8 single-use backup codes. Compatible with 2FA secrets imported from the PHP site; superadmins can reset another user's 2FA. |
+| **Member CSV import** | Admin → Members → Import CSV | Validate and preview first, then commit. Modes: update or skip existing members (matched by member number, else mobile). Use `dob_bs` / `dob_ad` columns for dates of birth. A sample CSV is provided. |
+| **Programmes & QR attendance** | Admin → Programme attendance; member `/member/programs` | A QR code per programme or per location, with open/close times. Check-in is instant or needs approval. The registration desk can check in by member number, card or phone. Also: void, pre-registration, CSV export, and one valid check-in per member, enforced by the database. |
+| **Member marketplace** | `/marketplace`, `/member/marketplace`, Admin → Marketplace | Products and skills; the office approves listings (and re-approves after edits); public inquiries notify the seller. |
+| **AI chat** | Settings → AI chat; FAQ answers in Admin → Chatbot answers | Instant FAQ answers first, then Gemini, OpenAI or DeepSeek (the same providers as the PHP site), answering from the cooperative's own facts only. Rate-limited; never asks for passwords or OTPs. |
+| **Office credentials** | Admin → Office credentials (superadmin) | AES-256-GCM with a key per tenant derived from `CREDENTIALS_KEY`. Every reveal or copy is logged. PHP-encrypted entries open with `CREDENTIALS_LEGACY_KEY` and upgrade automatically. |
+| **Site licence** | Platform console (date); Admin → Licence (renewal notice) | Warning 30 days before expiry. Once expired, the public site shows a notice and only superadmins can sign in. Admins submit eSewa, Khalti or bank payment notices; the operator verifies them and sets the new date. |
+
+The PHP site's HRM pages had already been removed (they only redirect to the dashboard), so HRM is not part of this app.
+
+### Extra environment variables
+
+```
+CREDENTIALS_KEY=          # office credential vault, min 32 chars (openssl rand -hex 32). Never change once used.
+CREDENTIALS_LEGACY_KEY=   # optional: PHP CRED_MASTER_KEY, to open imported credentials
+PLATFORM_HOST=platform.example.com
+PLATFORM_ADMIN_USER= / PLATFORM_ADMIN_PASSWORD=   # bootstrap the first platform operator
+```
 
 ## Development
 
 ```bash
 npm run dev               # auto-restart
-npm test                  # integration tests (needs DATABASE_URL); creates & drops two temp tenants
+npm test                  # 18 tests (needs DATABASE_URL); creates & drops two temp tenants
 npm run schema:convert    # regenerate db/schema.sql from db/legacy/install.sql
 ```
 

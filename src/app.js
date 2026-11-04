@@ -136,6 +136,7 @@ function createApp() {
   });
   app.use(security.flashMiddleware);
   app.use(auth.loadUsers);
+  app.use(require('./lib/license').guard);
   app.use(security.csrf);
 
   app.get('/lang/:code', (req, res) => {

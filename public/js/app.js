@@ -98,3 +98,58 @@ document.querySelectorAll('[data-print]').forEach(b => b.addEventListener('click
     });
   }).catch(() => {});
 })();
+
+/* Website assistant widget */
+(function () {
+  const root = document.querySelector('[data-chat]');
+  if (!root) return;
+  const panel = root.querySelector('.chat-panel');
+  const log = root.querySelector('[data-chat-log]');
+  const form = root.querySelector('[data-chat-form]');
+  const history = [];
+  root.querySelectorAll('[data-chat-toggle]').forEach(b => b.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) form.m.focus();
+  }));
+  const add = (text, who) => {
+    const d = document.createElement('div');
+    d.className = 'chat-msg ' + who;
+    d.textContent = text; // never innerHTML: answers are untrusted text
+    log.appendChild(d); log.scrollTop = log.scrollHeight;
+    return d;
+  };
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = form.m.value.trim();
+    if (!msg) return;
+    form.m.value = ''; add(msg, 'me');
+    const wait = add('…', 'bot typing');
+    try {
+      const r = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-csrf-token': root.dataset.csrf }, body: JSON.stringify({ message: msg, history }) });
+      const j = await r.json();
+      wait.remove(); add(j.answer || '—', 'bot');
+      history.push({ role: 'user', content: msg }, { role: 'assistant', content: j.answer || '' });
+      history.splice(0, Math.max(0, history.length - 8));
+    } catch (err) { wait.remove(); add(root.dataset.lang === 'en' ? 'Connection problem. Please try again.' : 'जडानमा समस्या भयो। फेरि प्रयास गर्नुहोस्।', 'bot'); }
+  });
+})();
+
+/* Credential vault: fetch a password only when asked (each request is logged server-side) */
+(function () {
+  const fetchPw = async (id, csrf, action) => {
+    const r = await fetch(`/admin/credentials/${id}/reveal`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-csrf-token': csrf }, body: JSON.stringify({ action }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'error');
+    return j.password;
+  };
+  document.querySelectorAll('[data-reveal]').forEach(b => b.addEventListener('click', async () => {
+    const span = document.querySelector(`[data-pw="${b.dataset.reveal}"]`);
+    if (span.dataset.shown) { span.textContent = '••••••••'; delete span.dataset.shown; return; }
+    try { span.textContent = await fetchPw(b.dataset.reveal, b.dataset.csrf, 'view'); span.dataset.shown = '1'; setTimeout(() => { span.textContent = '••••••••'; delete span.dataset.shown; }, 20000); }
+    catch (e) { span.textContent = e.message; }
+  }));
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(await fetchPw(b.dataset.copy, b.dataset.csrf, 'copy')); b.textContent = '✓'; setTimeout(() => { b.textContent = 'Copy'; }, 1500); }
+    catch (e) { b.textContent = '✗'; }
+  }));
+})();

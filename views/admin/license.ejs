@@ -1,0 +1,24 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<div class="grid grid-2">
+  <div class="card">
+    <h3><%= t('हालको स्थिति', 'Current status') %></h3>
+    <% if (!license.configured) { %><p class="muted"><%= t('म्याद तोकिएको छैन।', 'No expiry date set.') %></p>
+    <% } else { %>
+      <div class="kv"><div><%= t('म्याद', 'Valid until') %></div><div><%= nd.formatBs(license.untilBs, lang) %> <span class="faint small">(<%= license.until %>)</span></div>
+        <div><%= t('बाँकी', 'Remaining') %></div><div><span class="badge <%= license.expired ? 'badge-bad' : license.daysLeft <= 30 ? 'badge-warn' : 'badge-ok' %>"><%= license.expired ? t('म्याद सकियो', 'Expired') : num(license.daysLeft) + ' ' + t('दिन', 'days') %></span></div></div>
+    <% } %>
+  </div>
+  <form class="form-card" method="post" action="/admin/license">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3><%= t('नवीकरण भुक्तानी सूचना', 'Renewal payment notice') %></h3>
+    <div class="form-grid">
+      <div class="field"><label><%= t('भुक्तानी माध्यम', 'Paid via') %></label><select class="select" name="gateway"><option value="esewa">eSewa</option><option value="khalti">Khalti</option><option value="bank"><%= t('बैंक', 'Bank') %></option><option value="other"><%= t('अन्य', 'Other') %></option></select></div>
+      <div class="field"><label><%= t('रकम (रु.)', 'Amount (Rs.)') %></label><input class="input" name="amount" inputmode="decimal"></div>
+      <div class="field span-2"><label><%= t('कारोबार नं. / भौचर नं.', 'Transaction / voucher no.') %></label><input class="input" name="txn_reference" required></div>
+      <div class="field span-2"><label><%= t('टिप्पणी', 'Note') %></label><textarea class="textarea" name="note" rows="2"></textarea></div>
+    </div>
+    <button class="btn btn-primary mt-2"><%= t('पठाउनुहोस्', 'Send') %></button>
+  </form>
+</div>
+<% if (notices.length) { %><h2 class="mt-4"><%= t('पठाइएका सूचना', 'Notices sent') %></h2>
+<div class="table-wrap mt-2"><table class="table"><tbody><% notices.forEach(n => { %><tr><td class="small"><%= bsDate(n.created_at) %></td><td><%= n.gateway %></td><td><code><%= n.txn_reference %></code></td><td><%= n.amount_reported %></td><td><span class="badge <%= n.status === 'cleared' ? 'badge-ok' : n.status === 'cancelled' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(n.status) %></span></td></tr><% }) %></tbody></table></div><% } %>

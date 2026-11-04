@@ -10,6 +10,7 @@ const { upload } = require('../lib/uploads');
 const { isBot, flash } = require('../lib/security');
 const exchange = require('../lib/exchange-rate');
 const notify = require('../lib/notify');
+const aiChat = require('../lib/ai-chat');
 
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -436,6 +437,19 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
 }));
 
 router.use('/marketplace', require('./marketplace').pub);
+
+// ---------------------------------------------------------------- website assistant (AI chat)
+const chatLimiter = rateLimit({
+  windowMs: 10 * 60_000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false,
+  keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip),
+  handler: (req, res) => res.status(429).json({ answer: res.locals.t('धेरै प्रश्न भए। केही समयपछि प्रयास गर्नुहोस्।', 'Too many questions. Please try again later.'), source: 'limit' }),
+});
+router.post('/api/chat', chatLimiter, ah(async (req, res) => {
+  const message = String(req.body?.message || '').trim().slice(0, 500);
+  if (!message) return res.status(400).json({ answer: '', source: 'empty' });
+  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [];
+  res.json(await aiChat.reply(message, history, req.lang));
+}));
 
 // QR codes printed at programmes point here; members sign in and confirm
 router.get('/attend', (req, res) => res.redirect('/member/attend?t=' + encodeURIComponent(String(req.query.t || '').replace(/[^A-Za-z0-9_-]/g, ''))));

@@ -59,7 +59,9 @@ router.get('/', ah(async (req, res) => {
     t.stats = await db.withSchema(t.schema_name, async () => ({
       members: await db.value('SELECT count(*) FROM members WHERE deleted_at IS NULL'),
       pending: await db.value("SELECT count(*) FROM loan_applications WHERE status = 'pending' AND deleted_at IS NULL"),
-    })).catch(() => ({ members: '?', pending: '?' }));
+      notices: await db.many("SELECT * FROM site_license_renewal_notices WHERE status = 'pending' ORDER BY id DESC"),
+    })).catch(() => ({ members: '?', pending: '?', notices: [] }));
+    t.license = require('../lib/license').status(t);
   }
   render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain });
 }));
@@ -93,6 +95,18 @@ router.post('/tenants/:id/domains', ah(async (req, res) => {
     else throw new Error('Invalid domain');
     flash(req, 'success', 'Domains updated.');
   } catch (e) { flash(req, 'error', e.code === '23505' ? 'That domain is already mapped.' : e.message); }
+  res.redirect('/platform');
+}));
+
+router.post('/tenants/:id/license', ah(async (req, res) => {
+  const t = await tenants.get(Number(req.params.id));
+  if (!t) return res.redirect('/platform');
+  const until = /^\d{4}-\d{2}-\d{2}$/.test(req.body.until || '') ? req.body.until : null;
+  await db.query('UPDATE platform.tenants SET license_valid_until = $1, license_note = $2, updated_at = now() WHERE id = $3', [until, String(req.body.note || '').slice(0, 500) || null, t.id]);
+  const nid = Number(req.body.notice_id) || 0;
+  if (nid) await db.withSchema(t.schema_name, () => db.query("UPDATE site_license_renewal_notices SET status = $1 WHERE id = $2", [req.body.notice_action === 'cancel' ? 'cancelled' : 'cleared', nid]));
+  tenants.clearCache();
+  flash(req, 'success', `Licence for ${t.slug}: ${until || 'no expiry'}`);
   res.redirect('/platform');
 }));
 

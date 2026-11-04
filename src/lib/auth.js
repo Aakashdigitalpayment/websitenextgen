@@ -45,6 +45,9 @@ async function adminLogin(req, username, password) {
     await recordFailure(username, ip);
     return { error: 'प्रयोगकर्ता नाम वा पासवर्ड मिलेन।' };
   }
+  if (require('./license').loginBlocked(req.tenant, user)) {
+    return { error: 'वेबसाइट सेवाको म्याद सकिएको छ। सुपर प्रशासकले मात्र लगइन गर्न सक्छन्। (Licence expired — super admin only.)' };
+  }
   await clearFailures(username);
   await regenerate(req);
   req.session.tenantId = req.tenant.id;

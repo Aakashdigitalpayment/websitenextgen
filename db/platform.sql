@@ -42,3 +42,7 @@ CREATE TABLE IF NOT EXISTS platform.user_sessions (
   expire TIMESTAMP(6) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS user_sessions_expire_idx ON platform.user_sessions (expire);
+
+-- Site licence (per tenant). NULL = no expiry.
+ALTER TABLE platform.tenants ADD COLUMN IF NOT EXISTS license_valid_until DATE;
+ALTER TABLE platform.tenants ADD COLUMN IF NOT EXISTS license_note TEXT;

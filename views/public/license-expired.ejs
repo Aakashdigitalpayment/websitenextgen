@@ -1,0 +1,14 @@
+<!doctype html><html lang="<%= lang === 'en' ? 'en' : 'ne' %>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= siteName %></title><meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/app.css"><style>:root{--brand:<%= brandColor %>}</style></head>
+<body><section class="section"><div class="container maxw-sm text-center">
+  <span class="brand-mark" style="margin:0 auto 16px"><%= (siteName || 'C').trim().charAt(0) %></span>
+  <h1 style="font-size:1.5rem"><%= siteName %></h1>
+  <div class="card mt-2">
+    <h2 style="font-size:1.15rem"><%= t('वेबसाइट अस्थायी रूपमा बन्द छ', 'This website is temporarily unavailable') %></h2>
+    <p class="muted"><%= t('वेबसाइट सेवाको म्याद ' + nd.formatBs(st.untilBs, 'np') + ' मा सकिएको छ।', 'The website service expired on ' + st.until + '.') %></p>
+    <% if (adminBlocked) { %><p class="small"><%= t('सुपर प्रशासकले मात्र लगइन गर्न सक्छन्।', 'Only a super admin can sign in until it is renewed.') %> <a href="/admin/login"><%= t('लगइन', 'Sign in') %></a></p><% } %>
+    <% if (settings.phone || settings.email) { %><p class="small mb-0"><%= t('सम्पर्क', 'Contact') %>: <%= settings.phone || '' %> <%= settings.email || '' %></p><% } %>
+  </div>
+</div></section></body></html>

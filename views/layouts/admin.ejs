@@ -41,8 +41,10 @@
     <div class="side-group"><div class="side-title"><%= t('प्रणाली', 'System') %></div>
       <% if (lvl >= 3) { %><a class="side-link <%= cur.startsWith('/admin/settings') ? 'active' : '' %>" href="/admin/settings"><%- icon('settings') %><%= t('सेटिङ', 'Settings') %></a>
       <a class="side-link <%= cur.startsWith('/admin/notifications') ? 'active' : '' %>" href="/admin/notifications"><%- icon('bell') %><%= t('SMS/इमेल/Push', 'SMS / email / push') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/license') ? 'active' : '' %>" href="/admin/license"><%- icon('award') %><%= t('सेवा नवीकरण', 'Licence') %></a>
       <a class="side-link <%= cur.startsWith('/admin/audit') ? 'active' : '' %>" href="/admin/audit"><%- icon('eye') %><%= t('अडिट लग', 'Audit log') %></a><% } %>
-      <% if (lvl >= 4) { %><a class="side-link <%= cur.startsWith('/admin/users') ? 'active' : '' %>" href="/admin/users"><%- icon('shield') %><%= t('प्रशासक', 'Admin users') %></a><% } %>
+      <% if (lvl >= 4) { %><a class="side-link <%= cur.startsWith('/admin/users') ? 'active' : '' %>" href="/admin/users"><%- icon('shield') %><%= t('प्रशासक', 'Admin users') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/credentials') ? 'active' : '' %>" href="/admin/credentials"><%- icon('settings') %><%= t('कार्यालय पासवर्ड', 'Office credentials') %></a><% } %>
       <a class="side-link <%= cur.startsWith('/admin/2fa') ? 'active' : '' %>" href="/admin/2fa"><%- icon('shield') %><%= t('दुई-चरण प्रमाणीकरण', '2-step login') %></a>
       <a class="side-link <%= cur.startsWith('/admin/password') && !cur.startsWith('/admin/password-') ? 'active' : '' %>" href="/admin/password"><%- icon('settings') %><%= t('पासवर्ड', 'Password') %></a>
     </div>
@@ -58,6 +60,7 @@
     </header>
     <main class="content">
       <% (locals.flash || []).forEach(m => { %><div class="alert alert-<%= m.type %>"><%= m.message %></div><% }) %>
+      <% if (locals.license && license.configured && license.daysLeft <= 30) { %><div class="alert <%= license.expired ? 'alert-error' : 'alert-warn' %>"><%- icon('alert') %><span><%= license.expired ? t('वेबसाइट सेवाको म्याद सकियो — सार्वजनिक साइट बन्द छ।', 'Website licence expired — the public site is offline.') : t('वेबसाइट सेवाको म्याद ' + num(license.daysLeft) + ' दिनमा सकिँदैछ।', 'Website licence expires in ' + license.daysLeft + ' days.') %> <% if (roleLevel(admin.role) >= 3) { %><a href="/admin/license"><%= t('नवीकरण', 'Renew') %></a><% } %></span></div><% } %>
       <% if (admin.must_change_password && path !== '/admin/password') { %><div class="alert alert-warn"><%- icon('alert') %><span><%= t('सुरक्षाका लागि पासवर्ड परिवर्तन गर्नुहोस्।', 'Please change your password.') %> <a href="/admin/password"><%= t('अहिले परिवर्तन गर्नुहोस्', 'Change now') %></a></span></div><% } %>
       <%- body %>
     </main>
