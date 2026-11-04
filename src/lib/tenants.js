@@ -8,6 +8,8 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const config = require('../config');
+const domainsLib = require('./domains');
+const domains = domainsLib;
 
 const DB_DIR = path.join(config.rootDir, 'db');
 const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
@@ -28,13 +30,17 @@ async function resolveHost(rawHost) {
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.tenant;
 
   let tenant = await db.one(
-    `SELECT t.* FROM platform.tenant_domains d JOIN platform.tenants t ON t.id = d.tenant_id WHERE d.domain = $1`, [host]);
+    `SELECT t.*, 'custom' AS host_kind FROM platform.tenant_domains d JOIN platform.tenants t ON t.id = d.tenant_id WHERE d.domain = $1 AND d.status = 'active'`, [host]);
+  if (!tenant) tenant = await db.one(`SELECT t.*, 'target' AS host_kind FROM platform.tenants t WHERE t.cname_target = $1`, [host]);
   if (!tenant && host.endsWith('.' + config.baseDomain)) {
     const slug = host.slice(0, -(config.baseDomain.length + 1));
-    if (SLUG_RE.test(slug)) tenant = await db.one('SELECT * FROM platform.tenants WHERE slug = $1', [slug]);
+    if (SLUG_RE.test(slug)) tenant = await db.one(`SELECT t.*, 'subdomain' AS host_kind FROM platform.tenants t WHERE slug = $1`, [slug]);
   }
   if (!tenant && config.defaultTenant && host !== config.platformHost) {
-    tenant = await db.one('SELECT * FROM platform.tenants WHERE slug = $1', [config.defaultTenant]);
+    tenant = await db.one(`SELECT t.*, 'default' AS host_kind FROM platform.tenants t WHERE slug = $1`, [config.defaultTenant]);
+  }
+  if (tenant) {
+    tenant.primary_domain = await db.value(`SELECT domain FROM platform.tenant_domains WHERE tenant_id = $1 AND is_primary AND status = 'active'`, [tenant.id]);
   }
   if (tenant && host.length <= 253) {
     if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
@@ -44,9 +50,16 @@ async function resolveHost(rawHost) {
 }
 
 async function list() {
-  return db.many(`SELECT t.*, COALESCE(array_agg(d.domain ORDER BY d.is_primary DESC, d.domain) FILTER (WHERE d.domain IS NOT NULL), '{}') AS domains
-                  FROM platform.tenants t LEFT JOIN platform.tenant_domains d ON d.tenant_id = t.id
-                  GROUP BY t.id ORDER BY t.created_at DESC`);
+  return db.many(`SELECT t.*,
+      COALESCE(array_agg(d.domain ORDER BY d.is_primary DESC, d.domain) FILTER (WHERE d.domain IS NOT NULL), '{}') AS domains,
+      COALESCE(json_agg(json_build_object('id', d.id, 'domain', d.domain, 'status', d.status, 'is_primary', d.is_primary, 'last_error', d.last_error, 'verified_at', d.verified_at, 'last_check_at', d.last_check_at)
+               ORDER BY d.is_primary DESC, d.domain) FILTER (WHERE d.domain IS NOT NULL), '[]') AS domain_rows
+    FROM platform.tenants t LEFT JOIN platform.tenant_domains d ON d.tenant_id = t.id
+    GROUP BY t.id ORDER BY t.created_at DESC`);
+}
+
+async function domainsOf(tenantId) {
+  return db.many('SELECT * FROM platform.tenant_domains WHERE tenant_id = $1 ORDER BY is_primary DESC, domain', [tenantId]);
 }
 
 async function get(id) {
@@ -55,6 +68,10 @@ async function get(id) {
 
 async function applyPlatformSchema() {
   await db.query(fs.readFileSync(path.join(DB_DIR, 'platform.sql'), 'utf8'));
+  // every tenant needs a unique generated hostname (CNAME target)
+  for (const t of await db.many('SELECT id, slug FROM platform.tenants WHERE cname_target IS NULL')) {
+    await db.query('UPDATE platform.tenants SET cname_target = $1 WHERE id = $2', [domains.generateTarget(t.slug), t.id]);
+  }
 }
 
 function migrationFiles() {
@@ -119,7 +136,7 @@ const DEFAULT_SETTINGS = [
  * Create a tenant: registry row, schema, tables, default settings and first admin.
  * @returns {Promise<object>} tenant row
  */
-async function createTenant({ slug, name, nameEn = '', domains = [], adminUsername = 'admin', adminPassword, contactEmail = null }) {
+async function createTenant({ slug, name, nameEn = '', domains: domainList = [], adminUsername = 'admin', adminPassword, contactEmail = null }) {
   slug = String(slug || '').toLowerCase().trim();
   if (!SLUG_RE.test(slug)) throw new Error('Slug must be 2–40 chars: lowercase letters, digits, underscore; start with a letter');
   if (!name) throw new Error('Name is required');
@@ -130,12 +147,11 @@ async function createTenant({ slug, name, nameEn = '', domains = [], adminUserna
   if (exists) throw new Error(`Tenant "${slug}" already exists`);
 
   const tenant = await db.one(
-    `INSERT INTO platform.tenants (slug, name, schema_name, contact_email) VALUES ($1, $2, $3, $4) RETURNING *`,
-    [slug, name, schemaName, contactEmail]);
+    `INSERT INTO platform.tenants (slug, name, schema_name, contact_email, cname_target) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [slug, name, schemaName, contactEmail, domainsLib.generateTarget(slug)]);
   try {
-    for (const [i, d] of domains.map(normalizeHost).filter(Boolean).entries()) {
-      await db.query('INSERT INTO platform.tenant_domains (tenant_id, domain, is_primary) VALUES ($1, $2, $3)', [tenant.id, d, i === 0]);
-    }
+    for (const d of domainList.map(normalizeHost).filter(Boolean)) await addDomain(tenant.id, d, { verifyNow: false });
+    if (domainList.length) await refreshPrimary(tenant.id);
     await migrateTenant(tenant);
     await db.withSchema(schemaName, async () => {
       for (const [key, val, type, label, group] of DEFAULT_SETTINGS) {
@@ -164,17 +180,76 @@ async function setStatus(id, status) {
   clearCache();
 }
 
-async function addDomain(tenantId, domain) {
-  await db.query('INSERT INTO platform.tenant_domains (tenant_id, domain) VALUES ($1, $2)', [tenantId, normalizeHost(domain)]);
+/**
+ * Add a domain. Domains in our own zone are active immediately; client domains start
+ * 'pending' and become 'active' once DNS points at the tenant (verifyDomain).
+ */
+async function addDomain(tenantId, domain, { verifyNow = true } = {}) {
+  const v = domainsLib.validate(domain);
+  if (v.error) throw new Error(v.error);
+  const own = domainsLib.inOwnZone(v.domain);
+  const row = await db.one(`INSERT INTO platform.tenant_domains (tenant_id, domain, status, verified_at) VALUES ($1, $2, $3, $4) RETURNING *`,
+    [tenantId, v.domain, own ? 'active' : 'pending', own ? new Date() : null]);
+  clearCache();
+  return verifyNow && !own ? verifyDomain(row.id) : row;
+}
+
+/** Check DNS for one domain row and update its status. */
+async function verifyDomain(domainId) {
+  const d = await db.one('SELECT d.*, t.cname_target FROM platform.tenant_domains d JOIN platform.tenants t ON t.id = d.tenant_id WHERE d.id = $1', [domainId]);
+  if (!d) throw new Error('domain not found');
+  const r = await domainsLib.verify(d.domain, d.cname_target);
+  const status = r.ok ? 'active' : d.status === 'active' ? 'active' : (d.check_count >= 288 ? 'failed' : 'pending'); // ~3 days of 15-minute checks
+  const row = await db.one(`UPDATE platform.tenant_domains SET status = $1, last_check_at = now(), check_count = check_count + 1,
+                              last_error = $2, verified_at = CASE WHEN $3 THEN COALESCE(verified_at, now()) ELSE verified_at END
+                            WHERE id = $4 RETURNING *`, [status, r.ok ? null : String(r.reason).slice(0, 255), r.ok, d.id]);
+  if (r.ok) await refreshPrimary(d.tenant_id);
+  clearCache();
+  return { ...row, check: r };
+}
+
+/** Make sure a tenant with active client domains has one primary (prefer www.*, then the first verified). */
+async function refreshPrimary(tenantId) {
+  const rows = await db.many("SELECT * FROM platform.tenant_domains WHERE tenant_id = $1 ORDER BY verified_at NULLS LAST, id", [tenantId]);
+  const current = rows.find(r => r.is_primary);
+  const candidates = rows.filter(r => r.status === 'active' && !domainsLib.inOwnZone(r.domain));
+  // keep an active primary, unless it is our own subdomain and the client now has a verified domain
+  if (current && current.status === 'active' && (!domainsLib.inOwnZone(current.domain) || !candidates.length)) return current.domain;
+  const pick = candidates.find(r => r.domain.startsWith('www.')) || candidates[0] || rows.find(r => r.status === 'active');
+  if (!pick) return null;
+  await setPrimary(tenantId, pick.id);
+  return pick.domain;
+}
+
+async function setPrimary(tenantId, domainId) {
+  await db.transaction(async () => {
+    await db.query('UPDATE platform.tenant_domains SET is_primary = false WHERE tenant_id = $1 AND is_primary', [tenantId]);
+    await db.query("UPDATE platform.tenant_domains SET is_primary = true WHERE tenant_id = $1 AND id = $2 AND status = 'active'", [tenantId, domainId]);
+  });
   clearCache();
 }
 
 async function removeDomain(tenantId, domain) {
   await db.query('DELETE FROM platform.tenant_domains WHERE tenant_id = $1 AND domain = $2', [tenantId, normalizeHost(domain)]);
+  await refreshPrimary(tenantId);
   clearCache();
+}
+
+/** Background: re-check pending domains every 15 minutes (started by server.js). */
+function startDomainWorker(intervalMs = 15 * 60_000) {
+  const tick = async () => {
+    try {
+      const due = await db.many("SELECT id FROM platform.tenant_domains WHERE status = 'pending' AND (last_check_at IS NULL OR last_check_at < now() - interval '14 minutes') LIMIT 50");
+      for (const d of due) await verifyDomain(d.id).catch(() => {});
+    } catch (e) { console.error('domain worker:', e.message); }
+  };
+  const t = setInterval(tick, intervalMs);
+  t.unref();
+  setTimeout(tick, 5_000).unref();
+  return t;
 }
 
 module.exports = {
   resolveHost, list, get, createTenant, migrateTenant, applyPlatformSchema, setStatus,
-  addDomain, removeDomain, clearCache, normalizeHost, SLUG_RE,
+  addDomain, removeDomain, verifyDomain, setPrimary, refreshPrimary, domainsOf, startDomainWorker, clearCache, normalizeHost, SLUG_RE,
 };

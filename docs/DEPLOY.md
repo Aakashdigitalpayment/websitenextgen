@@ -62,21 +62,42 @@ Prefer Nginx? See `deploy/nginx.conf`. It needs a wildcard certificate, plus one
 
 ## 2. DNS
 
+### Your platform domain (once)
+
 | Record | Value |
 |---|---|
 | `A coopcloud.com.np` | server IP |
-| `A *.coopcloud.com.np` | server IP (every tenant subdomain) |
-| `A platform.coopcloud.com.np` | server IP (covered by the wildcard) |
-| Custom domain, e.g. `www.aakashsaccos.com.np` | `CNAME aakash.coopcloud.com.np`, or `A` to the server IP |
+| `A *.coopcloud.com.np` | server IP. This makes every tenant subdomain **and every generated CNAME target** resolve. |
 
-Caddy issues HTTPS certificates automatically for each host, but only after the app confirms the host belongs to a cooperative (`/__tls/allowed`, reachable from localhost only). Map a custom domain in the platform console **before** pointing its DNS at the server.
+Set `SERVER_IPS=<server IP>` in `.env`. It is used to verify client domains that point an A record at the server.
+
+### Each cooperative's own domain
+
+Every cooperative gets a **unique generated address** (its CNAME target) when it is created, e.g. `aakash-7k2mq.coopcloud.com.np`. You can see it in the platform console, or in **Admin → Website domain** (superadmin).
+
+1. Add the client's domain (e.g. `www.aakashsaccos.com.np`) in the platform console or in the cooperative's admin. It starts as **waiting for DNS**.
+2. At the client's domain provider, create the records shown on screen:
+
+   | Domain | Record |
+   |---|---|
+   | `www.aakashsaccos.com.np` | `CNAME → aakash-7k2mq.coopcloud.com.np` |
+   | `aakashsaccos.com.np` (bare / apex) | `A → <server IP>`, or ALIAS / ANAME / CNAME-flattening → the generated target. Apex domains cannot use a plain CNAME. |
+
+3. The platform checks DNS every 15 minutes, or immediately with **Check now**. When the record matches, the domain becomes **active** and Caddy issues its HTTPS certificate on the first visit.
+
+Behaviour once a domain is active:
+- The first verified client domain becomes the **primary** (`www.` is preferred); you can change it.
+- With **Redirect to primary** on (the default), the generated address, the platform subdomain and any other domain answer with a `301` to the primary. The API (`/api/v1`) is never redirected.
+- A client domain is **never served, and never gets a certificate, until its DNS has been verified**, so nobody can claim someone else's domain.
+- A domain can belong to only one cooperative.
 
 ## 3. Add cooperatives
 
 1. Open `https://platform.coopcloud.com.np/platform` and sign in with `PLATFORM_ADMIN_USER` / `PLATFORM_ADMIN_PASSWORD`.
 2. **New cooperative**: enter the slug, Nepali/English name, an optional custom domain and the first admin password.
 3. Sign in at `https://<slug>.coopcloud.com.np/admin`, change the password, turn on **2-step login**, then fill in **Settings** (logo, contact details, SMS/SMTP, AI).
-4. Optional: **Google sign-in for members.** In Google Cloud Console create an OAuth client (Web application), add the redirect URI shown in **Settings → Google sign-in**, and paste the client ID and secret there.
+4. Connect the cooperative's own domain: see section 2.
+5. Optional: **Google sign-in for members.** In Google Cloud Console create an OAuth client (Web application), add the redirect URI shown in **Settings → Google sign-in**, and paste the client ID and secret there.
 
 From the command line instead:
 

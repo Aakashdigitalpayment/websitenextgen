@@ -63,3 +63,18 @@ CREATE TABLE IF NOT EXISTS platform.operator_sessions (
   expire TIMESTAMP(6) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS operator_sessions_expire_idx ON platform.operator_sessions (expire);
+
+-- Custom domains: every tenant gets a unique generated hostname (CNAME target);
+-- client domains are served only after DNS verification.
+ALTER TABLE platform.tenants ADD COLUMN IF NOT EXISTS cname_target VARCHAR(253);
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_cname_target_uq ON platform.tenants (cname_target);
+ALTER TABLE platform.tenants ADD COLUMN IF NOT EXISTS redirect_to_primary BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE platform.tenant_domains ADD COLUMN IF NOT EXISTS status VARCHAR(12) NOT NULL DEFAULT 'active';
+ALTER TABLE platform.tenant_domains ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP;
+ALTER TABLE platform.tenant_domains ADD COLUMN IF NOT EXISTS last_check_at TIMESTAMP;
+ALTER TABLE platform.tenant_domains ADD COLUMN IF NOT EXISTS last_error VARCHAR(255);
+ALTER TABLE platform.tenant_domains ADD COLUMN IF NOT EXISTS check_count INTEGER NOT NULL DEFAULT 0;
+DO $$ BEGIN
+  ALTER TABLE platform.tenant_domains ADD CONSTRAINT tenant_domains_status_chk CHECK (status IN ('pending','active','failed'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS tenant_domains_one_primary ON platform.tenant_domains (tenant_id) WHERE is_primary;

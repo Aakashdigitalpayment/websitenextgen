@@ -57,7 +57,8 @@ function createApp() {
     const domain = tenants.normalizeHost(req.query.domain);
     if (!domain) return res.status(404).end();
     if (domain === config.platformHost) return res.status(200).end();
-    let ok = !!(await db.value('SELECT 1 FROM platform.tenant_domains WHERE domain = $1', [domain]));
+    let ok = !!(await db.value("SELECT 1 FROM platform.tenant_domains WHERE domain = $1 AND status = 'active'", [domain]))
+      || !!(await db.value('SELECT 1 FROM platform.tenants WHERE cname_target = $1', [domain]));
     if (!ok && domain.endsWith('.' + config.baseDomain)) {
       const slug = domain.slice(0, -(config.baseDomain.length + 1));
       ok = tenants.SLUG_RE.test(slug) && !!(await db.value('SELECT 1 FROM platform.tenants WHERE slug = $1', [slug]));
@@ -130,6 +131,13 @@ function createApp() {
       if (tenant.status !== 'active') return res.status(503).render('public/no-tenant', { layout: false, host: req.hostname, suspended: true });
       req.tenant = tenant;
       res.locals.tenant = tenant;
+      // visitors on the generated hostname / platform subdomain / a secondary domain go to the client's primary domain
+      const host = tenants.normalizeHost(req.hostname);
+      if (tenant.redirect_to_primary && tenant.primary_domain && host !== tenant.primary_domain && !require('./lib/domains').inOwnZone(tenant.primary_domain)
+          && (req.method === 'GET' || req.method === 'HEAD')
+          && !req.path.startsWith('/api/') && !req.path.startsWith('/__tls') && req.path !== '/healthz' && tenant.host_kind !== 'default') {
+        return res.redirect(301, `${req.protocol}://${tenant.primary_domain}${req.originalUrl}`);
+      }
       db.withSchema(tenant.schema_name, () => next());
     } catch (e) { next(e); }
   });

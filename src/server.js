@@ -7,6 +7,7 @@ const tenants = require('./lib/tenants');
   await tenants.applyPlatformSchema();
   const server = createApp().listen(config.port, process.env.HOST || (config.isProd ? '127.0.0.1' : '0.0.0.0'), () => console.log(`Cooperative platform listening on http://localhost:${config.port}`));
   if (process.env.WEBHOOK_WORKER !== 'off') require('./lib/webhooks').startWorker();
+  if (process.env.DOMAIN_WORKER !== 'off') tenants.startDomainWorker();
   const shutdown = sig => {
     console.log(`${sig} received — closing`);
     server.close(() => require('./db').pool.end().then(() => process.exit(0)));

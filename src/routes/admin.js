@@ -13,6 +13,7 @@ const { resources, GROUPS } = require('../modules/resources');
 const { upload, remove } = require('../lib/uploads');
 const { flash } = require('../lib/security');
 const notify = require('../lib/notify');
+const tenants = require('../lib/tenants');
 const totp = require('../lib/totp');
 const QRCode = require('qrcode');
 const memberImport = require('../lib/member-import');
@@ -413,6 +414,19 @@ router.use('/programs', require('./admin-programs'));
 router.use('/marketplace', require('./marketplace').admin);
 router.use('/credentials', require('./admin-credentials'));
 router.use('/integrations', require('./admin-integrations'));
+
+// own website domains (CNAME to the generated target)
+router.get('/domains', requireAdmin('superadmin'), ah(async (req, res) => {
+  const t = await db.one('SELECT * FROM platform.tenants WHERE id = $1', [req.tenant.id]);
+  res.render('admin/domains', { title: res.locals.t('वेबसाइट डोमेन', 'Website domain'), tn: t, rows: await tenants.domainsOf(req.tenant.id), dnsHelp: require('../lib/domains').instructions });
+}));
+router.post('/domains', requireAdmin('superadmin'), ah(async (req, res) => {
+  try {
+    flash(req, 'success', await require('./platform').domainAction(req.tenant.id, req.body));
+    await auth.audit(req, 'domain_' + req.body.action, 'tenant_domains', null, String(req.body.domain || req.body.domain_id || ''));
+  } catch (e) { flash(req, 'error', e.code === '23505' ? res.locals.t('यो डोमेन अर्को सहकारीमा प्रयोग भइसकेको छ।', 'That domain is already used by another cooperative.') : e.message); }
+  res.redirect('/admin/domains');
+}));
 router.use('/', require('./admin-system'));
 
 // ---------------------------------------------------------------- members

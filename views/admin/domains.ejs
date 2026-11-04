@@ -1,0 +1,15 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('आफ्नो डोमेन (जस्तै www.mycoop.com.np) मा वेबसाइट चलाउनुहोस्।', 'Run the website on your own domain (e.g. www.mycoop.com.np).') %></div></div></div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+  <div class="card"><%- include('../partials/domains-panel', { target: tn.cname_target, rows, base: '/admin/domains', redirect: tn.redirect_to_primary, dnsHelp }) %></div>
+  <div class="card">
+    <h3><%= t('कसरी जोड्ने?', 'How to connect') %></h3>
+    <ol class="small" style="padding-left:18px;line-height:1.9">
+      <li><%= t('माथि आफ्नो डोमेन थप्नुहोस् (www सहित सिफारिस गरिन्छ)।', 'Add your domain above (www. is recommended).') %></li>
+      <li><%= t('डोमेन किनेको ठाउँ (Mercantile, Cloudflare, GoDaddy…) को DNS मा CNAME record बनाउनुहोस्:', 'At your domain provider (Mercantile, Cloudflare, GoDaddy…) create a CNAME record:') %>
+        <div style="font-family:ui-monospace,monospace;background:var(--surface-2);padding:6px 8px;border-radius:6px;margin:4px 0">www → <%= tn.cname_target %></div></li>
+      <li><%= t('बिना www (mycoop.com.np) का लागि A record सर्भर IP मा वा ALIAS/CNAME flattening प्रयोग गर्नुहोस्।', 'For the bare domain (mycoop.com.np) use an A record to the server IP, or ALIAS / CNAME flattening.') %></li>
+      <li><%= t('"अहिले जाँच" थिच्नुहोस्। प्रणालीले हरेक १५ मिनेटमा आफैं पनि जाँच गर्छ।', 'Press "Check now". The system also re-checks every 15 minutes.') %></li>
+      <li><%= t('मिलेपछि HTTPS आफैं बन्छ र अन्य ठेगानाहरू मुख्य डोमेनमा redirect हुन्छन्।', 'When it matches, HTTPS is issued automatically and other addresses redirect to the primary domain.') %></li>
+    </ol>
+  </div>
+</div>

@@ -118,6 +118,35 @@ router.post('/2fa', ah(async (req, res) => {
   res.redirect('/platform');
 }));
 
+/** Shared domain actions for the platform console and the tenant admin page. */
+async function domainAction(tenantId, b) {
+  const did = Number(b.domain_id) || 0;
+  const owns = async () => !!(await db.value('SELECT 1 FROM platform.tenant_domains WHERE id = $1 AND tenant_id = $2', [did, tenantId]));
+  switch (b.action) {
+    case 'add': {
+      const row = await tenants.addDomain(tenantId, b.domain);
+      return row.status === 'active' ? `${row.domain} is active.` : `${row.domain} added — waiting for DNS. ${row.check && row.check.reason ? '(' + row.check.reason + ')' : ''}`;
+    }
+    case 'verify': {
+      if (!(await owns())) throw new Error('Domain not found');
+      const r = await tenants.verifyDomain(did);
+      return r.status === 'active' ? `${r.domain} verified (${r.check.method}) and active.` : `${r.domain}: ${r.check.reason}`;
+    }
+    case 'primary':
+      if (!(await owns())) throw new Error('Domain not found');
+      await tenants.setPrimary(tenantId, did);
+      return 'Primary domain changed.';
+    case 'remove':
+      await tenants.removeDomain(tenantId, b.domain);
+      return 'Domain removed.';
+    case 'redirect':
+      await db.query('UPDATE platform.tenants SET redirect_to_primary = $1 WHERE id = $2', [b.value === '1', tenantId]);
+      tenants.clearCache();
+      return b.value === '1' ? 'Other addresses now redirect to the primary domain.' : 'Redirect turned off.';
+    default: throw new Error('Unknown action');
+  }
+}
+
 router.get('/', ah(async (req, res) => {
   const list = await tenants.list();
   for (const t of list) {
@@ -128,7 +157,7 @@ router.get('/', ah(async (req, res) => {
     })).catch(() => ({ members: '?', pending: '?', notices: [] }));
     t.license = require('../lib/license').status(t);
   }
-  render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain });
+  render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions });
 }));
 
 router.post('/tenants', ah(async (req, res) => {
@@ -142,7 +171,7 @@ router.post('/tenants', ah(async (req, res) => {
     res.redirect('/platform');
   } catch (e) {
     const list = await tenants.list();
-    render(res.status(422), 'tenants', { title: 'Tenants', list, errors: { _: e.message }, values: b, baseDomain: config.baseDomain });
+    render(res.status(422), 'tenants', { title: 'Tenants', list, errors: { _: e.message }, values: b, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions });
   }
 }));
 
@@ -155,12 +184,10 @@ router.post('/tenants/:id/status', ah(async (req, res) => {
 router.post('/tenants/:id/domains', ah(async (req, res) => {
   const id = Number(req.params.id);
   try {
-    if (req.body.action === 'remove') await tenants.removeDomain(id, req.body.domain);
-    else if (/^[a-z0-9.-]{3,253}$/i.test(String(req.body.domain || '').trim())) await tenants.addDomain(id, req.body.domain.trim());
-    else throw new Error('Invalid domain');
-    flash(req, 'success', 'Domains updated.');
-  } catch (e) { flash(req, 'error', e.code === '23505' ? 'That domain is already mapped.' : e.message); }
-  res.redirect('/platform');
+    if (!(await tenants.get(id))) throw new Error('Tenant not found');
+    flash(req, 'success', await domainAction(id, req.body));
+  } catch (e) { flash(req, 'error', e.code === '23505' ? 'That domain is already used by a cooperative.' : e.message); }
+  res.redirect('/platform#tenant-' + id);
 }));
 
 router.post('/tenants/:id/license', ah(async (req, res) => {
@@ -183,3 +210,4 @@ router.post('/tenants/:id/migrate', ah(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports.domainAction = domainAction;

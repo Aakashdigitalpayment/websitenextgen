@@ -1,0 +1,50 @@
+<%#
+  Domain panel. Locals: target (generated hostname), rows (tenant_domains), base (form action base), dnsHelp(domain, target),
+  redirect (bool), csrfToken, t(np, en)
+%>
+<div class="domains-panel">
+  <div class="flex justify-between items-center wrap gap-1">
+    <div>
+      <div class="small muted"><%= t('यस सहकारीको आफ्नै CNAME लक्ष्य (generated URL)', "This cooperative's CNAME target (generated URL)") %></div>
+      <code style="font-size:1rem;user-select:all"><%= target %></code>
+      <a class="small" href="//<%= target %>" target="_blank" rel="noopener" style="margin-left:6px">↗</a>
+    </div>
+    <form method="post" action="<%= base %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="redirect"><input type="hidden" name="value" value="<%= redirect ? '0' : '1' %>">
+      <button class="btn btn-ghost btn-sm" title="<%= t('अन्य ठेगानाबाट मुख्य डोमेनमा पठाउने', 'Send other addresses to the primary domain') %>"><%= redirect ? '✓ ' : '' %><%= t('मुख्य डोमेनमा redirect', 'Redirect to primary') %></button></form>
+  </div>
+
+  <div class="table-wrap mt-2"><table class="table">
+    <thead><tr><th><%= t('डोमेन', 'Domain') %></th><th><%= t('स्थिति', 'Status') %></th><th></th></tr></thead>
+    <tbody>
+    <% if (!rows.length) { %><tr><td colspan="3" class="muted small"><%= t('अहिलेसम्म डोमेन थपिएको छैन।', 'No domains yet.') %></td></tr><% } %>
+    <% rows.forEach(d => { const help = dnsHelp(d.domain, target); %>
+      <tr>
+        <td><a href="//<%= d.domain %>" target="_blank" rel="noopener" style="font-weight:500;color:var(--text)"><%= d.domain %></a>
+          <% if (d.is_primary) { %> <span class="badge badge-brand"><%= t('मुख्य', 'primary') %></span><% } %>
+          <% if (d.status === 'pending' && help.length) { %>
+            <div class="small mt-1" style="background:var(--surface-2);border-radius:8px;padding:8px 10px">
+              <div class="muted"><%= t('आफ्नो DNS (domain provider) मा यो record थप्नुहोस्:', 'Add this record at your DNS / domain provider:') %></div>
+              <% help.forEach(h => { %><div style="font-family:ui-monospace,monospace;margin-top:4px"><b><%= h.type %></b> &nbsp; <%= h.host %> &nbsp;→&nbsp; <span style="user-select:all"><%= h.value %></span></div><% if (h.note) { %><div class="faint" style="font-size:.78rem"><%= h.note %></div><% } %><% }) %>
+            </div>
+          <% } %>
+          <% if (d.last_error && d.status !== 'active') { %><div class="small" style="color:var(--warn);margin-top:4px"><%= d.last_error %></div><% } %>
+        </td>
+        <td><span class="badge <%= d.status === 'active' ? 'badge-ok' : d.status === 'failed' ? 'badge-bad' : 'badge-warn' %>"><%= d.status === 'active' ? t('चालु', 'active') : d.status === 'failed' ? t('असफल', 'failed') : t('DNS पर्खँदै', 'waiting for DNS') %></span>
+          <% if (d.last_check_at) { %><div class="small faint"><%= t('जाँच', 'checked') %> <%= new Date(d.last_check_at).toTimeString().slice(0,5) %></div><% } %></td>
+        <td><div class="row-actions">
+          <% if (d.status !== 'active') { %><form method="post" action="<%= base %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="verify"><input type="hidden" name="domain_id" value="<%= d.id %>"><button class="btn btn-soft btn-sm"><%= t('अहिले जाँच', 'Check now') %></button></form><% } %>
+          <% if (d.status === 'active' && !d.is_primary) { %><form method="post" action="<%= base %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="primary"><input type="hidden" name="domain_id" value="<%= d.id %>"><button class="btn btn-ghost btn-sm"><%= t('मुख्य बनाउने', 'Make primary') %></button></form><% } %>
+          <form method="post" action="<%= base %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="remove"><input type="hidden" name="domain" value="<%= d.domain %>"><button class="btn btn-ghost btn-sm btn-icon" data-confirm="<%= t('हटाउने?', 'Remove?') %> <%= d.domain %>"><%- icon('trash') %></button></form>
+        </div></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+
+  <form method="post" action="<%= base %>" class="flex gap-1 wrap mt-2">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="add">
+    <input class="input" name="domain" placeholder="www.mycoop.com.np" required style="max-width:260px">
+    <button class="btn btn-primary btn-sm"><%- icon('plus') %><%= t('डोमेन थप्नुहोस्', 'Add domain') %></button>
+  </form>
+  <p class="small faint mt-1 mb-0"><%= t('DNS मिलेपछि (सामान्यतया केही मिनेटदेखि केही घण्टा) डोमेन आफैं चालु हुन्छ र HTTPS प्रमाणपत्र स्वतः बन्छ।', 'Once DNS points here (usually minutes to a few hours) the domain turns active by itself and gets an HTTPS certificate automatically.') %></p>
+</div>

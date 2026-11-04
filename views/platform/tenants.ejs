@@ -3,7 +3,7 @@
   <div class="stack">
     <% if (!list.length) { %><div class="empty">No tenants yet — create the first one.</div><% } %>
     <% list.forEach(tn => { %>
-      <div class="card">
+      <div class="card" id="tenant-<%= tn.id %>">
         <div class="flex justify-between items-center wrap gap-1">
           <div><h3 class="mb-0"><%= tn.name %> <span class="badge <%= tn.status === 'active' ? 'badge-ok' : 'badge-bad' %>"><%= tn.status %></span></h3>
             <div class="small faint"><code><%= tn.slug %></code> · schema <code><%= tn.schema_name %></code> · <%= tn.stats.members %> members · <%= tn.stats.pending %> pending loans</div></div>
@@ -27,10 +27,9 @@
             <button class="btn btn-ghost btn-sm" name="notice_action" value="cancel" formnovalidate>Reject</button>
           </form>
         <% }) %>
-        <div class="flex gap-1 wrap mt-2">
-          <% tn.domains.forEach(d => { %><form method="post" action="/platform/tenants/<%= tn.id %>/domains" class="badge badge-brand" style="gap:6px"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="remove"><input type="hidden" name="domain" value="<%= d %>"><a href="http://<%= d %>" target="_blank" rel="noopener" style="color:inherit"><%= d %></a><button style="border:0;background:none;color:inherit;cursor:pointer;padding:0" aria-label="Remove" data-confirm="Remove <%= d %>?">×</button></form><% }) %>
-          <form method="post" action="/platform/tenants/<%= tn.id %>/domains" class="flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="domain" placeholder="www.example.com.np" style="padding:5px 10px;width:200px"><button class="btn btn-ghost btn-sm">Add domain</button></form>
-        </div>
+        <details class="mt-2" <%= tn.domain_rows.some(d => d.status !== 'active') ? 'open' : '' %>><summary class="small" style="cursor:pointer">Domains (<%= tn.domain_rows.length %>) · CNAME target <code><%= tn.cname_target %></code></summary>
+          <div class="mt-1"><%- include('../partials/domains-panel', { target: tn.cname_target, rows: tn.domain_rows, base: '/platform/tenants/' + tn.id + '/domains', redirect: tn.redirect_to_primary, dnsHelp }) %></div>
+        </details>
       </div>
     <% }) %>
   </div>
