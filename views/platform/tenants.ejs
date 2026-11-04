@@ -45,6 +45,18 @@
       <div class="field"><label>Contact email</label><input class="input" name="contact_email" type="email" value="<%= values.contact_email || '' %>"></div>
       <div class="field"><label>First admin username</label><input class="input" name="admin_username" value="<%= values.admin_username || 'admin' %>"></div>
       <div class="field"><label>Admin password (blank = generate)</label><input class="input" name="admin_password" type="text" autocomplete="off"></div>
+      <div class="field span-2"><label>Design</label>
+        <div class="palette-grid">
+          <% (locals.designs || []).forEach((d, i) => { %>
+            <label class="palette-card" style="--sw:<%= d.color %>">
+              <input type="radio" name="design" value="<%= d.key %>" <%= (values.design ? values.design === d.key : i === 0) ? 'checked' : '' %>>
+              <div class="palette-mock"><i></i><i></i><i style="width:70%"></i><b></b></div>
+              <div class="palette-name"><%= d.en %></div><div class="small faint"><%= d.np %></div>
+            </label>
+          <% }) %>
+        </div>
+        <label class="check mt-1"><input type="hidden" name="starter_content" value="0"><input type="checkbox" name="starter_content" value="1" checked> Create starter content (slides, services, interest rates, FAQ, committees, useful links) — editable by the cooperative</label>
+      </div>
       <button class="btn btn-primary">Create tenant</button>
     </div>
   </form>

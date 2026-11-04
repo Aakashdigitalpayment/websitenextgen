@@ -67,7 +67,7 @@ async function confirm(q) {
     if (!a.create) throw new Error(`Tenant "${a.tenant}" does not exist. Add --create --name="…" --admin-password=… to create it.`);
     if (a['dry-run']) console.log(`· tenant "${a.tenant}" would be created (dry run)`);
     else {
-      tenant = await tenants.createTenant({ slug: a.tenant, name: a.name || a.tenant, nameEn: a['name-en'], domains: a.domain, adminUsername: a.admin || 'admin', adminPassword: a['admin-password'] || require('crypto').randomBytes(12).toString('base64url') });
+      tenant = await tenants.createTenant({ slug: a.tenant, name: a.name || a.tenant, nameEn: a['name-en'], domains: a.domain, adminUsername: a.admin || 'admin', adminPassword: a['admin-password'] || require('crypto').randomBytes(12).toString('base64url'), design: null });
       console.log(`✓ tenant "${tenant.slug}" created (schema ${tenant.schema_name})`);
     }
   }

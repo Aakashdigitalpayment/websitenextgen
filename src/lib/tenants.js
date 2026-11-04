@@ -136,7 +136,12 @@ const DEFAULT_SETTINGS = [
  * Create a tenant: registry row, schema, tables, default settings and first admin.
  * @returns {Promise<object>} tenant row
  */
-async function createTenant({ slug, name, nameEn = '', domains: domainList = [], adminUsername = 'admin', adminPassword, contactEmail = null }) {
+/**
+ * @param {object} o
+ * @param {string|null} [o.design='saving_credit'] starter design key (src/lib/starter.js); null = leave the defaults untouched
+ * @param {boolean} [o.starterContent=true] also create starter content (services, rates, FAQs, committees, slides…)
+ */
+async function createTenant({ slug, name, nameEn = '', domains: domainList = [], adminUsername = 'admin', adminPassword, contactEmail = null, design = 'saving_credit', starterContent = true }) {
   slug = String(slug || '').toLowerCase().trim();
   if (!SLUG_RE.test(slug)) throw new Error('Slug must be 2–40 chars: lowercase letters, digits, underscore; start with a letter');
   if (!name) throw new Error('Name is required');
@@ -163,6 +168,7 @@ async function createTenant({ slug, name, nameEn = '', domains: domainList = [],
       await db.query(
         `INSERT INTO admin_users (username, password, full_name, role, is_active, status) VALUES ($1, $2, $3, 'superadmin', 1, 'active')`,
         [adminUsername, await bcrypt.hash(adminPassword, 12), 'Super Admin']);
+      if (design) await require('./starter').apply(design, { content: starterContent });
     });
   } catch (e) {
     // roll back a half-provisioned tenant

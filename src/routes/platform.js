@@ -157,7 +157,7 @@ router.get('/', ah(async (req, res) => {
     })).catch(() => ({ members: '?', pending: '?', notices: [] }));
     t.license = require('../lib/license').status(t);
   }
-  render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions });
+  render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions, designs: require('../lib/starter').list() });
 }));
 
 router.post('/tenants', ah(async (req, res) => {
@@ -166,12 +166,14 @@ router.post('/tenants', ah(async (req, res) => {
   if (!domains.length && b.slug) domains.push(`${String(b.slug).toLowerCase()}.${config.baseDomain}`);
   const password = b.admin_password || crypto.randomBytes(9).toString('base64url');
   try {
-    const t = await tenants.createTenant({ slug: b.slug, name: b.name, nameEn: b.name_en, domains, adminUsername: b.admin_username || 'admin', adminPassword: password, contactEmail: b.contact_email || null });
+    const starter = require('../lib/starter');
+    const t = await tenants.createTenant({ slug: b.slug, name: b.name, nameEn: b.name_en, domains, adminUsername: b.admin_username || 'admin', adminPassword: password, contactEmail: b.contact_email || null,
+      design: starter.DESIGNS[b.design] ? b.design : 'saving_credit', starterContent: b.starter_content !== '0' });
     flash(req, 'success', `Tenant "${t.slug}" created. Admin login: ${b.admin_username || 'admin'} / ${password} — share it securely; they must change it.`);
     res.redirect('/platform');
   } catch (e) {
     const list = await tenants.list();
-    render(res.status(422), 'tenants', { title: 'Tenants', list, errors: { _: e.message }, values: b, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions });
+    render(res.status(422), 'tenants', { title: 'Tenants', list, errors: { _: e.message }, values: b, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions, designs: require('../lib/starter').list() });
   }
 }));
 

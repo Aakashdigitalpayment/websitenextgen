@@ -9,7 +9,7 @@
   <link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/admin.css">
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
-<body class="panel">
+<body class="panel <%= locals.siteLayout ? 'corners-' + siteLayout.corners : '' %>">
 <div class="shell">
   <aside class="sidebar" data-nav>
     <a class="brand" href="/"><% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %><span class="brand-name" style="font-size:.92rem"><%= siteName %></span></a>
@@ -27,7 +27,7 @@
       <a class="btn btn-ghost btn-sm" href="/"><%- icon('globe') %><span class="btn-text"><%= t('वेबसाइट', 'Website') %></span></a>
       <div class="grow"></div>
       <%- include('../partials/theme-picker') %>
-      <span class="lang-switch"><a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">ने</a><a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a></span>
+      <% if (!locals.languages || languages.length > 1) { %><span class="lang-switch"><a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">ने</a><a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a></span><% } %>
       <div class="who"><b><%= member.name_np || member.name %></b><%= member.sadasyata_number || member.phone || '' %></div>
       <form method="post" action="/member/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-icon" aria-label="Log out"><%- icon('logout') %></button></form>
     </header>

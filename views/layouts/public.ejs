@@ -16,22 +16,22 @@
   <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= locals.theme ? theme.brand : brandColor %>">
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
-<body>
+<body class="<%= locals.siteLayout ? siteLayout.bodyClass : '' %>">
   <a class="sr-only" href="#main">Skip to content</a>
   <div class="topbar">
     <div class="container">
       <div class="tb-left">
         <% if (settings.phone) { %><a class="tb-item" href="tel:<%= settings.phone %>"><%- icon('phone') %><%= settings.phone %></a><% } %>
         <% if (settings.email) { %><a class="tb-item" href="mailto:<%= settings.email %>"><%- icon('mail') %><%= settings.email %></a><% } %>
-        <% if (settings.working_hours) { %><span class="tb-item"><%- icon('clock') %><%= settings.working_hours %></span><% } %>
+        <% if (settings.working_hours) { %><span class="tb-item tb-hours"><%- icon('clock') %><%= settings.working_hours %></span><% } %>
       </div>
       <div class="tb-right">
-        <span class="tb-item faint"><%= nd.formatBs(nd.todayBs(), lang) %></span>
+        <span class="tb-item tb-date faint"><%= nd.formatBs(nd.todayBs(), lang) %></span>
         <%- include('../partials/theme-picker') %>
-        <span class="lang-switch" role="group" aria-label="Language">
+        <% if (!locals.languages || languages.length > 1) { %><span class="lang-switch" role="group" aria-label="Language">
           <a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">नेपाली</a>
           <a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a>
-        </span>
+        </span><% } %>
       </div>
     </div>
   </div>

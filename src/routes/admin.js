@@ -623,7 +623,19 @@ router.get('/theme', requireAdmin('admin'), ah(async (req, res) => {
     members: Number(await db.value('SELECT count(*) FROM members WHERE theme_pref IS NOT NULL AND deleted_at IS NULL')) || 0,
     admins: Number(await db.value('SELECT count(*) FROM admin_users WHERE theme_pref IS NOT NULL AND deleted_at IS NULL')) || 0,
   };
-  res.render('admin/theme', { title: res.locals.t('रूप / थिम', 'Theme'), pol, swatches: themes.swatches(pol.orgColor), modes: themes.MODES, counts });
+  const s = await settings.all();
+  res.render('admin/theme', { title: res.locals.t('रूप / थिम', 'Theme'), pol, swatches: themes.swatches(pol.orgColor), modes: themes.MODES, counts,
+    L: require('../lib/layouts'), lay: require('../lib/layouts').resolve(s), langDefault: s.lang_default === 'en' ? 'en' : 'np', langEnabled: s.lang_enabled || 'both',
+    designs: require('../lib/starter').list(), currentDesign: s.starter_design || '' });
+}));
+// one-click: apply a complete starter design (look + layout; optionally fill empty sections with starter content)
+router.post('/theme/design', requireAdmin('admin'), ah(async (req, res) => {
+  const starter = require('../lib/starter');
+  if (!starter.DESIGNS[req.body.design]) { flash(req, 'error', 'Unknown design'); return res.redirect('/admin/theme'); }
+  await starter.apply(req.body.design, { content: req.body.content === '1' });
+  await auth.audit(req, 'update', 'site_settings', null, 'Applied design ' + req.body.design);
+  flash(req, 'success', res.locals.t('डिजाइन लागू भयो।', 'Design applied.'));
+  res.redirect('/admin/theme');
 }));
 router.post('/theme', requireAdmin('admin'), ah(async (req, res) => {
   const b = req.body, s = await settings.all();
@@ -632,6 +644,12 @@ router.post('/theme', requireAdmin('admin'), ah(async (req, res) => {
   if (themes.isPalette(b.palette)) await settings.set('theme_default_palette', b.palette, { ...meta, label: 'Default theme palette' });
   if (themes.isMode(b.mode)) await settings.set('theme_default_mode', b.mode, { ...meta, label: 'Default theme mode' });
   await settings.set('theme_user_choice', b.allow_user === '1' ? '1' : '0', { ...meta, label: 'Users may change the theme' });
+  const L = require('../lib/layouts');
+  if (b.layout_header) await settings.set('layout_header', L.valid(L.HEADERS, b.layout_header, 'classic'), { ...meta, label: 'Menu placement' });
+  if (b.layout_home) await settings.set('layout_home', L.valid(L.HOMES, b.layout_home, 'split'), { ...meta, label: 'Home page style' });
+  if (b.layout_corners) await settings.set('layout_corners', L.valid(L.CORNERS, b.layout_corners, 'rounded'), { ...meta, label: 'Corner style' });
+  if (b.lang_enabled) await settings.set('lang_enabled', L.valid(L.LANGS, b.lang_enabled, 'both'), { ...meta, label: 'Languages offered' });
+  if (b.lang_default) await settings.set('lang_default', b.lang_default === 'en' ? 'en' : 'np', { ...meta, label: 'Default language' });
   if (b.reset_all === '1') {
     await settings.set('theme_epoch', String((Number(s.theme_epoch) || 0) + 1), { ...meta, label: 'Theme reset counter' });
     await db.query('UPDATE members SET theme_pref = NULL WHERE theme_pref IS NOT NULL');

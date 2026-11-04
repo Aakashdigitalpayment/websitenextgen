@@ -97,6 +97,7 @@ function mediaUrl(stored) {
   if (!stored) return '';
   const s = String(stored).trim().replace(/\\/g, '/');
   if (/^https?:\/\//i.test(s)) return s;
+  if (/^starter:[a-z]+$/.test(s)) return '/starter-art/' + s.slice(8) + '.svg';
   const rel = s.replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
   if (rel.includes('..')) return '';
   if (rel.startsWith('_private/')) return '/admin/files/' + rel.split('/').map(encodeURIComponent).join('/'); // staff-only route

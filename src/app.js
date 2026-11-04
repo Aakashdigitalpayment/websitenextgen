@@ -17,6 +17,7 @@ const util = require('./lib/util');
 const nd = require('./lib/nepali-date');
 const { icon } = require('./lib/icons');
 const themes = require('./lib/themes');
+const layouts = require('./lib/layouts');
 const { mediaUrl, tenantDir } = require('./lib/uploads');
 const { statusLabel } = require('./lib/forms');
 const navigation = require('./lib/navigation');
@@ -82,12 +83,12 @@ function createApp() {
   });
 
   // ---------- shared view helpers ----------
-  app.use((req, res, next) => {
-    const lang = req.query.lang === 'en' || req.query.lang === 'np' ? req.query.lang : (req.get('cookie') || '').match(/(?:^|;\s*)lang=(en|np)/)?.[1] || 'np';
+  // language-dependent helpers; set once here (explicit choice or 'np') and again after the tenant's
+  // settings load when the tenant's default language / enabled languages say otherwise
+  const setLang = (req, res, lang) => {
     req.lang = lang;
     Object.assign(res.locals, {
-      lang, icon, mediaUrl, nd, util, statusLabel: s => statusLabel(s, lang),
-      path: req.path, query: req.query,
+      lang, statusLabel: s => statusLabel(s, lang),
       t: (np, en) => (lang === 'en' ? (en || np) : (np || en)),
       // pick a bilingual column: f(row, 'title') → title_np / title_en / title
       f: (row, field) => {
@@ -99,8 +100,14 @@ function createApp() {
       num: v => (lang === 'np' ? nd.toNepaliDigits(v) : String(v ?? '')),
       money: v => util.money(v, lang),
       bsDate: ad => (ad ? nd.formatBs(nd.adToBs(ad instanceof Date ? ad : String(ad).slice(0, 10)), lang) : ''),
-      isActive: p => (p === '/' ? req.path === '/' : req.path.startsWith(p)),
     });
+  };
+  app.use((req, res, next) => {
+    const chosen = req.query.lang === 'en' || req.query.lang === 'np' ? req.query.lang : (req.get('cookie') || '').match(/(?:^|;\s*)lang=(en|np)/)?.[1];
+    req.langExplicit = !!chosen;
+    Object.assign(res.locals, { icon, mediaUrl, nd, util, path: req.path, query: req.query,
+      isActive: p => (p === '/' ? req.path === '/' : req.path.startsWith(p)) });
+    setLang(req, res, chosen || 'np');
     next();
   });
 
@@ -164,6 +171,12 @@ function createApp() {
     try {
       const s = await settings.all();
       res.locals.settings = s;
+      // tenant language policy: default language + which languages are offered
+      const enabled = s.lang_enabled === 'np' || s.lang_enabled === 'en' ? [s.lang_enabled] : ['np', 'en'];
+      const want = enabled.length === 1 ? enabled[0] : req.langExplicit ? req.lang : (s.lang_default === 'en' ? 'en' : 'np');
+      if (want !== req.lang) setLang(req, res, want);
+      res.locals.languages = enabled;
+      res.locals.siteLayout = layouts.resolve(s);
       res.locals.siteName = (req.lang === 'en' ? s.site_name_en : s.site_name) || s.site_name || req.tenant.name;
       res.locals.brandColor = /^#[0-9a-f]{3,8}$/i.test(s.primary_color || '') ? s.primary_color : '#0f766e';
       next();
@@ -202,9 +215,17 @@ function createApp() {
   });
 
   app.get('/lang/:code', (req, res) => {
-    const code = req.params.code === 'en' ? 'en' : 'np';
+    let code = req.params.code === 'en' ? 'en' : 'np';
+    if (res.locals.languages && !res.locals.languages.includes(code)) code = res.locals.languages[0];
     res.cookie('lang', code, { maxAge: 365 * 86400_000, sameSite: 'lax', httpOnly: false });
     res.redirect(auth.safeNext(req.query.next, '/'));
+  });
+
+  // built-in starter slide illustrations, drawn in the visitor's current theme colour
+  app.get('/starter-art/:name', (req, res, next) => {
+    const svg = require('./lib/starter-art').render(String(req.params.name).replace(/\.svg$/, ''), res.locals.theme && res.locals.theme.brand);
+    if (!svg) return next();
+    res.set('Cache-Control', 'private, max-age=600').set('Vary', 'Cookie').type('image/svg+xml').send(svg);
   });
 
   app.use('/admin', require('./routes/admin'));

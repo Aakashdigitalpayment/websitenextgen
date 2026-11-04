@@ -1,4 +1,22 @@
 <div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('वेबसाइट, सदस्य प्यानल र एडमिनको पूर्वनिर्धारित रूप छान्नुहोस्।', 'Choose the default look of the website, member panel and admin.') %></div></div></div>
+<form class="form-card mb-3" method="post" action="/admin/theme/design">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <h3><%= t('तयारी डिजाइन', 'Ready-made designs') %></h3>
+  <p class="small muted"><%= t('एक क्लिकमा रङ, मेनुको स्थान, गृहपृष्ठ शैली र भाषा सेट हुन्छ।', 'One click sets colour, menu placement, home style and language.') %></p>
+  <div class="palette-grid">
+    <% designs.forEach(d => { %>
+      <label class="palette-card" style="--sw:<%= d.color %>">
+        <input type="radio" name="design" value="<%= d.key %>" <%= currentDesign === d.key ? 'checked' : '' %> required>
+        <div class="palette-mock"><i></i><i></i><i style="width:70%"></i><b></b></div>
+        <div class="palette-name"><%= t(d.np, d.en) %></div>
+        <div class="small faint" style="margin-top:2px"><%= d.tagline %></div>
+      </label>
+    <% }) %>
+  </div>
+  <label class="check mt-2"><input type="checkbox" name="content" value="1"> <%= t('खाली खण्डहरूमा नमुना सामग्री (सेवा, ब्याजदर, FAQ, समिति, स्लाइड) पनि थप्ने', 'Also fill empty sections with starter content (services, rates, FAQ, committees, slides)') %></label>
+  <div class="form-actions"><button class="btn btn-outline"><%- icon('check') %><%= t('डिजाइन लागू गर्नुहोस्', 'Apply design') %></button></div>
+</form>
+
 <form class="form-card" method="post" action="/admin/theme">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 
@@ -24,6 +42,34 @@
     <% modes.forEach(m => { %>
       <label class="mode-card"><input type="radio" name="mode" value="<%= m.key %>" <%= pol.mode === m.key ? 'checked' : '' %>><%- icon(m.icon) %><span><%= t(m.np, m.en) %><% if (m.key === 'system') { %><span class="small faint" style="display:block"><%= t('प्रयोगकर्ताको फोन/कम्प्युटर अनुसार', "Follows the user's phone / computer") %></span><% } %></span></label>
     <% }) %>
+  </div>
+
+  <h3 class="mt-3"><%= t('मेनुको स्थान', 'Menu placement') %></h3>
+  <div class="layout-cards">
+    <% L.HEADERS.forEach(h => { %>
+      <label class="layout-card"><input type="radio" name="layout_header" value="<%= h.key %>" <%= lay.header === h.key ? 'checked' : '' %>>
+        <span class="lmock lmock-hdr-<%= h.key %>"><i class="l"></i><i class="m"></i><i class="m"></i><i class="m"></i><i class="b"></i></span>
+        <b><%= t(h.np, h.en) %></b><span class="small faint"><%= t(...h.hint) %></span></label>
+    <% }) %>
+  </div>
+
+  <h3 class="mt-3"><%= t('गृहपृष्ठ शैली', 'Home page style') %></h3>
+  <div class="layout-cards">
+    <% L.HOMES.forEach(h => { %>
+      <label class="layout-card"><input type="radio" name="layout_home" value="<%= h.key %>" <%= lay.home === h.key ? 'checked' : '' %>>
+        <span class="lmock lmock-home-<%= h.key %>"><i class="tx"></i><i class="tx s"></i><i class="im"></i></span>
+        <b><%= t(h.np, h.en) %></b><span class="small faint"><%= t(...h.hint) %></span></label>
+    <% }) %>
+  </div>
+
+  <div class="form-grid mt-3">
+    <div class="field"><label><%= t('कुनाको शैली', 'Corners') %></label>
+      <select class="select" name="layout_corners"><% L.CORNERS.forEach(c => { %><option value="<%= c.key %>" <%= lay.corners === c.key ? 'selected' : '' %>><%= t(c.np, c.en) %></option><% }) %></select></div>
+    <div class="field"><label><%= t('उपलब्ध भाषा', 'Languages offered') %></label>
+      <select class="select" name="lang_enabled"><% L.LANGS.forEach(c => { %><option value="<%= c.key %>" <%= langEnabled === c.key ? 'selected' : '' %>><%= t(c.np, c.en) %></option><% }) %></select></div>
+    <div class="field"><label><%= t('पूर्वनिर्धारित भाषा', 'Default language') %></label>
+      <select class="select" name="lang_default"><option value="np" <%= langDefault === 'np' ? 'selected' : '' %>>नेपाली</option><option value="en" <%= langDefault === 'en' ? 'selected' : '' %>>English</option></select>
+      <div class="field-hint"><%= t('पहिलो पटक आउने आगन्तुकले यही भाषा देख्छन्।', 'First-time visitors see this language.') %></div></div>
   </div>
 
   <h3 class="mt-3"><%= t('प्रयोगकर्ताको छनोट', 'User choice') %></h3>
