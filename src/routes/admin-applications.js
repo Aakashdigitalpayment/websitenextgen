@@ -409,6 +409,9 @@ router.get('/files/*rest', requireAdmin('staff'), (req, res, next) => {
   const rest = [].concat(req.params.rest || []).join('/');
   if (!rest.startsWith('_private/')) return next();
   if (rest.startsWith('_private/information-room-items/') && auth.roleLevel(req.admin.role) < ADMIN) return res.status(403).end();
+  // application documents live in _private/<module>/…: admin-only modules keep their documents admin-only too
+  const mod = Object.hasOwn(modules, rest.split('/')[1] || '') ? modules[rest.split('/')[1]] : null;
+  if (mod && mod.adminOnly && auth.roleLevel(req.admin.role) < ADMIN) return res.status(403).end();
   sendStored(req, res, next, rest);
 });
 

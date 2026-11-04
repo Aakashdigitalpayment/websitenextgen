@@ -56,7 +56,13 @@ router.post('/backup', auth.requireAdmin('superadmin'), ah(async (req, res) => {
   const schema = db.currentSchema();
   const tables = (await db.many(`SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE' ORDER BY 1`, [schema])).map(r => r.table_name);
   // secrets stay out of the file: hashes, vault ciphertext, TOTP secrets, sessions
-  const REDACT = { admin_users: ['password', 'twofa_secret', 'twofa_backup_codes'], members: ['password_hash'], office_credentials: ['password_enc', 'password_iv', 'password_tag'], member_otp_tokens: ['otp_code'], site_settings: [] };
+  const REDACT = {
+    admin_users: ['password', 'twofa_secret', 'twofa_backup_codes'],
+    members: ['password_hash', 'twofa_secret', 'twofa_backup_codes'],
+    member_id_cards: ['cvv'], partner_facilities: ['pin_hash'],
+    api_clients: ['key_hash', 'webhook_secret', 'webhook_secret_enc', 'webhook_secret_iv', 'webhook_secret_tag'],
+    office_credentials: ['password_enc', 'password_iv', 'password_tag'], member_otp_tokens: ['otp_code', 'otp_hash'], site_settings: [],
+  };
   const SECRET_SETTING = /password|api_key|token|secret|private/;
   await auth.audit(req, 'backup', 'tenant', null, `JSON backup downloaded (${tables.length} tables)`);
   res.set('Cache-Control', 'no-store').type('application/json').attachment(`${req.tenant.slug}-backup-${new Date().toISOString().slice(0, 10)}.json`);

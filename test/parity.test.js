@@ -262,21 +262,21 @@ test('partner desk: PIN set by admin, service logged on /verify only after a car
   });
   let r = await admin.form(`/admin/partners/${partner.id}/pin`, { pin: '12' }, '/admin/partners');
   assert.equal(await inA(() => db.value('SELECT pin_hash FROM partner_facilities WHERE id = $1', [partner.id])), null);
-  r = await admin.form(`/admin/partners/${partner.id}/pin`, { pin: '2468' }, '/admin/partners');
+  r = await admin.form(`/admin/partners/${partner.id}/pin`, { pin: '246813' }, '/admin/partners');
   const row = await inA(() => db.one('SELECT pin_hash, partner_code FROM partner_facilities WHERE id = $1', [partner.id]));
   assert.ok(row.pin_hash && row.partner_code.startsWith('PF-'));
 
   const desk = client();
   // no verified card in this session → refused
-  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '2468' }, '/verify');
+  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '246813' }, '/verify');
   assert.equal(r.status, 403);
   r = await desk.form('/verify', { code: 'PAR-TEST-0001', cvv: '4321' });
   assert.match(r.text, /Log service|सेवा लग गर्नुहोस्/);
-  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '0000', service_name: 'Check-up' }, '/verify');
+  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '000000', service_name: 'Check-up' }, '/verify');
   assert.equal(r.status, 422);
-  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '2468', service_name: 'Check-up', service_taken: 'yes' }, '/verify');
+  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '246813', service_name: 'Check-up', service_taken: 'yes' }, '/verify');
   assert.equal(r.status, 200);
-  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '2468' }, '/verify');
+  r = await desk.form('/verify/service', { member_id: String(mid), partner_id: String(partner.id), partner_pin: '246813' }, '/verify');
   assert.equal(r.status, 422); // 90-second duplicate guard
   assert.equal(await inA(() => db.value('SELECT count(*) FROM member_partner_services WHERE member_id = $1', [mid])), 1);
   const m = await memberClient('9841000001');

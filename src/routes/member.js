@@ -67,13 +67,17 @@ router.get('/oauth/google/callback', ah(async (req, res) => {
   }
   // login: by linked Google id, else by verified email of exactly one member without a Google link
   let m = await db.one('SELECT * FROM members WHERE google_id = $1 AND deleted_at IS NULL', [info.sub]);
+  let linkNow = false;
   if (!m && info.email) {
+    // an email on the member record is not proof of ownership (it can come from forms): auto-link only accounts with 2FA,
+    // which still asks for the authenticator below; everyone else links from the profile after a normal sign-in
     const byEmail = await db.many("SELECT * FROM members WHERE lower(email) = $1 AND deleted_at IS NULL AND (google_id IS NULL OR google_id = '') LIMIT 2", [info.email]);
-    if (byEmail.length === 1) { m = byEmail[0]; await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, m.id]); }
+    if (byEmail.length === 1 && Number(byEmail[0].twofa_enabled)) { m = byEmail[0]; linkNow = true; }
   }
   if (!m) return fail(res.locals.t('यो Google खातासँग कुनै सदस्य जोडिएको छैन। मोबाइल/पासवर्डले लगइन गरेर प्रोफाइलबाट जोड्नुहोस्।', 'No member is linked to this Google account. Sign in with your mobile and password, then link it from your profile.'));
   const gate = require('../lib/member-portal').eligibilityError(m, res.locals.t);
   if (gate) return fail(gate);
+  if (linkNow) await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, m.id]);
   const started = await auth.startMemberSession(req, m); // never skips the member's authenticator (2FA)
   await auth.audit(req, 'login_google', 'members', m.id, 'Member login (Google)', { actorId: m.id, actorName: m.name });
   res.redirect(started.needs2fa ? '/member/login/2fa' : '/member');

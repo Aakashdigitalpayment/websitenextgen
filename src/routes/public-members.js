@@ -93,10 +93,9 @@ router.post('/track', trackLimiter, ah(async (req, res) => {
   for (const mod of Object.values(modules)) {
     if (mod.noTracking || mod.key === 'contact') continue;
     const cols = await db.columns(mod.table);
-    if (!cols.has('tracking_id') || !cols.has(mod.phoneCol)) continue;
-    const params = [phone];
-    let where = `${portal.phoneDigitsSql(mod.phoneCol)} = $1`;
-    if (cols.has('email')) { params.push(email); where += " AND (lower(trim(COALESCE(email, ''))) = $2 OR COALESCE(email, '') = '')"; }
+    if (!cols.has('tracking_id') || !cols.has(mod.phoneCol) || !cols.has('email')) continue; // both contacts must be on the row
+    const params = [phone, email];
+    const where = `${portal.phoneDigitsSql(mod.phoneCol)} = $1 AND lower(trim(COALESCE(email, ''))) = $2`;
     const rows = await db.many(`SELECT * FROM ${mod.table} WHERE ${where} AND tracking_id IS NOT NULL ${cols.has('deleted_at') ? 'AND deleted_at IS NULL' : ''} ORDER BY created_at DESC LIMIT 50`, params);
     rows.forEach(row => list.push({ mod, row }));
   }

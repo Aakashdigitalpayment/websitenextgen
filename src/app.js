@@ -161,7 +161,9 @@ function createApp() {
 
   // tenant-isolated uploaded files
   app.use('/uploads', (req, res, next) => {
-    if (/^\/_private(\/|$)/i.test(decodeURIComponent(req.path))) return res.status(404).end();
+    let rel;
+    try { rel = path.posix.normalize('/' + decodeURIComponent(req.path)).replace(/^\/+/, ''); } catch { return res.status(400).end(); }
+    if (/^_private(\/|$)/i.test(rel) || /(^|\/)_private(\/|$)/i.test(decodeURIComponent(req.path))) return res.status(404).end();
     express.static(tenantDir(req), { maxAge: config.isProd ? '30d' : 0, dotfiles: 'deny', index: false,
       setHeaders: r => r.set('X-Content-Type-Options', 'nosniff').set('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'") })(req, res, next);
   });

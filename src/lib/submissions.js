@@ -27,7 +27,8 @@ const hooks = {
     if (ctx.data.email) ctx.data.email = String(ctx.data.email).toLowerCase();
     const dup = await db.one("SELECT id, tracking_id FROM membership_applications WHERE mobile = $1 AND status = 'pending' ORDER BY id DESC LIMIT 1", [mobile]);
     if (dup) {
-      return { row: dup, duplicate: true, notice: [`यही मोबाइलमा पेन्डिङ अनुरोध पहिले नै छ — Tracking ID: ${dup.tracking_id}`, `A pending request with this mobile already exists — Tracking ID: ${dup.tracking_id}`] };
+      // the existing tracking ID is NOT shown (it is half of the tracker's two factors); the applicant has it by SMS/email
+      return { row: { ...dup, tracking_id: null }, duplicate: true, notice: ['यही मोबाइलमा पेन्डिङ अनुरोध पहिले नै छ। पहिले पाएको SMS/इमेलको Tracking ID प्रयोग गर्नुहोस् वा कार्यालयमा सम्पर्क गर्नुहोस्।', 'A pending request with this mobile already exists. Use the tracking ID from your earlier SMS/email, or contact the office.'] };
     }
     return null;
   },

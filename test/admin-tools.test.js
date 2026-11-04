@@ -249,7 +249,7 @@ test('members-only report files are gated; unlock by membership number', async (
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'r1.pdf'), '%PDF-1.4 test');
   const id = await inTenant(async () => {
-    await db.insert('members', { name: 'Unlock Member', sadasyata_number: 'UM-77', approval_status: 'approved', is_active: 1 });
+    await db.insert('members', { name: 'Unlock Member', sadasyata_number: 'UM-77', phone: '9811177777', approval_status: 'approved', is_active: 1 });
     return (await db.insert('reports', { title: 'Secret AGM', title_np: 'गोप्य', file_path: 'reports/r1.pdf', access_level: 'member', is_active: 1 })).id;
   });
   const c = client();
@@ -258,7 +258,9 @@ test('members-only report files are gated; unlock by membership number', async (
   assert.equal((await c.get(`/reports/${id}/file`)).status, 403);
   await c.form('/reports/unlock', { membership_no: 'WRONG' }, '/reports');
   assert.equal((await c.get(`/reports/${id}/file`)).status, 403);
-  await c.form('/reports/unlock', { membership_no: 'um-77' }, '/reports');
+  await c.form('/reports/unlock', { membership_no: 'um-77', mobile: '9800000000' }, '/reports'); // right number, wrong mobile → still locked
+  assert.equal((await c.get(`/reports/${id}/file`)).status, 403);
+  await c.form('/reports/unlock', { membership_no: 'um-77', mobile: '9811177777' }, '/reports');
   const file = await c.get(`/reports/${id}/file`);
   assert.equal(file.status, 200);
   // the legacy public copy was moved to private storage

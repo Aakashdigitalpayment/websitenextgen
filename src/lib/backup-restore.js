@@ -70,10 +70,15 @@ async function apply(data, tenant) {
       const t = db.ident(table);
       const types = await db.columns(table);
       let rows = data.tables[table];
-      if (table === 'members') {
-        // the export redacts password hashes: keep the current hash of each member id
-        const hashes = new Map((await db.many('SELECT id, password_hash FROM members')).map(r => [r.id, r.password_hash]));
-        rows = rows.map(r => (r.password_hash == null && hashes.has(r.id) ? { ...r, password_hash: hashes.get(r.id) } : r));
+      // the export redacts secrets (password hashes, 2FA seeds, card CVVs, PINs, API keys): keep the current values per id
+      const KEEP = { members: ['password_hash', 'twofa_secret', 'twofa_backup_codes'], member_id_cards: ['cvv'], partner_facilities: ['pin_hash'],
+        api_clients: ['key_hash', 'webhook_secret', 'webhook_secret_enc', 'webhook_secret_iv', 'webhook_secret_tag'] }[table];
+      if (KEEP) {
+        const keep = KEEP.filter(c => types.has(c));
+        if (keep.length) {
+          const cur = new Map((await db.many(`SELECT id, ${keep.map(c => db.ident(c)).join(', ')} FROM ${t}`)).map(r => [r.id, r]));
+          rows = rows.map(r => { const c = cur.get(r.id); if (!c) return r; const out = { ...r }; for (const k of keep) if (out[k] == null) out[k] = c[k]; return out; });
+        }
       }
       if (table === 'site_settings') {
         const current = new Map((await db.many('SELECT setting_key, setting_value FROM site_settings')).map(r => [r.setting_key, r.setting_value]));

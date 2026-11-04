@@ -9,7 +9,8 @@
     </div>
     <form class="flex gap-1 wrap mt-2" method="post" action="/reports/unlock">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <input class="input" name="membership_no" required maxlength="50" autocomplete="off" placeholder="<%= t('सदस्यता नम्बर', 'Membership number') %>" aria-label="<%= t('सदस्यता नम्बर', 'Membership number') %>" style="max-width:260px">
+      <input class="input" name="membership_no" required maxlength="50" autocomplete="off" placeholder="<%= t('सदस्यता नम्बर', 'Membership number') %>" aria-label="<%= t('सदस्यता नम्बर', 'Membership number') %>" style="max-width:220px">
+      <input class="input" name="mobile" required inputmode="numeric" maxlength="14" autocomplete="tel" placeholder="<%= t('दर्ता भएको मोबाइल', 'Registered mobile') %>" aria-label="<%= t('दर्ता भएको मोबाइल', 'Registered mobile') %>" style="max-width:200px">
       <button class="btn btn-primary"><%= t('खोल्नुहोस्', 'Unlock') %></button>
     </form>
     <% if (unlockError) { %><div class="field-error mt-1"><%= unlockError %></div><% } %>

@@ -32,13 +32,17 @@ function fail(req) {
 }
 
 /** @returns {Promise<{ok:true}|{ok:false,error:[np,en]}>} */
-async function tryUnlock(req, raw) {
+async function tryUnlock(req, raw, mobileRaw) {
   if (guard(req).blocked) return { ok: false, error: ['धेरै पटक प्रयास भयो। केही समयपछि फेरि प्रयास गर्नुहोस्।', 'Too many attempts. Please try again later.'] };
   const id = nd.toLatinDigits(String(raw || '')).replace(/\s+/g, '').toUpperCase().slice(0, 50);
   if (id.length < 2) { fail(req); return { ok: false, error: ['मान्य सदस्यता नम्बर लेख्नुहोस्।', 'Enter a valid membership number.'] }; }
   const variants = [...new Set([id, nd.toNepaliDigits ? nd.toNepaliDigits(id) : id])];
+  // membership numbers are often sequential: the mobile registered with it is the second factor
+  const mobile = nd.toLatinDigits(String(mobileRaw || '')).replace(/\D/g, '').slice(-10);
+  if (mobile.length !== 10) { fail(req); return { ok: false, error: ['सदस्यता नम्बर र दर्ता भएको मोबाइल दुवै लेख्नुहोस्।', 'Enter the membership number and the registered mobile.'] }; }
   const row = await db.one(`SELECT id FROM members WHERE deleted_at IS NULL AND is_active = 1 AND approval_status = 'approved'
-                            AND upper(trim(sadasyata_number)) = ANY($1::text[]) LIMIT 1`, [variants]);
+                            AND upper(trim(sadasyata_number)) = ANY($1::text[])
+                            AND right(regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g'), 10) = $2 LIMIT 1`, [variants, mobile]);
   if (!row) { fail(req); return { ok: false, error: ['सदस्यता नम्बर प्रमाणित हुन सकेन।', 'Membership number could not be verified.'] }; }
   req.session[SESSION_KEY] = { at: Date.now(), via: 'membership_no', memberId: row.id };
   delete req.session[GUARD_KEY];

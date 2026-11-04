@@ -28,10 +28,10 @@ function normalizeMobile(p) {
   if (d.length > 10 && d.startsWith('977')) d = d.slice(-10);
   return d;
 }
+/** Exact match on the normalised 10-digit mobile (a short ledger number must not match any suffix). */
 function phonesMatch(a, b) {
   const x = normalizeMobile(a), y = normalizeMobile(b);
-  if (!x || !y) return false;
-  return x === y || x.endsWith(y) || y.endsWith(x);
+  return !!x && !!y && x.length >= 10 && x === y;
 }
 /** SQL expression: a phone column reduced to digits (for comparisons with normalizeMobile output). */
 const phoneDigitsSql = col => `right(regexp_replace(COALESCE(${col}::text, ''), '[^0-9]', '', 'g'), 10)`;
@@ -129,7 +129,7 @@ async function register({ sadasyata, email, phone, password, confirm }, t) {
     if (stub) {
       const m = await db.one(`UPDATE members SET name = $1, email = COALESCE($2, email), phone = COALESCE($3, phone), password_hash = $4,
                                 kyc_application_id = COALESCE($5, kyc_application_id),
-                                approval_status = CASE WHEN approval_status = 'rejected' THEN 'pending' ELSE approval_status END
+                                approval_status = 'pending' -- knowing a member ID + mobile is not proof of identity: the office approves
                               WHERE id = $6 RETURNING *`,
       [kycEn || stub.name || kycNp || 'Member', email, mobile, hash, kyc?.id || null, stub.id]);
       return { member: m, attached: true };

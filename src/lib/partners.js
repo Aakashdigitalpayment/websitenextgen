@@ -29,14 +29,23 @@ async function setPin(partnerId, pin) {
   await db.query('UPDATE partner_facilities SET pin_hash = $1, partner_code = COALESCE(NULLIF(partner_code, \'\'), $2), updated_at = now() WHERE id = $3',
     [hash, row && row.partner_code ? row.partner_code : await generateCode(), partnerId]);
 }
-const validPin = pin => /^[A-Za-z0-9]{4,12}$/.test(String(pin || '').trim());
+const validPin = pin => /^[A-Za-z0-9]{6,12}$/.test(String(pin || '').trim());
+const PIN_MAX_FAILS = 5, PIN_LOCK_MIN = 15;
 
 /** Returns { ok } or { ok:false, error: 'partner'|'pin'|'duplicate' } (legacy logMemberPartnerService). */
 async function logService({ memberId, cardNo = '', partnerId, serviceName = '', taken = true, note = '', pin = '', ip = '' }) {
   if (!(memberId > 0) || !(partnerId > 0)) return { ok: false, error: 'invalid' };
   const partner = await db.one('SELECT * FROM partner_facilities WHERE id = $1', [partnerId]);
   if (!partner || !Number(partner.is_active)) return { ok: false, error: 'partner' };
-  if (!(await verifyPin(partner, pin))) return { ok: false, error: 'pin' };
+  if (partner.pin_locked_until && new Date(partner.pin_locked_until) > new Date()) return { ok: false, error: 'locked' };
+  if (!(await verifyPin(partner, pin))) {
+    await db.query(`UPDATE partner_facilities SET
+                      pin_locked_until = CASE WHEN pin_failed_count + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE pin_locked_until END,
+                      pin_failed_count = CASE WHEN pin_failed_count + 1 >= $2 THEN 0 ELSE pin_failed_count + 1 END
+                    WHERE id = $1`, [partner.id, PIN_MAX_FAILS, PIN_LOCK_MIN]);
+    return { ok: false, error: 'pin' };
+  }
+  if (partner.pin_failed_count) await db.query('UPDATE partner_facilities SET pin_failed_count = 0 WHERE id = $1', [partner.id]).catch(() => {});
   if (await db.value("SELECT 1 FROM member_partner_services WHERE member_id = $1 AND partner_id = $2 AND created_at >= now() - interval '90 seconds'", [memberId, partnerId])) {
     return { ok: false, error: 'duplicate' };
   }

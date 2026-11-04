@@ -81,7 +81,12 @@ function resolve(path) {
   let best = null, len = -1;
   for (const s of sections) for (const pre of s.prefixes) if (under(p, pre.toLowerCase()) && pre.length > len) { best = s; len = pre.length; }
   if (best) return { section: best.key, group: best.group };
-  if (under(p, '/files')) return { section: 'inbox:*', group: 'applications' }; // other private files: application documents
+  if (under(p, '/files')) {
+    // application documents: _private/<module>/… → that module's inbox permission (not "any inbox")
+    const seg = (p.split('/')[3] || '').replace(/-/g, '_');
+    const s = sections.find(x => x.key === 'inbox:' + seg);
+    return s ? { section: s.key, group: s.group } : { section: 'inbox:*', group: 'applications' };
+  }
   return null;
 }
 
