@@ -8,9 +8,13 @@ const modules = require('../modules/applications');
 const { flash } = require('../lib/security');
 const push = require('../lib/push');
 const att = require('../lib/attendance');
+const google = require('../lib/google-oauth');
+const QRCode = require('qrcode');
 
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+router.use(ah(async (req, res, next) => { res.locals.googleEnabled = !!(await google.config()); next(); }));
 
 // ---------------------------------------------------------------- auth
 router.get('/login', (req, res) => {
@@ -40,6 +44,45 @@ router.post('/forgot', ah(async (req, res) => {
   }
   // same response whether or not the member exists (no account enumeration)
   res.render('member/forgot', { layout: 'auth', title: res.locals.t('पासवर्ड बिर्सनुभयो?', 'Forgot password?'), done: true });
+}));
+
+// ---------------------------------------------------------------- Google sign-in (members)
+router.get('/oauth/google', ah(async (req, res) => {
+  const url = await google.start(req, 'login');
+  if (!url) return res.redirect('/member/login');
+  res.redirect(url);
+}));
+
+router.get('/oauth/google/callback', ah(async (req, res) => {
+  const fail = msg => { flash(req, 'error', msg); return res.redirect(req.member ? '/member/profile' : '/member/login'); };
+  let info;
+  try { info = await google.finish(req); } catch (e) {
+    return fail(e.message === 'unverified' ? res.locals.t('Google इमेल प्रमाणित छैन।', 'Your Google email is not verified.') : res.locals.t('Google बाट लगइन हुन सकेन। फेरि प्रयास गर्नुहोस्।', 'Google sign-in failed. Please try again.'));
+  }
+  if (info.intent === 'link') {
+    if (!req.member) return fail(res.locals.t('पहिले लगइन गर्नुहोस्।', 'Please sign in first.'));
+    const taken = await db.value('SELECT 1 FROM members WHERE google_id = $1 AND id <> $2', [info.sub, req.member.id]);
+    if (taken) return fail(res.locals.t('यो Google खाता अर्को सदस्यसँग जोडिएको छ।', 'This Google account is linked to another member.'));
+    await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, req.member.id]);
+    await auth.audit(req, 'google_link', 'members', req.member.id, 'Google account linked');
+    flash(req, 'success', res.locals.t('Google खाता जोडियो।', 'Google account linked.'));
+    return res.redirect('/member/profile');
+  }
+  // login: by linked Google id, else by verified email of exactly one member without a Google link
+  let m = await db.one('SELECT * FROM members WHERE google_id = $1 AND deleted_at IS NULL', [info.sub]);
+  if (!m && info.email) {
+    const byEmail = await db.many("SELECT * FROM members WHERE lower(email) = $1 AND deleted_at IS NULL AND (google_id IS NULL OR google_id = '') LIMIT 2", [info.email]);
+    if (byEmail.length === 1) { m = byEmail[0]; await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, m.id]); }
+  }
+  if (!m) return fail(res.locals.t('यो Google खातासँग कुनै सदस्य जोडिएको छैन। मोबाइल/पासवर्डले लगइन गरेर प्रोफाइलबाट जोड्नुहोस्।', 'No member is linked to this Google account. Sign in with your mobile and password, then link it from your profile.'));
+  if (!m.is_active) return fail(res.locals.t('तपाईंको खाता निष्क्रिय छ।', 'Your account is inactive.'));
+  if (m.approval_status && m.approval_status !== 'approved') return fail(res.locals.t('तपाईंको खाता स्वीकृत हुन बाँकी छ।', 'Your account is awaiting approval.'));
+  await auth.regenerate(req);
+  req.session.tenantId = req.tenant.id;
+  req.session.memberId = m.id;
+  await db.query('UPDATE members SET last_login = now() WHERE id = $1', [m.id]);
+  await auth.audit(req, 'login_google', 'members', m.id, 'Member login (Google)', { actorId: m.id, actorName: m.name });
+  res.redirect('/member');
 }));
 
 router.use(auth.requireMember);
@@ -123,6 +166,38 @@ router.post('/profile', ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- digital ID card
+router.get('/oauth/google/link', ah(async (req, res) => {
+  const url = await google.start(req, 'link');
+  res.redirect(url || '/member/profile');
+}));
+router.post('/oauth/google/unlink', ah(async (req, res) => {
+  if (!req.member.password_hash) { flash(req, 'error', res.locals.t('पहिले पासवर्ड सेट गर्नुहोस्।', 'Set a password first.')); return res.redirect('/member/profile'); }
+  await db.query('UPDATE members SET google_id = NULL WHERE id = $1', [req.member.id]);
+  await auth.audit(req, 'google_unlink', 'members', req.member.id, 'Google account unlinked');
+  res.redirect('/member/profile');
+}));
+
+// ---------------------------------------------------------------- membership certificate + KYC print
+router.get('/certificate', ah(async (req, res) => {
+  const m = req.member;
+  if (m.approval_status !== 'approved') { flash(req, 'error', res.locals.t('खाता स्वीकृत भएपछि मात्र प्रमाणपत्र उपलब्ध हुन्छ।', 'The certificate is available once your membership is approved.')); return res.redirect('/member'); }
+  const card = await db.one("SELECT verification_code FROM member_id_cards WHERE member_id = $1 AND status = 'active' ORDER BY id DESC LIMIT 1", [String(m.id)]);
+  const verifyCode = card?.verification_code || '';
+  const target = `${req.protocol}://${req.get('host')}/verify${verifyCode ? '?code=' + encodeURIComponent(verifyCode) : ''}`;
+  const sinceAd = (m.approved_at || m.created_at) ? new Date(m.approved_at || m.created_at).toISOString().slice(0, 10) : null;
+  res.render('member/certificate', { layout: false, qr: await QRCode.toDataURL(target, { margin: 1, width: 200 }), verifyCode: verifyCode || '—', since: sinceAd ? nd.adToBs(sinceAd) : null });
+}));
+
+router.get('/kyc-print', ah(async (req, res) => {
+  const m = req.member;
+  const keys = [m.sadasyata_number, m.member_card_no].filter(Boolean);
+  const k = await db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3)) OR mobile = $4)
+                          ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
+  if (!k) { flash(req, 'info', res.locals.t('तपाईंको KYC फारम भेटिएन। पहिले KYC भर्नुहोस्।', 'No KYC form found. Please fill in the KYC form first.')); return res.redirect('/apply/kyc'); }
+  const mod = modules.kyc;
+  res.render('member/kyc-print', { layout: false, k, mod, options: await require('../lib/forms').resolveOptions(mod) });
+}));
+
 router.get('/id-card', ah(async (req, res) => {
   const card = await db.one("SELECT * FROM member_id_cards WHERE member_id = $1 AND status = 'active' ORDER BY id DESC LIMIT 1", [String(req.member.id)]);
   res.render('member/id-card', { title: res.locals.t('सदस्य परिचयपत्र', 'Member ID card'), card });

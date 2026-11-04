@@ -15,7 +15,7 @@
   <h1><%= t('सदस्यता प्रमाणपत्र', 'Certificate of Membership') %></h1>
   <p style="font-size:12pt;margin-top:6mm"><%= t('यो प्रमाणित गरिन्छ कि', 'This is to certify that') %></p>
   <div class="name"><%= member.name_np || member.name %></div>
-  <% if (member.name_np && member.name) { %><div class="muted"><%= member.name %></div><% } %>
+  <% if (member.name_np && member.name && member.name !== member.name_np) { %><div class="muted"><%= member.name %></div><% } %>
   <p style="font-size:12pt;max-width:200mm;margin:5mm auto 0;line-height:1.8">
     <%= t('यस संस्थाको सदस्यता नं. ', 'is a registered member of this cooperative, membership no. ') %><b><%= member.sadasyata_number || member.member_card_no || '—' %></b>
     <%= t(' मा दर्ता भई ' + (since ? nd.formatBs(since, 'np') : '—') + ' देखि सदस्य हुनुहुन्छ।', ', since ' + (since ? nd.formatBs(since, 'en') : '—') + '.') %>

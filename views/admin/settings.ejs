@@ -1,5 +1,6 @@
 <div class="content-head"><h1><%= title %></h1><% if (tab === 'notify') { %><a class="btn btn-outline btn-sm" href="/admin/notifications"><%- icon('mail') %><%= t('परीक्षण र लग', 'Test & log') %></a><% } %></div>
 <div class="tabs"><% Object.entries(groups).forEach(([g, label]) => { %><a class="tab <%= tab === g ? 'active' : '' %>" href="?tab=<%= g %>"><%= t(...label) %></a><% }) %></div>
+<% if (tab === 'oauth') { %><div class="alert alert-info"><%- icon('info') %><span><%= t('Google Cloud Console मा OAuth client (Web application) बनाउनुहोस् र Authorized redirect URI मा यो राख्नुहोस्:', 'In Google Cloud Console create an OAuth client (Web application) and add this Authorized redirect URI:') %> <code><%= oauthRedirect %></code></span></div><% } %>
 <form class="form-card" method="post" action="/admin/settings?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="_tab" value="<%= tab %>">
   <div class="form-grid">

@@ -19,3 +19,9 @@
   </div>
   <div class="form-actions"><button class="btn btn-primary"><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
 </form>
+<% if (locals.googleEnabled || member.google_id) { %>
+<div class="card maxw-md mt-3 flex justify-between items-center wrap gap-2">
+  <div><h3 class="mb-0">Google</h3><div class="small muted"><%= member.google_id ? t('तपाईंको Google खाता जोडिएको छ।', 'Your Google account is linked.') : t('Google खाता जोडेर छिटो लगइन गर्नुहोस्।', 'Link your Google account for quick sign-in.') %></div></div>
+  <% if (member.google_id) { %><form method="post" action="/member/oauth/google/unlink"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('Google खाता हटाउने?', 'Unlink Google?') %>"><%= t('हटाउनुहोस्', 'Unlink') %></button></form>
+  <% } else { %><a class="btn btn-outline btn-sm" href="/member/oauth/google/link"><%= t('Google जोड्नुहोस्', 'Link Google') %></a><% } %>
+</div><% } %>

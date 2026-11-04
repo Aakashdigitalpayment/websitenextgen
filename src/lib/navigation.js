@@ -58,6 +58,7 @@ async function build() {
       { href: '/careers', label: ['रोजगारी', 'Careers'] },
       { href: '/auctions', label: ['लिलाम', 'Auctions'] },
       { href: '/elections', label: ['निर्वाचन', 'Elections'] },
+      { href: '/programs', label: ['कार्यक्रम', 'Programmes'] },
       { href: '/calendar', label: ['सहकारी पात्रो', 'Calendar'] },
       ...pageLinks('more'),
     ] },

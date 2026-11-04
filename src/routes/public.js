@@ -435,7 +435,7 @@ router.get('/track', ah(async (req, res) => {
 
 // ---------------------------------------------------------------- ID card verification
 const verifyLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 15, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip), standardHeaders: 'draft-7', legacyHeaders: false });
-router.get('/verify', (req, res) => res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: null, code: '' }));
+router.get('/verify', (req, res) => res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: null, code: String(req.query.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) }));
 router.post('/verify', verifyLimiter, ah(async (req, res) => {
   const code = String(req.body.code || '').trim().toUpperCase().slice(0, 20);
   const cvv = nd.toLatinDigits(String(req.body.cvv || '').trim()).slice(0, 4);
@@ -462,6 +462,14 @@ router.post('/api/chat', chatLimiter, ah(async (req, res) => {
   if (!message) return res.status(400).json({ answer: '', source: 'empty' });
   const history = Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [];
   res.json(await aiChat.reply(message, history, req.lang));
+}));
+
+router.get('/programs', ah(async (req, res) => {
+  const [upcoming, past] = await Promise.all([
+    db.many('SELECT * FROM upcoming_programs WHERE is_active = 1 AND parent_program_id IS NULL AND (event_date IS NULL OR event_date >= CURRENT_DATE) ORDER BY event_date NULLS LAST LIMIT 30'),
+    db.many('SELECT title, location, event_date FROM upcoming_programs WHERE is_active = 1 AND parent_program_id IS NULL AND event_date < CURRENT_DATE ORDER BY event_date DESC LIMIT 20'),
+  ]);
+  res.render('public/programs', { title: res.locals.t('कार्यक्रमहरू', 'Programmes'), upcoming, past });
 }));
 
 // QR codes printed at programmes point here; members sign in and confirm

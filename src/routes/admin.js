@@ -543,12 +543,12 @@ router.post('/password-requests/:id/resolve', requireAdmin('staff'), ah(async (r
 const SETTING_GROUPS = {
   general: ['सामान्य', 'General'], theme: ['रूप', 'Theme'], contact: ['सम्पर्क', 'Contact'], about: ['परिचय', 'About'],
   social: ['सामाजिक सञ्जाल', 'Social'], apps: ['एप/बैंकिङ', 'Apps'], seo: ['SEO', 'SEO'],
-  notify: ['SMS / इमेल', 'SMS / email'], ai: ['AI च्याट', 'AI chat'],
+  notify: ['SMS / इमेल', 'SMS / email'], ai: ['AI च्याट', 'AI chat'], oauth: ['Google लगइन', 'Google sign-in'],
 };
 const SECRET_KEY = /password|api_key|token|secret|private/;
 router.get('/settings', requireAdmin('admin'), ah(async (req, res) => {
   const rows = await settings.grouped();
-  res.render('admin/settings', { title: res.locals.t('सेटिङ', 'Settings'), rows, groups: SETTING_GROUPS, tab: req.query.tab || 'general' });
+  res.render('admin/settings', { title: res.locals.t('सेटिङ', 'Settings'), rows, groups: SETTING_GROUPS, tab: req.query.tab || 'general', oauthRedirect: `${req.protocol}://${req.get('host')}/member/oauth/google/callback` });
 }));
 
 router.post('/settings', requireAdmin('admin'), (req, res, next) => {

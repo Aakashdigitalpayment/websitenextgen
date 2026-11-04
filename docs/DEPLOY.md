@@ -76,6 +76,7 @@ Caddy issues HTTPS certificates automatically for each host, but only after the 
 1. Open `https://platform.coopcloud.com.np/platform` and sign in with `PLATFORM_ADMIN_USER` / `PLATFORM_ADMIN_PASSWORD`.
 2. **New cooperative**: enter the slug, Nepali/English name, an optional custom domain and the first admin password.
 3. Sign in at `https://<slug>.coopcloud.com.np/admin`, change the password, turn on **2-step login**, then fill in **Settings** (logo, contact details, SMS/SMTP, AI).
+4. Optional: **Google sign-in for members.** In Google Cloud Console create an OAuth client (Web application), add the redirect URI shown in **Settings → Google sign-in**, and paste the client ID and secret there.
 
 From the command line instead:
 
@@ -103,11 +104,14 @@ npm run db:import-mysql -- --tenant=aakash --mysql=mysql://USER:PASS@OLD_HOST:33
 ## 5. Backups
 
 - **Docker:** the `backup` service writes a nightly `pg_dump` per tenant plus uploads to `./backups/` and keeps 14 days.
-- **systemd:** add a cron job:
+- **systemd:** add cron jobs for the backup and the daily cleanup (old login attempts, used OTPs, expired sessions, old logs):
 
   ```
   15 2 * * *  cd /opt/websitenextgen && scripts/backup.sh /var/backups/coop >> /var/log/coop-backup.log 2>&1
+  45 2 * * *  cd /opt/websitenextgen && /usr/bin/node scripts/cleanup.js >> /var/log/coop-cleanup.log 2>&1
   ```
+
+  With Docker, the `cleanup` service runs the same job daily.
 
 - Copy the backups off the server as well (e.g. `rclone`/`rsync` to another location).
 - **Restore one tenant:** `pg_restore --clean --if-exists -d "$DATABASE_URL" /var/backups/coop/<date>/tenant_aakash.dump`
