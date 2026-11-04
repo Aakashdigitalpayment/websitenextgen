@@ -23,6 +23,7 @@
       <% } else { %><% if (i === 0) { %><a href="<%= r.view ? r.view + row.id : '/admin/r/' + r.key + '/' + row.id + '/edit' %>" style="font-weight:500;color:var(--text)"><%= util.excerpt(v, 80) || '#' + row.id %></a><% } else { %><%= util.excerpt(v, 60) %><% } %><% } %>
     </td><% }) %>
     <td><div class="row-actions">
+      <% (r.rowLinks || []).forEach(l => { %><a class="btn btn-ghost btn-sm" href="<%= l.href.replace(':id', row.id) %>"><%- icon(l.icon || 'link') %><%= t(...l.label) %></a><% }) %>
       <a class="btn btn-ghost btn-sm btn-icon" href="/admin/r/<%= r.key %>/<%= row.id %>/edit" title="Edit"><%- icon('edit') %></a>
       <form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm btn-icon" title="Delete" data-confirm="<%= t('पक्का हटाउने?', 'Delete this item?') %>"><%- icon('trash') %></button></form>
     </div></td>

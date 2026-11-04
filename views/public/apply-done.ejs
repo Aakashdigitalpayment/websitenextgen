@@ -3,6 +3,7 @@
     <span class="icon-tile" style="margin:0 auto 12px;background:var(--ok-soft);color:var(--ok)"><%- icon('check', 'icon-lg') %></span>
     <h1 style="font-size:1.6rem"><%= t('आवेदन प्राप्त भयो', 'Application received') %></h1>
     <p class="muted"><%= t(...mod.title) %></p>
+    <% if (locals.notice) { %><div class="alert alert-info"><%- icon('info') %><span><%= t(...notice) %></span></div><% } %>
     <% if (tracking) { %>
       <div class="small muted"><%= t('तपाईंको ट्र्याकिङ नम्बर', 'Your tracking number') %></div>
       <div class="tracking-id"><%= tracking %></div>

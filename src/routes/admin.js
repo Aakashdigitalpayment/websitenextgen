@@ -25,7 +25,8 @@ const { requireAdmin } = auth;
 router.use((req, res, next) => {
   res.locals.resources = resources;
   res.locals.GROUPS = GROUPS;
-  res.locals.modules = modules;
+  res.locals.modules = req.admin && auth.roleLevel(req.admin.role) < auth.roleLevel('admin')
+    ? Object.fromEntries(Object.entries(modules).filter(([, m]) => !m.adminOnly)) : modules;
   res.locals.roleLevel = auth.roleLevel;
   next();
 });
@@ -329,130 +330,8 @@ router.post('/r/:resource/:id/delete', getResource, ah(async (req, res) => {
   res.redirect(`/admin/r/${r.key}`);
 }));
 
-// ---------------------------------------------------------------- application inboxes
-function getModule(req, res, next) {
-  const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
-  if (!m) return next('route');
-  if (auth.roleLevel(req.admin.role) < auth.roleLevel('staff')) return res.status(403).render('admin/denied', { title: 'Access denied' });
-  req.mod = m;
-  next();
-}
-
-async function inboxQuery(req, m) {
-  const cols = await db.columns(m.table);
-  const where = [], params = [];
-  if (cols.has('deleted_at')) where.push('deleted_at IS NULL');
-  const status = String(req.query.status || '');
-  if (status && cols.has('status')) { params.push(status); where.push(`status = $${params.length}`); }
-  const q = String(req.query.q || '').trim();
-  if (q) {
-    params.push('%' + q + '%');
-    const search = [m.nameCol, m.phoneCol, 'email', 'tracking_id', m.memberCol].filter(c => c && cols.has(c));
-    where.push('(' + search.map(c => `${c}::text ILIKE $${params.length}`).join(' OR ') + ')');
-  }
-  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) && !Number.isNaN(Date.parse(v));
-  if (isDate(req.query.from)) { params.push(req.query.from); where.push(`created_at >= $${params.length}::date`); }
-  if (isDate(req.query.to)) { params.push(req.query.to); where.push(`created_at < $${params.length}::date + 1`); }
-  return { w: where.length ? 'WHERE ' + where.join(' AND ') : '', params, cols, status, q };
-}
-
-router.get('/inbox/:module', getModule, ah(async (req, res) => {
-  const m = req.mod;
-  const { w, params, cols, status, q } = await inboxQuery(req, m);
-  const total = await db.value(`SELECT count(*) FROM ${m.table} ${w}`, params);
-  const pg = util.paginate(total, util.int(req.query.page, 1), 25);
-  const rows = await db.many(`SELECT * FROM ${m.table} ${w} ORDER BY created_at DESC NULLS LAST, id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params);
-  const statuses = cols.has('status') && !m.noStatus ? await forms.statusesFor(m.table) : [];
-  const options = await forms.resolveOptions(m);
-  res.render('admin/inbox-list', { title: res.locals.t(...m.title), m, rows, pg, statuses, status, q, options, hasRead: cols.has('is_read') });
-}));
-
-router.get('/inbox/:module/export.csv', getModule, ah(async (req, res) => {
-  const m = req.mod;
-  const { w, params } = await inboxQuery(req, m);
-  const rows = await db.many(`SELECT * FROM ${m.table} ${w} ORDER BY created_at DESC NULLS LAST LIMIT 10000`, params);
-  const cols = ['tracking_id', ...m.fields.filter(f => f.type !== 'file' && f.type !== 'image').map(f => f.name), 'status', 'created_at'].filter((c, i, a) => a.indexOf(c) === i && (!rows[0] || c in rows[0]));
-  await auth.audit(req, 'export', m.table, null, `CSV export (${rows.length} rows)`);
-  res.type('text/csv; charset=utf-8').attachment(`${m.key}-${new Date().toISOString().slice(0, 10)}.csv`)
-    .send(util.toCsv(cols, rows));
-}));
-
-router.get('/inbox/:module/:id', getModule, ah(async (req, res, next) => {
-  const m = req.mod;
-  const row = await db.one(`SELECT * FROM ${m.table} WHERE id = $1`, [util.int(req.params.id)]);
-  if (!row) return next();
-  const cols = await db.columns(m.table);
-  if (cols.has('is_read') && !row.is_read) await db.query(`UPDATE ${m.table} SET is_read = 1 WHERE id = $1`, [row.id]);
-  const history = await db.many('SELECT * FROM request_status_history WHERE module = $1 AND request_id = $2 ORDER BY created_at DESC', [m.key, row.id]);
-  const statuses = cols.has('status') && !m.noStatus ? await forms.statusesFor(m.table) : [];
-  const options = await forms.resolveOptions(m);
-  res.render('admin/inbox-view', { title: res.locals.t(...m.title), m, row, history, statuses, options, hasRemarks: cols.has(m.remarksCol) });
-}));
-
-router.post('/inbox/:module/:id/status', getModule, ah(async (req, res, next) => {
-  const m = req.mod;
-  const row = await db.one(`SELECT * FROM ${m.table} WHERE id = $1`, [util.int(req.params.id)]);
-  if (!row) return next();
-  const statuses = await forms.statusesFor(m.table);
-  const status = String(req.body.status || '');
-  const comment = String(req.body.comment || '').trim().slice(0, 2000);
-  const cols = await db.columns(m.table);
-  const data = {};
-  if (statuses.includes(status)) data.status = status;
-  if (cols.has(m.remarksCol) && comment) data[m.remarksCol] = comment;
-  if (cols.has('reviewed_by')) data.reviewed_by = req.admin.username;
-  if (cols.has('reviewed_at')) data.reviewed_at = new Date();
-  if (m.key === 'grievance' && status === 'resolved') data.resolved_at = new Date();
-  if (m.key === 'welfare' && req.body.approved_amount) data.approved_amount = Number(nd.toLatinDigits(req.body.approved_amount)) || null;
-  await db.transaction(async () => {
-    await db.update(m.table, row.id, await db.pick(m.table, data));
-    await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, now(), 0, 0)`, [m.key, row.id, row.status || null, data.status || row.status || null, comment || null, req.admin.id, req.admin.full_name || req.admin.username]);
-    // notify the member in-portal when we can match them
-    const memberKey = (m.memberCol && row[m.memberCol]) || row[m.phoneCol];
-    if (memberKey) {
-      const member = await db.one('SELECT id FROM members WHERE deleted_at IS NULL AND (sadasyata_number = $1 OR member_card_no = $1 OR phone = $1) LIMIT 1', [String(memberKey)]);
-      if (member) await notify.notifyMember(member.id, m.title[0] + ': ' + forms.statusLabel(data.status || row.status), comment || null, row.tracking_id ? '/track?id=' + encodeURIComponent(row.tracking_id) : null, 'status');
-    }
-  });
-  if (data.status && data.status !== row.status) {
-    notify.later(() => require('../lib/webhooks').emit('application.status_changed', { type: m.key, id: row.id, tracking_id: row.tracking_id || null, status: data.status, previous_status: row.status || null, remarks: comment || null, changed_by: req.admin.username }));
-  }
-  const notifyApplicant = req.body.notify === '1' && data.status && data.status !== row.status;
-  if (notifyApplicant && row.tracking_id) {
-    notify.later(() => notify.applicationEvent('status_changed', { name: row[m.nameCol], tracking_id: row.tracking_id, module: m.title[0], status: forms.statusLabel(data.status), remarks: comment }, { phone: row[m.phoneCol], email: row.email }));
-    await db.query('UPDATE request_status_history SET admin_chose_to_notify = 1, notify_sent = 1 WHERE id = (SELECT max(id) FROM request_status_history WHERE module = $1 AND request_id = $2)', [m.key, row.id]);
-  }
-  await auth.audit(req, 'status', m.table, row.id, `${row.status} → ${data.status || row.status}`, { old: { status: row.status }, new: data });
-  let msg = res.locals.t('स्थिति अद्यावधिक भयो।', 'Status updated.');
-  // an approved vendor is also listed as a partner facility (legacy vendor-enlistment.php)
-  if (m.key === 'vendor' && data.status === 'approved' && row.status !== 'approved') {
-    const promo = await require('../lib/partners').promoteVendor(row.id);
-    if (promo.ok && promo.created) msg += ' ' + res.locals.t(`साझेदार सुविधा सूचीमा पनि थपियो (#${promo.partnerId}) — छुट/विवरण मिलाउनुहोस्।`, `Also added to partner facilities (#${promo.partnerId}) — set the discount and details.`);
-  }
-  flash(req, 'success', msg);
-  res.redirect(`/admin/inbox/${m.key}/${row.id}`);
-}));
-
-router.post('/inbox/:module/:id/delete', getModule, ah(async (req, res) => {
-  const m = req.mod;
-  if (auth.roleLevel(req.admin.role) < auth.roleLevel('admin')) return res.status(403).render('admin/denied', { title: 'Access denied' });
-  const cols = await db.columns(m.table);
-  const id = util.int(req.params.id);
-  if (cols.has('deleted_at')) await db.query(`UPDATE ${m.table} SET deleted_at = now() WHERE id = $1`, [id]);
-  else await db.query(`DELETE FROM ${m.table} WHERE id = $1`, [id]);
-  await auth.audit(req, 'delete', m.table, id, `${m.title[1]} #${id}`);
-  flash(req, 'success', res.locals.t('हटाइयो।', 'Deleted.'));
-  res.redirect(`/admin/inbox/${m.key}`);
-}));
-
-// confidential uploads (application documents, information room) — signed-in staff only
-router.get('/files/*rest', requireAdmin('staff'), (req, res, next) => {
-  const rest = [].concat(req.params.rest || []).join('/');
-  if (!rest.startsWith('_private/')) return next();
-  if (rest.startsWith('_private/information-room-items/') && auth.roleLevel(req.admin.role) < auth.roleLevel('admin')) return res.status(403).end();
-  require('../lib/uploads').sendStored(req, res, next, rest);
-});
+// ---------------------------------------------------------------- application inboxes, KYM tools, private files
+router.use(require('./admin-applications'));
 
 router.use('/programs', require('./admin-programs'));
 router.use('/elections', require('./admin-elections'));

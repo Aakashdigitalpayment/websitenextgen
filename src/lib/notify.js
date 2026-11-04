@@ -12,8 +12,14 @@ const settings = require('./settings');
 const push = require('./push');
 
 // ---------------------------------------------------------------- helpers
+/** {{var}} placeholders; the PHP app's single-brace {var} templates (migrated rows) work too. Unknown → blank. */
 function render(tpl, vars) {
-  return String(tpl || '').replace(/\\n/g, '\n').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (vars[k] ?? '')).trim();
+  const val = k => {
+    const v = vars[k];
+    if (v && typeof v === 'object') return Object.entries(v).map(([a, b]) => `${a}: ${b}`).join('\n');
+    return v ?? '';
+  };
+  return String(tpl || '').replace(/\\n/g, '\n').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => val(k)).replace(/\{([a-z_][a-z0-9_]*)\}/gi, (m, k) => val(k)).trim();
 }
 
 const ipaddr = require('ipaddr.js');
@@ -66,7 +72,8 @@ async function overLimit(channel, event, recipient) {
                                  count(*) FILTER (WHERE channel = $1 AND recipient = $2 AND event_type = $3) AS this_one
                           FROM notification_log WHERE created_at >= CURRENT_DATE AND status = 'sent'`, [channel, recipient, event]);
   if (r.all_today >= daily) return 'daily limit reached';
-  if (event !== 'test' && r.this_one >= 3) return 'recipient limit reached';
+  // office recipients get every new application (bounded by the daily cap); applicants 3 per event per day
+  if (event !== 'test' && !String(event).endsWith(':admin') && r.this_one >= 3) return 'recipient limit reached';
   return null;
 }
 
@@ -178,23 +185,58 @@ async function template(event, audience, channel) {
   return db.one('SELECT * FROM notification_templates WHERE event_type = $1 AND audience = $2 AND channel = $3 AND enabled = 1', [event, audience, channel]);
 }
 
+/** The module's own template (includes/notification-templates.php events) or the generic one. */
+async function moduleTemplate(own, generic, audience, channel) {
+  if (own) {
+    const row = await db.one('SELECT * FROM notification_templates WHERE event_type = $1 AND audience = $2 AND channel = $3', [own, audience, channel]);
+    if (row) return Number(row.enabled) ? row : null; // a disabled module template switches that message off
+  }
+  return template(generic, audience, channel);
+}
+
+const cleanDetails = d => (d && typeof d === 'object' ? Object.fromEntries(Object.entries(d).map(([k, x]) => [safeText(k, 40), safeText(x, 200)])) : safeText(d, 500));
+const templateVars = (s, vars) => ({
+  site: s.site_name || '', site_name: s.site_name || '', site_url: s.site_url || '', ...vars,
+  name: safeText(vars.name, 40), remarks: safeText(vars.remarks, 160), status: safeText(vars.status, 40),
+  tracking: vars.tracking_id || '', details: cleanDetails(vars.details || ''),
+});
+
 /**
- * Fire an application event. vars: name, tracking_id, module, status, remarks.
- * contact: { phone, email }. Runs detached from the request (call without await).
+ * Office notification for a new submission (sendAdminNotification): email to notify_admin_emails,
+ * SMS to notify_sms_recipients — using the module's admin template (loan_application, contact_message …).
  */
-async function applicationEvent(event, vars, contact = {}) {
+async function adminEvent(mod, vars, generic = 'submitted') {
   try {
     const s = await settings.all();
-    const v = { site: s.site_name || '', ...vars, name: safeText(vars.name, 40), remarks: safeText(vars.remarks, 160), status: safeText(vars.status, 40) };
-    const memberAllowed = ch => event !== 'status_changed' || s['notify_member_' + ch] !== '0';
-    const sms = memberAllowed('sms') && contact.phone ? await template(event, 'member', 'sms') : null;
-    if (sms) await sendSms(event, contact.phone, render(sms.body, v));
-    const mail = memberAllowed('email') && contact.email ? await template(event, 'member', 'email') : null;
-    if (mail) await sendEmail(event, contact.email, render(mail.subject, v), render(mail.body, v));
-    if (event === 'submitted' && s.notify_admin_emails) {
-      const adm = await template(event, 'admin', 'email');
-      if (adm) await sendEmail(event + ':admin', s.notify_admin_emails, render(adm.subject, v), render(adm.body, v));
+    const v = templateVars(s, { module: mod.title?.[0] || '', ...vars });
+    const ev = (mod.adminEvent || mod.key || 'submitted') + ':admin';
+    if (s.notify_admin_emails) {
+      const adm = await moduleTemplate(mod.adminEvent, generic, 'admin', 'email');
+      if (adm) await sendEmail(ev, s.notify_admin_emails, render(adm.subject, v) || 'New notification', render(adm.body, v));
     }
+    const phones = String(s.notify_sms_recipients || '').split(/[,;\s]+/).map(normalizePhone).filter(Boolean);
+    if (phones.length) {
+      const sms = await moduleTemplate(mod.adminEvent, generic, 'admin', 'sms');
+      if (sms) for (const p of [...new Set(phones)]) await sendSms(ev, p, render(sms.body, v).slice(0, 320));
+    }
+  } catch (e) { console.error('notify admin:', e.message); }
+}
+
+/**
+ * Fire an application event. vars: name, tracking_id, module, status, remarks, amount, date, details.
+ * contact: { phone, email }. mod: the application module (per-module templates). Runs detached (call without await).
+ */
+async function applicationEvent(event, vars, contact = {}, mod = null) {
+  try {
+    const s = await settings.all();
+    const v = templateVars(s, vars);
+    const own = event === 'status_changed' ? mod?.memberEvent : null;
+    const memberAllowed = ch => event !== 'status_changed' || s['notify_member_' + ch] !== '0';
+    const sms = memberAllowed('sms') && contact.phone ? await moduleTemplate(own, event, 'member', 'sms') : null;
+    if (sms) await sendSms(event, contact.phone, render(sms.body, v));
+    const mail = memberAllowed('email') && contact.email ? await moduleTemplate(own, event, 'member', 'email') : null;
+    if (mail) await sendEmail(event, contact.email, render(mail.subject, v), render(mail.body, v));
+    if (event === 'submitted') await adminEvent(mod || {}, vars, 'submitted');
   } catch (e) { console.error('notify:', e.message); }
 }
 
@@ -205,4 +247,4 @@ function later(fn) {
   setImmediate(() => db.withSchema(schema, () => Promise.resolve().then(fn).catch(e => console.error('later:', e.message))));
 }
 
-module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };
+module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, adminEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };

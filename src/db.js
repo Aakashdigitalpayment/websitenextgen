@@ -42,13 +42,17 @@ async function bindClient(client, schema) {
   }
 }
 
+const pii = require('./lib/pii-crypto');
+/** Encrypted PII values (pii1:/pii2:/pii3:) come back decrypted, like the PHP app's CoopPiiStatement. */
+const decryptResult = (r, schema) => { if (r && r.rows && r.rows.length) pii.decryptRows(r.rows, schema); return r; };
+
 async function query(text, params = []) {
   const store = als.getStore();
-  if (store?.tx) return store.tx.query(text, params);
+  if (store?.tx) return decryptResult(await store.tx.query(text, params), store.schema);
   const client = await pool.connect();
   try {
     await bindClient(client, store?.schema);
-    return await client.query(text, params);
+    return decryptResult(await client.query(text, params), store?.schema);
   } finally { client.release(); }
 }
 

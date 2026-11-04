@@ -16,6 +16,8 @@ const seo = require('../lib/seo');
 const antispam = require('../lib/antispam');
 const memberAccess = require('../lib/member-access');
 const teamLib = require('../lib/team');
+const submissions = require('../lib/submissions');
+const kym = require('../lib/kym');
 
 const router = express.Router();
 router.use(seo.middleware);
@@ -422,7 +424,8 @@ router.post('/contact', submitLimiter, ah(async (req, res) => {
     const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
     return res.status(422).render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: req.body, errors });
   }
-  await forms.insertSubmission(mod, data, { is_read: 0 });
+  const row = await forms.insertSubmission(mod, data, { is_read: 0 });
+  notify.later(() => notify.adminEvent(mod, { name: row.name, details: { 'नाम': row.name, 'फोन': row.phone || '', 'इमेल': row.email || '', 'विषय': row.subject, 'सन्देश': util.excerpt(row.message, 300) } }));
   flash(req, 'success', res.locals.t('धन्यवाद! तपाईंको सन्देश प्राप्त भयो।', 'Thank you! Your message has been received.'));
   res.redirect('/contact');
 }));
@@ -446,10 +449,19 @@ const prefillFromMember = (member, mod) => {
 
 async function renderForm(req, res, mod, values = {}, errors = {}, status = 200) {
   const options = await forms.resolveOptions(mod);
+  let existingDocs = {};
+  if (mod.key === 'kyc' && req.member) {
+    const own = await kym.loadLinkedKyc(req.member);
+    if (own) {
+      existingDocs = Object.fromEntries(kym.DOC_KEYS.map(k => [k, !!own[k]]));
+      if (status === 200) values = { ...forms.rowToValues(mod, own), ...values };
+    }
+    if (req.member.sadasyata_number) values.member_id = req.member.sadasyata_number;
+  }
   if (req.query.program) values.program_id = values.program_id || req.query.program;
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
-  res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...prefillFromMember(req.member, mod), ...values }, errors });
+  res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...prefillFromMember(req.member, mod), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number });
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {
@@ -479,16 +491,26 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
     if (mod.key === 'honor' && req.member) extra.member_portal_id = req.member.id;
     if (mod.key === 'honor') extra.is_member = data.member_id ? 1 : 0;
     if (mod.key === 'job' || mod.key === 'survey') extra.is_read = 0;
-    const row = await forms.insertSubmission(mod, data, extra);
+    const out = await submissions.submit(mod, data, { body: req.body, member: req.member, options, lang: req.lang, extra });
+    if (out.errors) return renderForm(req, res, mod, req.body, out.errors, 422);
+    const row = out.row;
+    if (out.duplicate) {
+      req.session.lastSubmission = { module: mod.key, tracking: row.tracking_id || null, notice: out.notice };
+      return res.redirect(`/apply/${mod.key}/done`);
+    }
     if (req.member) {
       await notify.notifyMember(req.member.id, res.locals.t(...mod.title), res.locals.t('तपाईंको आवेदन प्राप्त भयो। ट्र्याकिङ नं: ', 'Application received. Tracking no: ') + (row.tracking_id || row.id), '/track?id=' + encodeURIComponent(row.tracking_id || ''));
     }
     notify.later(() => require('../lib/webhooks').emit('application.submitted', { type: mod.key, id: row.id, tracking_id: row.tracking_id || null, status: row.status || null,
       applicant: { name: row[mod.nameCol] || null, phone: row[mod.phoneCol] || null, email: row.email || null }, created_at: row.created_at }));
     if (row.tracking_id) {
-      notify.later(() => notify.applicationEvent('submitted', { name: row[mod.nameCol], tracking_id: row.tracking_id, module: mod.title[0] }, { phone: row[mod.phoneCol], email: row.email || row.bidder_email }));
+      const details = submissions.details(mod, row, options);
+      notify.later(() => notify.applicationEvent('submitted', { name: row[mod.nameCol], tracking_id: row.tracking_id, module: mod.title[0],
+        amount: mod.amountCol && row[mod.amountCol] ? 'Rs. ' + util.money(row[mod.amountCol]) : '', date: mod.dateCol ? row[mod.dateCol] || '' : '', details }, { phone: row[mod.phoneCol], email: row.email || row.bidder_email }, mod));
+    } else if (mod.adminEvent) {
+      notify.later(() => notify.adminEvent(mod, { name: row[mod.nameCol], details: submissions.details(mod, row, options) }));
     }
-    req.session.lastSubmission = { module: mod.key, tracking: row.tracking_id || null };
+    req.session.lastSubmission = { module: mod.key, tracking: row.tracking_id || null, notice: out.notice || null };
     res.redirect(`/apply/${mod.key}/done`);
   })().catch(next);
   step();
@@ -498,7 +520,7 @@ router.get('/apply/:key/done', (req, res, next) => {
   const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   const last = req.session.lastSubmission;
   if (!mod || !last || last.module !== mod.key) return res.redirect('/apply/' + req.params.key);
-  res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking });
+  res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking, notice: last.notice || null });
 });
 
 // ---------------------------------------------------------------- tracker, signed ID-card preview, ID card verification
@@ -530,6 +552,31 @@ router.post('/verify/service', serviceLimiter, ah(async (req, res) => {
     log: r.ok ? { ok: true, text: res.locals.t(`सेवा लग भयो — ${r.partner.partner_name}।`, `Service logged — ${r.partner.partner_name_en || r.partner.partner_name}.`) } : { ok: false, text: errors[r.error] || errors.invalid },
   });
 }));
+
+/** Office reply attachment for the applicant (tracking number + the phone used on the application). */
+const attachLimiter = rateLimit({ windowMs: 10 * 60_000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip) });
+router.get('/track/attachment', attachLimiter, ah(async (req, res, next) => {
+  const id = String(req.query.id || '').trim().toUpperCase();
+  const given = nd.toLatinDigits(String(req.query.phone || '')).replace(/\D/g, '').slice(-8);
+  if (!id || given.length < 6) return next();
+  for (const mod of Object.values(modules)) {
+    if (mod.noTracking || !mod.attachCol) continue;
+    const row = await db.one(`SELECT * FROM ${mod.table} WHERE upper(tracking_id) = $1 LIMIT 1`, [id]);
+    if (!row) continue;
+    const rowPhone = String(row[mod.phoneCol] || '').replace(/\D/g, '').slice(-8);
+    if (rowPhone.length < 6 || rowPhone !== given || !row[mod.attachCol]) return next();
+    return require('../lib/uploads').sendStored(req, res, next, row[mod.attachCol]);
+  }
+  next();
+}));
+
+// ---------------------------------------------------------------- form helpers: BS calendar data + Nepal address (static, cached)
+let formData = null;
+router.get('/js/form-data.js', (req, res) => {
+  formData = formData || 'window.BS_MONTH_DAYS=' + JSON.stringify(require('../lib/bs-month-days.json')) + ';\nwindow.NEPAL_ADDRESS=' + JSON.stringify(require('../lib/nepal-address.json')) + ';\n';
+  res.type('application/javascript').set('Cache-Control', 'public, max-age=86400').send(formData);
+});
+
 
 router.use('/marketplace', require('./marketplace').pub);
 

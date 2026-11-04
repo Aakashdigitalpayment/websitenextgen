@@ -206,7 +206,8 @@ const resources = {
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'),
     N('bs_year', 'वि.सं. वर्ष (खाली = हरेक वर्ष)', 'BS year (blank = every year)'), N('bs_month', 'महिना (१–१२)', 'Month (1–12)', { required: true, list: true }), N('bs_day', 'गते', 'Day', { required: true, list: true }),
     SEL('recurrence', 'दोहोरिने', 'Repeats', [['yearly', 'हरेक वर्ष', 'Yearly'], ['once', 'एक पटक', 'Once']], { default: 'yearly' }), T('event_type', 'प्रकार', 'Type'), TA('description_np', 'विवरण', 'Description'), ACTIVE] },
-  honor_programs: { group: 'engage', icon: 'award', title: ['सम्मान कार्यक्रम', 'Honour programmes'], order: 'id DESC', fields: [
+  honor_programs: { group: 'engage', icon: 'award', title: ['सम्मान कार्यक्रम', 'Honour programmes'], order: 'id DESC',
+    rowLinks: [{ href: '/admin/honor-programs/:id/categories', label: ['विधा', 'Categories'], icon: 'award' }], fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('fiscal_year', 'आ.व.', 'Fiscal year', { list: true }),
     T('opens_at', 'खुल्ने मिति', 'Opens', { type: 'datetime' }), T('closes_at', 'बन्द मिति', 'Closes', { type: 'datetime', list: true }), TA('instructions_np', 'निर्देशन', 'Instructions'), ACTIVE] },
   honor_categories: { group: 'engage', icon: 'award', title: ['सम्मान विधा', 'Honour categories'], order: 'display_order, id', fields: [
@@ -214,6 +215,7 @@ const resources = {
     B('requires_nominee', 'मनोनीत चाहिन्छ', 'Requires nominee'), B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE] },
   welfare_claim_types: { group: 'engage', icon: 'heart', title: ['कल्याण दाबी प्रकार', 'Welfare claim types'], order: 'display_order, id', fields: [
     T('slug', 'कोड', 'Code', { required: true, list: true }), T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
+    SEL('form_profile', 'फारमका थप विवरण', 'Form fields', [['other', 'सामान्य', 'General'], ['death', 'मृत्यु (मृतक, प्रमाणपत्र, लाभग्राही)', 'Death (deceased, certificate, beneficiary)'], ['maternity', 'सुत्केरी (प्रसूति मिति, अस्पताल)', 'Maternity (delivery date, hospital)'], ['medical', 'उपचार (रोग, उपचार मिति)', 'Medical (illness, treatment date)'], ['accident', 'दुर्घटना', 'Accident'], ['insurance', 'बीमा (पोलिसी नं., बीमा कम्पनी)', 'Insurance (policy no., insurer)']], { default: 'other', list: true }),
     B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE] },
   election_cycles: { minRole: 'admin', group: 'engage', icon: 'vote', title: ['निर्वाचन', 'Elections'], order: 'sort_order, date_from DESC NULLS LAST', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('period_label', 'अवधि', 'Period'),
@@ -267,10 +269,18 @@ const resources = {
   satisfaction_links: { group: 'links', icon: 'star', title: ['सन्तुष्टि लिङ्क', 'Satisfaction links'], order: 'display_order, id', links: [['/admin/satisfaction', 'settings', 'विजेट सेटिङ', 'Widget setting']], fields: [
     T('title', 'शीर्षक', 'Title', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }), ORDER, ACTIVE] },
   notification_templates: { minRole: 'admin', group: 'links', icon: 'mail', title: ['SMS/इमेल ढाँचा', 'Message templates'], order: 'event_type, audience, channel', fields: [
-    SEL('event_type', 'घटना', 'Event', [['submitted', 'आवेदन प्राप्त', 'Application received'], ['status_changed', 'स्थिति परिवर्तन', 'Status changed']], { required: true, list: true }),
+    SEL('event_type', 'घटना', 'Event', [
+      ['submitted', 'आवेदन प्राप्त (सबै)', 'Application received (all)'], ['status_changed', 'स्थिति परिवर्तन (सबै)', 'Status changed (all)'],
+      ['loan_application', 'नयाँ ऋण आवेदन (कार्यालय)', 'New loan application (office)'], ['kyc_application', 'नयाँ केवाइएम (कार्यालय)', 'New KYM (office)'],
+      ['account_application', 'नयाँ खाता आवेदन (कार्यालय)', 'New account application (office)'], ['grievance', 'गुनासो', 'Grievance'],
+      ['appointment', 'भेटघाट', 'Appointment'], ['digital_service', 'डिजिटल सेवा', 'Digital service'], ['honor_application', 'सम्मान आवेदन', 'Honour application'],
+      ['job_application', 'नयाँ जागिर आवेदन (कार्यालय)', 'New job application (office)'], ['contact_message', 'नयाँ सम्पर्क सन्देश (कार्यालय)', 'New contact message (office)'],
+      ['membership_application', 'नयाँ सदस्यता अनुरोध (कार्यालय)', 'New membership request (office)'], ['welfare_claim', 'नयाँ कल्याण दाबी (कार्यालय)', 'New welfare claim (office)'],
+      ['loan', 'ऋण — स्थिति (आवेदक)', 'Loan — status (applicant)'], ['kyc', 'केवाइएम — स्थिति (आवेदक)', 'KYM — status (applicant)'], ['account', 'खाता — स्थिति (आवेदक)', 'Account — status (applicant)'],
+    ], { required: true, list: true, hint: 'कार्यालय: प्रशासक; आवेदक: स्थिति परिवर्तन / office events go to admin recipients, applicant events on status change' }),
     SEL('audience', 'प्राप्तकर्ता', 'Audience', [['member', 'आवेदक', 'Applicant'], ['admin', 'प्रशासक', 'Admin']], { required: true, list: true }),
     SEL('channel', 'माध्यम', 'Channel', [['sms', 'SMS', 'SMS'], ['email', 'इमेल', 'Email']], { required: true, list: true }),
-    T('subject', 'विषय (इमेल)', 'Subject (email)'), TA('body', 'सन्देश', 'Message', { required: true, hint: '{{name}} {{tracking_id}} {{module}} {{status}} {{remarks}} {{site}}' }),
+    T('subject', 'विषय (इमेल)', 'Subject (email)'), TA('body', 'सन्देश', 'Message', { required: true, hint: '{{name}} {{tracking_id}} {{module}} {{status}} {{remarks}} {{amount}} {{date}} {{details}} {{site}}' }),
     B('enabled', 'सक्रिय', 'Enabled', { default: 1, list: true })] },
   chatbot_faqs: { group: 'links', icon: 'message', title: ['च्याटबट प्रश्नोत्तर', 'Chatbot answers'], order: 'display_order, id', fields: [
     T('question', 'प्रश्न (नेपाली)', 'Question (Nepali)', { required: true, list: true }), T('question_en', 'प्रश्न (English)', 'Question (English)'),

@@ -154,6 +154,15 @@ router.get('/requests', ah(async (req, res) => {
   res.render('member/requests', { title: res.locals.t('मेरा आवेदन', 'My applications'), requests: await myRequests(req.member) });
 }));
 
+/** Office reply attachment on one of the member's own applications. */
+router.get('/requests/:module/:id/attachment', ah(async (req, res, next) => {
+  const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
+  if (!m || !m.attachCol) return next();
+  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  if (!mine || !mine.row[m.attachCol]) return next();
+  require('../lib/uploads').sendStored(req, res, next, mine.row[m.attachCol]);
+}));
+
 router.get('/notifications', ah(async (req, res) => {
   const rows = await db.many('SELECT * FROM member_notifications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 100', [req.member.id]);
   await db.query('UPDATE member_notifications SET is_read = 1 WHERE member_id = $1 AND is_read = 0', [req.member.id]);
@@ -204,7 +213,8 @@ router.get('/kyc-print', ah(async (req, res) => {
                           ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
   if (!k) { flash(req, 'info', res.locals.t('तपाईंको KYC फारम भेटिएन। पहिले KYC भर्नुहोस्।', 'No KYC form found. Please fill in the KYC form first.')); return res.redirect('/apply/kyc'); }
   const mod = modules.kyc;
-  res.render('member/kyc-print', { layout: false, k, mod, options: await require('../lib/forms').resolveOptions(mod) });
+  const forms = require('../lib/forms');
+  res.render('member/kyc-print', { layout: false, k, mod, options: await forms.resolveOptions(mod), display: forms.displayData(mod, k) });
 }));
 
 router.get('/accounts', ah(async (req, res) => {

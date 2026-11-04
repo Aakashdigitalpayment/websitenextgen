@@ -1,0 +1,106 @@
+<%
+  const val = fl => display.value(fl);
+  const show = (fl, v) => { const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); return o ? t(o[1], o[2]) : v; };
+  const isImg = p => /\.(jpe?g|png|gif|webp)$/i.test(String(p || ''));
+  const photoField = m.fields.find(f => f.name === 'photo' || f.name === 'photo_path');
+  const photo = photoField && row[photoField.name];
+  const bioKeys = ['signature', 'left_thumb', 'right_thumb'];
+  const docs = m.fileFields.filter(f => row[f.name] && f !== photoField && !bioKeys.includes(f.name));
+  const familyField = m.fields.find(f => f.type === 'family');
+  const officeAddr = s.address || s.office_address || '';
+  const formTitle = m.key === 'kyc' ? t('व्यक्तिगत सदस्य पहिचान फारम (केवाइएम / KYM)', 'Know Your Member (KYM) form') : t(m.title[0] + ' फारम', m.title[1] + ' form');
+%><!doctype html><html lang="<%= lang === 'en' ? 'en' : 'ne' %>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= formTitle %> — <%= row.tracking_id || '#' + row.id %></title>
+<link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css">
+<style>
+  :root { --brand: <%= brandColor %>; }
+  body { background: #fff; color: #111; }
+  .sheet { max-width: 194mm; margin: 6mm auto; font-size: 10pt; line-height: 1.45; }
+  .lh { display: flex; gap: 4mm; align-items: center; border-bottom: 2.5px solid var(--brand); padding-bottom: 3mm; }
+  .lh img { height: 18mm; width: auto; }
+  .lh .org { flex: 1; text-align: center; }
+  .lh .org h1 { font-size: 16pt; margin: 0; color: var(--brand); }
+  .lh .org div { font-size: 9pt; color: #444; }
+  .title { display: flex; justify-content: space-between; align-items: flex-start; gap: 4mm; margin: 4mm 0 2mm; }
+  .title h2 { font-size: 13pt; margin: 0; }
+  .meta { font-size: 9pt; color: #333; }
+  .photo { width: 32mm; height: 38mm; border: 1px solid #999; display: flex; align-items: center; justify-content: center; font-size: 8pt; color: #888; text-align: center; overflow: hidden; flex: none; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; padding: 1mm 2mm; background: color-mix(in srgb, var(--brand) 10%, #fff); border-left: 3px solid var(--brand); }
+  table.rows { width: 100%; border-collapse: collapse; }
+  table.rows td { border: 1px solid #ccc; padding: 1.2mm 2mm; vertical-align: top; }
+  table.rows td.l { width: 26%; background: #fafafa; color: #333; }
+  table.grid { width: 100%; border-collapse: collapse; margin-top: 1mm; }
+  table.grid th, table.grid td { border: 1px solid #ccc; padding: 1.2mm 2mm; text-align: left; }
+  table.grid th { background: #f3f3f3; font-weight: 600; }
+  .docs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+  .docs figure { margin: 0; text-align: center; font-size: 8pt; border: 1px solid #ddd; padding: 1.5mm; }
+  .docs img { width: 100%; height: 30mm; object-fit: contain; }
+  .sigs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin-top: 6mm; }
+  .sig { border: 1px solid #999; height: 26mm; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .sig img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .sigl { text-align: center; font-size: 8.5pt; margin-top: 1mm; }
+  .office { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; margin-top: 10mm; font-size: 9pt; }
+  .office div { border-top: 1px solid #555; padding-top: 1mm; text-align: center; }
+  .foot { margin-top: 6mm; font-size: 8pt; color: #666; display: flex; justify-content: space-between; }
+  @page { size: A4; margin: 9mm; }
+  @media print { .no-print { display: none !important; } .sheet { margin: 0; } h3, .sigs, .office { break-inside: avoid; } }
+</style></head>
+<body <%= autoprint ? 'data-autoprint' : '' %>><div class="sheet">
+  <div class="lh">
+    <% if (s.logo) { %><img src="<%= mediaUrl(s.logo) %>" alt=""><% } %>
+    <div class="org"><h1><%= lang === 'en' ? (s.site_name_en || s.site_name) : s.site_name %></h1>
+      <% if (officeAddr) { %><div><%= officeAddr %></div><% } %>
+      <div><% if (s.phone) { %><%= t('फोन', 'Phone') %>: <%= s.phone %><% } %><% if (s.email) { %> · <%= s.email %><% } %><% if (s.registration_no) { %> · <%= t('दर्ता नं.', 'Reg. no.') %> <%= s.registration_no %><% } %></div></div>
+    <% if (s.logo) { %><div style="width:18mm"></div><% } %>
+  </div>
+  <div class="title">
+    <div><h2><%= formTitle %></h2>
+      <div class="meta"><%= t('ट्र्याकिङ नं.', 'Tracking no.') %>: <strong><%= row.tracking_id || '#' + row.id %></strong> · <%= t('पेश मिति', 'Submitted') %>: <%= bsDate(row.created_at) %><% if (row.status) { %> · <%= t('स्थिति', 'Status') %>: <strong><%= statusLabel(row.status) %></strong><% } %>
+      <% if (m.key === 'kyc' && row.risk_category) { %> · <%= t('जोखिम', 'Risk') %>: <%= String(row.risk_category).toUpperCase() %><% } %></div></div>
+    <% if (photoField) { %><div class="photo"><% if (photo && isImg(photo)) { %><img src="<%= mediaUrl(photo) %>" alt=""><% } else { %><%= t('पासपोर्ट साइज फोटो', 'Passport photo') %><% } %></div><% } %>
+  </div>
+
+  <% m.sections.forEach(sec => {
+       const rows = sec.fields.filter(fl => !['image', 'file', 'heading', 'family', 'moneyitems'].includes(fl.type) && fl.store !== 'none' && !(fl.type === 'checkbox' && !Number(val(fl))))
+         .map(fl => [fl, val(fl)]).filter(([, v]) => v !== null && v !== undefined && v !== '');
+       const hasFamily = sec.fields.some(f => f.type === 'family') && display.family.length;
+       const money = sec.fields.filter(f => f.type === 'moneyitems' && (f.name === 'income_source' ? display.income : display.expense).length);
+       if (!rows.length && !hasFamily && !money.length) return; %>
+    <h3><%= sec.title ? t(...sec.title) : t(...m.title) %></h3>
+    <% if (rows.length) { %><table class="rows"><tbody>
+      <% for (let i = 0; i < rows.length; i += 2) { %><tr>
+        <% [rows[i], rows[i + 1]].forEach(cell => { if (!cell) { %><td class="l"></td><td></td><% return; } const [fl, v] = cell; %>
+          <td class="l"><%= t(fl.label[0], fl.label[1]) %></td>
+          <td><%= fl.type === 'checkbox' ? '✓' : fl.format === 'money' ? 'रु. ' + util.money(v) : fl.type === 'date' ? bsDate(v) + ' (' + String(v).slice(0, 10) + ')' : show(fl, v) %></td>
+        <% }) %>
+      </tr><% } %>
+    </tbody></table><% } %>
+    <% if (hasFamily) { %><table class="grid"><thead><tr><th><%= t('नाता', 'Relation') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('फोन', 'Phone') %></th></tr></thead>
+      <tbody><% display.family.forEach(f => { const rel = (familyField.relations || []).find(r => r[0] === f.relation); %><tr><td><%= rel ? t(rel[1], rel[2]) : f.relation %></td><td><%= f.name %></td><td><%= f.phone || '' %></td></tr><% }) %></tbody></table><% } %>
+    <% if (money.length) { %><table class="grid"><thead><tr><th><%= t('मासिक आय स्रोत', 'Monthly income') %></th><th><%= t('रकम', 'Amount') %></th><th><%= t('मासिक खर्च', 'Monthly expenses') %></th><th><%= t('रकम', 'Amount') %></th></tr></thead><tbody>
+      <% const n = Math.max(display.income.length, display.expense.length); for (let i = 0; i < n; i++) { const a = display.income[i], b = display.expense[i]; %>
+        <tr><td><%= a ? a.name : '' %></td><td><%= a ? 'रु. ' + util.money(a.amount) : '' %></td><td><%= b ? b.name : '' %></td><td><%= b ? 'रु. ' + util.money(b.amount) : '' %></td></tr><% } %>
+      <tr><th><%= t('जम्मा आय', 'Total income') %></th><th>रु. <%= util.money(display.aml.income_total || 0) %></th><th><%= t('जम्मा खर्च', 'Total expenses') %></th><th>रु. <%= util.money(display.aml.expense_total || 0) %></th></tr>
+      <tr><th colspan="3"><%= t('मासिक बचत अनुमान (आय − खर्च)', 'Estimated monthly saving') %></th><th>रु. <%= util.money(display.aml.net_saving_estimate || 0) %></th></tr>
+    </tbody></table><% } %>
+  <% }) %>
+
+  <% if (row[m.remarksCol]) { %><h3><%= t('कार्यालयको टिप्पणी', 'Office remarks') %></h3><p style="white-space:pre-wrap;margin:0"><%= row[m.remarksCol] %></p><% } %>
+
+  <% if (docs.length) { %><h3><%= t('संलग्न कागजात', 'Attached documents') %></h3>
+    <div class="docs"><% docs.forEach(f => { %><figure><% if (isImg(row[f.name])) { %><img src="<%= mediaUrl(row[f.name]) %>" alt=""><% } else { %><div style="height:30mm;display:flex;align-items:center;justify-content:center">📄 <%= String(row[f.name]).split('.').pop().toUpperCase() %></div><% } %><figcaption><%= t(f.label[0], f.label[1]) %></figcaption></figure><% }) %></div>
+  <% } %>
+
+  <div class="sigs">
+    <% [['signature', 'आवेदकको हस्ताक्षर', 'Applicant signature'], ['left_thumb', 'बायाँ औंठा छाप', 'Left thumb'], ['right_thumb', 'दायाँ औंठा छाप', 'Right thumb']].forEach(([k, np, en]) => { %>
+      <div><div class="sig"><% if (row[k] && isImg(row[k])) { %><img src="<%= mediaUrl(row[k]) %>" alt=""><% } %></div><div class="sigl"><%= t(np, en) %></div></div>
+    <% }) %>
+  </div>
+  <div class="office">
+    <div><%= t('फारम बुझ्ने', 'Received by') %></div><div><%= t('प्रमाणित गर्ने', 'Verified by') %></div><div><%= t('स्वीकृत गर्ने', 'Approved by') %></div>
+  </div>
+  <div class="foot"><span><%= t('प्रिन्ट', 'Printed') %>: <%= bsDate(new Date()) %> · <%= admin.full_name || admin.username %></span><span><%= row.tracking_id || '#' + row.id %></span></div>
+  <p class="text-center no-print mt-3"><button class="btn btn-primary" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट / PDF', 'Print / PDF') %></button> <a class="btn btn-ghost" href="/admin/inbox/<%= m.key %>/<%= row.id %>"><%= t('फर्कनुहोस्', 'Back') %></a></p>
+</div>
+<script src="/static/js/app.js" defer></script><script src="/static/js/admin-inbox.js" defer></script></body></html>
