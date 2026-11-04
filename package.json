@@ -16,7 +16,8 @@
     "test": "node --test --test-concurrency=1 test/*.test.js",
     "tenant:create": "node scripts/tenant-create.js",
     "tenant:admin": "node scripts/tenant-admin.js",
-    "demo:seed": "node scripts/demo-seed.js"
+    "demo:seed": "node scripts/demo-seed.js",
+    "migrate:site": "node scripts/migrate-site.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

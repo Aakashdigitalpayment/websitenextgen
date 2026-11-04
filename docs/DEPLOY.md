@@ -84,22 +84,44 @@ From the command line instead:
 npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --domain=www.aakashsaccos.com.np --password='Temp@12345678'
 ```
 
-## 4. Move an existing PHP site
+## 4. Move an existing PHP site (migration tool)
 
-On the server (or anywhere that can reach both databases):
+The tool copies the database, uploaded files, settings, admins (with their passwords), members (with their passwords), 2FA and the office-credential vault from an old PHP site into one tenant. Run it on the new server, with read access to the old site's folder or database.
 
 ```bash
-npm install mysql2      # optional dependency, only needed for the import
-npm run db:import-mysql -- --tenant=aakash --mysql=mysql://USER:PASS@OLD_HOST:3306/OLD_DB \
-     --uploads=/path/to/old/public_html/assets/uploads --truncate
+npm install mysql2      # once; only needed for migrations
+
+# 1) Check first. Nothing is written; you get a plan and an HTML report.
+npm run migrate:site -- --tenant=aakash --php-root=/home/olduser/public_html --dry-run
+
+# 2) Migrate. --create also creates the tenant if it does not exist yet.
+npm run migrate:site -- --tenant=aakash --create --name="आकाश सहकारी" --domain=www.aakashsaccos.com.np \
+     --admin-password='Temp@12345678' --php-root=/home/olduser/public_html
 ```
 
-- Admin and member passwords keep working.
-- Old upload paths keep working.
-- Executable files are skipped.
-- Credentials saved in the old vault open if you set `CREDENTIALS_LEGACY_KEY` to the PHP `CRED_MASTER_KEY`.
+**`--php-root`** points at the old site's folder. The tool reads:
+- `includes/database.local.php` (MySQL connection)
+- `assets/uploads` (files)
+- `includes/.cred-master.key` (vault key)
 
-**Recommended cut-over:** import to a test subdomain → check it → re-run the import with `--truncate` right before switching → change DNS.
+If the database is on another machine, or the files were copied elsewhere, use `--mysql=mysql://user:pass@host:3306/db` and `--uploads=/path` instead.
+
+What it does:
+1. **Checks:** MySQL connection and charset, garbled ("double-encoded") Nepali text, tables and columns that have no place in the new system, file counts and free disk space.
+2. **Copies data:** every table and column that exists in both systems.
+   - `--mode=fresh` (the default) first replaces the tenant's rows in those tables.
+   - `--mode=incremental` only adds rows that are new since the last run.
+3. **Copies uploads:** PHP, HTML and other executable files are never copied.
+4. **Protects confidential files:** application documents (citizenship copies, CVs, KYC photos) and information-room files move to private storage and their paths are updated.
+5. **Re-encrypts** office credentials from the PHP AES-CBC vault to the new AES-GCM vault. This needs `CREDENTIALS_KEY`.
+6. **Verifies:** row counts, old vs new, per table; files the database points to that are missing; members who can sign in with their old password; active admins.
+7. **Writes a report:** `reports/migration-<tenant>-<time>.html`, plus a `.json` version.
+
+**Recommended cut-over:**
+1. Run with `--dry-run` and fix any warnings (e.g. charset).
+2. Migrate to a test subdomain (`aakash.coopcloud.com.np`) and check the site and admin.
+3. Right before switching, run the migration again (`fresh`) so the last day's applications come along.
+4. Map the real domain in the platform console and switch DNS.
 
 ## 5. Backups
 

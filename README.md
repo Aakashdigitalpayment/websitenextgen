@@ -50,6 +50,9 @@ npm start                       # http://aakash.localhost:3000  (admin: /admin)
 
 ## Moving an existing PHP site over
 
+The recommended way is the migration tool: `npm run migrate:site -- --tenant=<slug> --php-root=<old public_html> --dry-run`. See docs/DEPLOY.md §4. The lower-level importer below still works.
+
+
 ```bash
 npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --domain=www.aakashsaccos.com.np --password='Temp@12345678'
 npm run db:import-mysql -- --tenant=aakash --mysql=mysql://user:pass@host:3306/old_db \
