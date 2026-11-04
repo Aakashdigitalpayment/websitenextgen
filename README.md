@@ -44,13 +44,7 @@ npm start                       # http://aakash.localhost:3000  (admin: /admin)
 
 `*.localhost` resolves to 127.0.0.1 in most browsers. For local development you can also set `DEFAULT_TENANT=aakash` so that plain `http://localhost:3000` serves that tenant.
 
-Docker:
-
-```bash
-SESSION_SECRET=$(openssl rand -hex 32) docker compose up -d
-docker compose exec app npm run db:migrate
-docker compose exec app npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --domain=aakash.example.com --password='ChangeMe@12345'
-```
+**Production:** see **[docs/DEPLOY.md](docs/DEPLOY.md)**. It covers Docker Compose (app, PostgreSQL, Caddy with automatic HTTPS for every cooperative domain, and nightly backups) or systemd with Caddy/Nginx, plus DNS, tenant setup, moving the PHP sites, backup/restore, updates and a go-live checklist.
 
 ## Moving an existing PHP site over
 
@@ -106,7 +100,10 @@ Tested against the legacy `install.sql` loaded into MariaDB.
 | **Office credentials** | Admin → Office credentials (superadmin) | AES-256-GCM with a key per tenant derived from `CREDENTIALS_KEY`. Every reveal or copy is logged. PHP-encrypted entries open with `CREDENTIALS_LEGACY_KEY` and upgrade automatically. |
 | **Site licence** | Platform console (date); Admin → Licence (renewal notice) | Warning 30 days before expiry. Once expired, the public site shows a notice and only superadmins can sign in. Admins submit eSewa, Khalti or bank payment notices; the operator verifies them and sets the new date. |
 
-The PHP site's HRM pages had already been removed (they only redirect to the dashboard), so HRM is not part of this app.
+| **HRM** | Admin → HR (admin role) | Departments, employees, contracts, documents with expiry, leave per fiscal year, printable staff ID card with a QR code that opens a public verification page (`/staff/<code>`). The dashboard flags contracts and documents about to expire, and who is on leave. |
+| **Election results** | Admin → Election results | Tallies per position, leading candidates, turnout, latest ballots. Printable. |
+| **System & backup** | Admin → System / backup (superadmin) | Health checks (SMTP, SMS, AI, vault key, 2FA coverage, licence), database and upload sizes, migrations, and a JSON export of all tenant data with secrets removed. |
+| **PWA** | — | Web manifest per tenant and an offline page. The service worker caches only static files, never admin or member pages. |
 
 ### Extra environment variables
 

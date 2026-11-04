@@ -45,6 +45,22 @@ function createApp() {
   app.use(compression());
   app.use('/static', express.static(path.join(config.rootDir, 'public'), { maxAge: config.isProd ? '7d' : 0 }));
   app.get('/healthz', (req, res) => res.json({ ok: true }));
+  // Caddy on_demand_tls "ask" hook: issue certificates only for hosts we actually serve.
+  // Loopback only, so the public cannot enumerate tenant domains.
+  app.get('/__tls/allowed', async (req, res) => {
+    const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+    const extra = String(process.env.TLS_ASK_ALLOW || '').split(',').map(x => x.trim()).filter(Boolean); // e.g. docker network prefix "172.18."
+    if (!/^(127\.|::1$)/.test(ip) && !extra.some(p => ip.startsWith(p))) return res.status(403).end();
+    const domain = tenants.normalizeHost(req.query.domain);
+    if (!domain) return res.status(404).end();
+    if (domain === config.platformHost) return res.status(200).end();
+    let ok = !!(await db.value('SELECT 1 FROM platform.tenant_domains WHERE domain = $1', [domain]));
+    if (!ok && domain.endsWith('.' + config.baseDomain)) {
+      const slug = domain.slice(0, -(config.baseDomain.length + 1));
+      ok = tenants.SLUG_RE.test(slug) && !!(await db.value('SELECT 1 FROM platform.tenants WHERE slug = $1', [slug]));
+    }
+    res.status(ok ? 200 : 404).end();
+  });
   app.get('/sw.js', (req, res) => res.set('Service-Worker-Allowed', '/').set('Cache-Control', 'no-cache').sendFile(path.join(config.rootDir, 'public', 'sw.js')));
   app.use(express.urlencoded({ extended: false, limit: '1mb' }));
   app.use(express.json({ limit: '256kb' }));

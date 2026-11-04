@@ -1,9 +1,12 @@
-# Local / single-server deployment:  docker compose up -d
-# then:  docker compose exec app npm run db:migrate
-#        docker compose exec app npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --domain=aakash.localhost --password=ChangeMe@12345
+# Single-server deployment with automatic HTTPS:
+#   cp .env.example .env   (set SESSION_SECRET, CREDENTIALS_KEY, BASE_DOMAIN, PLATFORM_HOST, POSTGRES_PASSWORD)
+#   docker compose up -d --build
+#   docker compose exec app npm run db:migrate
+#   docker compose exec app npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --password='ChangeMe@12345'
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: coop
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-coop}
@@ -13,21 +16,54 @@ services:
       test: ["CMD-SHELL", "pg_isready -U coop"]
       interval: 5s
       retries: 10
+    networks: [internal]
+
   app:
     build: .
+    restart: unless-stopped
     depends_on:
       db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://coop:${POSTGRES_PASSWORD:-coop}@db:5432/coop
+      TRUST_PROXY: "1"
+      TLS_ASK_ALLOW: "172.,10.,192.168."   # caddy reaches the app over the private docker network
+    volumes: [uploads:/app/uploads]
+    networks: [internal]              # not published to the host — only caddy is
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [internal]
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on: [db]
     environment:
       DATABASE_URL: postgres://coop:${POSTGRES_PASSWORD:-coop}@db:5432/coop
-      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
-      NODE_ENV: production
-      BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
-      PLATFORM_HOST: ${PLATFORM_HOST:-platform.localhost}
-      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
-      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
-      TRUST_PROXY: ${TRUST_PROXY:-1}
-    ports: ["3000:3000"]
-    volumes: [uploads:/app/uploads]
+      KEEP_DAYS: "14"
+      APP_DIR: /work
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - uploads:/work/uploads:ro
+      - ./backups:/backups
+    working_dir: /work
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache bash >/dev/null && while true; do bash /backup.sh /backups; sleep 86400; done"]
+    networks: [internal]
+
 volumes:
   pgdata:
   uploads:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
