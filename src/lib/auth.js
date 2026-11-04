@@ -107,7 +107,7 @@ async function loadUsers(req, res, next) {
       req.session.tenantId = req.tenant.id;
     }
     if (req.session.adminId) {
-      req.admin = await db.one(`SELECT id, username, full_name, email, role, is_active, must_change_password, session_version FROM admin_users
+      req.admin = await db.one(`SELECT id, username, full_name, email, role, is_active, must_change_password, session_version, theme_pref FROM admin_users
                                 WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL`, [req.session.adminId]);
       // credentials changed since this session signed in → session is no longer valid
       if (!req.admin || (req.admin.session_version || 1) !== (req.session.adminVer || 1)) { req.admin = null; delete req.session.adminId; }

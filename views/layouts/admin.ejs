@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="<%= lang === 'en' ? 'en' : 'ne' %>">
+<html lang="<%= lang === 'en' ? 'en' : 'ne' %>"<% if (locals.theme && theme.attr) { %> data-theme="<%= theme.attr %>"<% } %>>
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= locals.title ? title + ' · ' : '' %>Admin · <%= siteName %></title>
@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/admin.css">
-  <style>:root{--brand:<%= brandColor %>}</style>
+  <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
 <body class="panel">
 <div class="shell">
@@ -41,6 +41,7 @@
     <% }) %>
     <div class="side-group"><div class="side-title"><%= t('प्रणाली', 'System') %></div>
       <% if (lvl >= 3) { %><a class="side-link <%= cur.startsWith('/admin/settings') ? 'active' : '' %>" href="/admin/settings"><%- icon('settings') %><%= t('सेटिङ', 'Settings') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/theme') ? 'active' : '' %>" href="/admin/theme"><%- icon('sun') %><%= t('रूप / थिम', 'Theme') %></a>
       <a class="side-link <%= cur.startsWith('/admin/notifications') ? 'active' : '' %>" href="/admin/notifications"><%- icon('bell') %><%= t('SMS/इमेल/Push', 'SMS / email / push') %></a>
       <a class="side-link <%= cur.startsWith('/admin/license') ? 'active' : '' %>" href="/admin/license"><%- icon('award') %><%= t('सेवा नवीकरण', 'Licence') %></a>
       <a class="side-link <%= cur.startsWith('/admin/audit') ? 'active' : '' %>" href="/admin/audit"><%- icon('eye') %><%= t('अडिट लग', 'Audit log') %></a><% } %>
@@ -58,6 +59,7 @@
       <button class="btn btn-ghost btn-icon side-toggle" data-nav-toggle aria-label="Menu"><%- icon('menu') %></button>
       <a class="btn btn-ghost btn-sm" href="/" target="_blank" rel="noopener"><%- icon('globe') %><span class="btn-text"><%= t('वेबसाइट', 'View site') %></span></a>
       <div class="grow"></div>
+      <%- include('../partials/theme-picker') %>
       <span class="lang-switch"><a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">ने</a><a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a></span>
       <div class="who"><b><%= admin.full_name || admin.username %></b><%= admin.role %></div>
       <form method="post" action="/admin/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-icon" aria-label="Log out" title="Log out"><%- icon('logout') %></button></form>

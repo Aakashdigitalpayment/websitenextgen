@@ -47,3 +47,9 @@ body.panel { background: var(--bg); }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media print { .sidebar, .topnav, .no-print { display: none !important; } .shell { display: block; } .content { padding: 0; } }
+
+@media (max-width: 560px) {
+  .topnav { gap: 6px; padding: 0 12px; }
+  .topnav .who { display: none; }
+  .topnav .btn-text { display: none; }
+}

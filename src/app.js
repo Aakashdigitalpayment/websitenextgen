@@ -16,6 +16,7 @@ const auth = require('./lib/auth');
 const util = require('./lib/util');
 const nd = require('./lib/nepali-date');
 const { icon } = require('./lib/icons');
+const themes = require('./lib/themes');
 const { mediaUrl, tenantDir } = require('./lib/uploads');
 const { statusLabel } = require('./lib/forms');
 const navigation = require('./lib/navigation');
@@ -170,8 +171,35 @@ function createApp() {
   });
   app.use(security.flashMiddleware);
   app.use(auth.loadUsers);
+  app.use((req, res, next) => {
+    res.locals.theme = themes.resolve(req, res.locals.settings);
+    res.locals.themeSwatches = themes.swatches(res.locals.brandColor, res.locals.theme.palette);
+    next();
+  });
   app.use(require('./lib/license').guard);
   app.use(security.csrf);
+
+  // personal theme (when the cooperative allows it): cookie for everyone, saved on the account when signed in
+  app.post('/theme', async (req, res, next) => {
+    try {
+      const pol = themes.policy(res.locals.settings);
+      const json = (req.get('accept') || '').includes('application/json');
+      if (!pol.allowUser) return json ? res.status(403).json({ error: 'Theme is fixed by the cooperative' }) : res.redirect(auth.safeNext(req.body.next, '/'));
+      const reset = req.body.reset === '1';
+      const palette = themes.isPalette(req.body.palette) ? req.body.palette : res.locals.theme.palette;
+      const mode = themes.isMode(req.body.mode) ? req.body.mode : res.locals.theme.mode;
+      const value = reset ? null : themes.serialize(palette, mode, pol.epoch);
+      if (reset) res.clearCookie('theme', { sameSite: 'lax' });
+      else res.cookie('theme', value, { maxAge: 365 * 86400_000, sameSite: 'lax', httpOnly: false, secure: config.isProd });
+      if (req.member) await db.query('UPDATE members SET theme_pref = $1 WHERE id = $2', [value, req.member.id]);
+      if (req.admin) await db.query('UPDATE admin_users SET theme_pref = $1 WHERE id = $2', [value, req.admin.id]);
+      if (json) {
+        const pal = themes.PALETTES.find(p => p.key === (reset ? pol.palette : palette));
+        return res.json({ ok: true, palette: pal.key, mode: reset ? pol.mode : mode, brand: pal.brand || pol.orgColor });
+      }
+      res.redirect(auth.safeNext(req.body.next, '/'));
+    } catch (e) { next(e); }
+  });
 
   app.get('/lang/:code', (req, res) => {
     const code = req.params.code === 'en' ? 'en' : 'np';

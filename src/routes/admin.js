@@ -581,7 +581,7 @@ router.post('/password-requests/:id/resolve', requireAdmin('staff'), ah(async (r
 
 // ---------------------------------------------------------------- settings
 const SETTING_GROUPS = {
-  general: ['सामान्य', 'General'], theme: ['रूप', 'Theme'], contact: ['सम्पर्क', 'Contact'], about: ['परिचय', 'About'],
+  general: ['सामान्य', 'General'], contact: ['सम्पर्क', 'Contact'], about: ['परिचय', 'About'],
   social: ['सामाजिक सञ्जाल', 'Social'], apps: ['एप/बैंकिङ', 'Apps'], seo: ['SEO', 'SEO'],
   notify: ['SMS / इमेल', 'SMS / email'], ai: ['AI च्याट', 'AI chat'], oauth: ['Google लगइन', 'Google sign-in'],
 };
@@ -613,6 +613,33 @@ router.post('/settings', requireAdmin('admin'), (req, res, next) => {
   await auth.audit(req, 'update', 'site_settings', null, 'Settings updated');
   flash(req, 'success', res.locals.t('सेटिङ सुरक्षित भयो।', 'Settings saved.'));
   res.redirect('/admin/settings?tab=' + encodeURIComponent(String(req.body._tab || 'general')));
+}));
+
+// ---------------------------------------------------------------- theme (admin + superadmin choose the default)
+const themes = require('../lib/themes');
+router.get('/theme', requireAdmin('admin'), ah(async (req, res) => {
+  const pol = themes.policy(await settings.all());
+  const counts = {
+    members: Number(await db.value('SELECT count(*) FROM members WHERE theme_pref IS NOT NULL AND deleted_at IS NULL')) || 0,
+    admins: Number(await db.value('SELECT count(*) FROM admin_users WHERE theme_pref IS NOT NULL AND deleted_at IS NULL')) || 0,
+  };
+  res.render('admin/theme', { title: res.locals.t('रूप / थिम', 'Theme'), pol, swatches: themes.swatches(pol.orgColor), modes: themes.MODES, counts });
+}));
+router.post('/theme', requireAdmin('admin'), ah(async (req, res) => {
+  const b = req.body, s = await settings.all();
+  const meta = { group: 'appearance' };
+  if (/^#[0-9a-f]{6}$/i.test(b.primary_color || '')) await settings.set('primary_color', b.primary_color, { type: 'color', label: 'Brand colour', group: 'theme' });
+  if (themes.isPalette(b.palette)) await settings.set('theme_default_palette', b.palette, { ...meta, label: 'Default theme palette' });
+  if (themes.isMode(b.mode)) await settings.set('theme_default_mode', b.mode, { ...meta, label: 'Default theme mode' });
+  await settings.set('theme_user_choice', b.allow_user === '1' ? '1' : '0', { ...meta, label: 'Users may change the theme' });
+  if (b.reset_all === '1') {
+    await settings.set('theme_epoch', String((Number(s.theme_epoch) || 0) + 1), { ...meta, label: 'Theme reset counter' });
+    await db.query('UPDATE members SET theme_pref = NULL WHERE theme_pref IS NOT NULL');
+    await db.query('UPDATE admin_users SET theme_pref = NULL WHERE theme_pref IS NOT NULL');
+  }
+  await auth.audit(req, 'update', 'site_settings', null, `Theme default ${b.palette}/${b.mode}${b.reset_all === '1' ? ' (reset all)' : ''}`);
+  flash(req, 'success', res.locals.t('रूप सुरक्षित भयो।', 'Theme saved.'));
+  res.redirect('/admin/theme');
 }));
 
 // ---------------------------------------------------------------- admin users (super admin)

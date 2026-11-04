@@ -1,0 +1,36 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('वेबसाइट, सदस्य प्यानल र एडमिनको पूर्वनिर्धारित रूप छान्नुहोस्।', 'Choose the default look of the website, member panel and admin.') %></div></div></div>
+<form class="form-card" method="post" action="/admin/theme">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+  <h3><%= t('संस्थाको रङ', 'Organisation colour') %></h3>
+  <div class="flex gap-1 items-center wrap">
+    <input class="input" type="color" name="primary_color" value="<%= pol.orgColor %>" style="width:64px;height:40px;padding:4px">
+    <span class="small muted"><%= t('"संस्थाको रङ" प्यालेटमा, इमेल र मोबाइल ब्राउजरको रङमा प्रयोग हुन्छ।', 'Used by the "Organisation colour" palette, emails and the mobile browser bar.') %></span>
+  </div>
+
+  <h3 class="mt-3"><%= t('पूर्वनिर्धारित रङ (प्यालेट)', 'Default palette') %></h3>
+  <div class="palette-grid">
+    <% swatches.forEach(p => { %>
+      <label class="palette-card" style="--sw:<%= p.color %>">
+        <input type="radio" name="palette" value="<%= p.key %>" <%= pol.palette === p.key ? 'checked' : '' %>>
+        <div class="palette-mock"><i></i><i></i><i style="width:70%"></i><b></b></div>
+        <div class="palette-name"><%= t(p.np, p.en) %></div>
+      </label>
+    <% }) %>
+  </div>
+
+  <h3 class="mt-3"><%= t('पूर्वनिर्धारित मोड', 'Default mode') %></h3>
+  <div class="mode-cards">
+    <% modes.forEach(m => { %>
+      <label class="mode-card"><input type="radio" name="mode" value="<%= m.key %>" <%= pol.mode === m.key ? 'checked' : '' %>><%- icon(m.icon) %><span><%= t(m.np, m.en) %><% if (m.key === 'system') { %><span class="small faint" style="display:block"><%= t('प्रयोगकर्ताको फोन/कम्प्युटर अनुसार', "Follows the user's phone / computer") %></span><% } %></span></label>
+    <% }) %>
+  </div>
+
+  <h3 class="mt-3"><%= t('प्रयोगकर्ताको छनोट', 'User choice') %></h3>
+  <label class="check"><input type="checkbox" name="allow_user" value="1" <%= pol.allowUser ? 'checked' : '' %>> <%= t('आगन्तुक, सदस्य र कर्मचारीले आफ्नो रूप आफैं परिवर्तन गर्न पाउने', 'Visitors, members and staff may change the theme for themselves') %></label>
+  <div class="field-hint"><%= t('बन्द गरेमा सबैलाई माथिको पूर्वनिर्धारित रूप मात्र देखिन्छ।', 'When off, everyone sees the default above.') %></div>
+  <label class="check mt-1"><input type="checkbox" name="reset_all" value="1"> <%= t('सबैको सुरक्षित छनोट हटाएर नयाँ पूर्वनिर्धारित लागू गर्ने', "Clear everyone's saved choice and apply the new default") %></label>
+  <div class="field-hint"><%= t('अहिले', 'Currently') %> <%= num(counts.members) %> <%= t('सदस्य र', 'members and') %> <%= num(counts.admins) %> <%= t('कर्मचारीले आफ्नै रूप राखेका छन्।', 'staff have their own theme saved.') %></div>
+
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+</form>

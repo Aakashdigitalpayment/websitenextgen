@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="<%= lang === 'en' ? 'en' : 'ne' %>">
+<html lang="<%= lang === 'en' ? 'en' : 'ne' %>"<% if (locals.theme && theme.attr) { %> data-theme="<%= theme.attr %>"<% } %>>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,8 +13,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/app.css">
   <% if (settings.logo) { %><link rel="icon" href="<%= mediaUrl(settings.logo) %>"><% } %>
-  <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= brandColor %>">
-  <style>:root{--brand:<%= brandColor %>}</style>
+  <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= locals.theme ? theme.brand : brandColor %>">
+  <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
 <body>
   <a class="sr-only" href="#main">Skip to content</a>
@@ -27,6 +27,7 @@
       </div>
       <div class="tb-right">
         <span class="tb-item faint"><%= nd.formatBs(nd.todayBs(), lang) %></span>
+        <%- include('../partials/theme-picker') %>
         <span class="lang-switch" role="group" aria-label="Language">
           <a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">नेपाली</a>
           <a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a>

@@ -4,6 +4,40 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
+  // personal theme: apply instantly, save in the background (form still works without JS)
+  $$('[data-theme-form]').forEach(form => {
+    const root = document.documentElement;
+    const apply = () => {
+      const mode = (form.querySelector('[name=mode]:checked') || {}).value;
+      const pal = form.querySelector('[name=palette]:checked');
+      if (mode === 'light' || mode === 'dark') root.setAttribute('data-theme', mode); else root.removeAttribute('data-theme');
+      if (pal) root.style.setProperty('--brand', pal.dataset.color);
+    };
+    const save = async extra => {
+      const body = new URLSearchParams(new FormData(form));
+      if (extra) Object.entries(extra).forEach(([k, v]) => body.set(k, v));
+      try {
+        const r = await fetch('/theme', { method: 'POST', body, headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+        return r.ok ? r.json() : null;
+      } catch (e) { return null; }
+    };
+    form.addEventListener('change', () => { apply(); save(); });
+    const applyBtn = form.querySelector('[data-theme-apply]');
+    if (applyBtn) applyBtn.hidden = true;
+    const reset = form.querySelector('[data-theme-reset]');
+    if (reset) reset.addEventListener('click', async ev => {
+      ev.preventDefault();
+      const j = await save({ reset: '1' });
+      if (!j) return form.submit();
+      const m = form.querySelector(`[name=mode][value="${j.mode}"]`); if (m) m.checked = true;
+      const p = form.querySelector(`[name=palette][value="${j.palette}"]`); if (p) p.checked = true;
+      apply();
+    });
+  });
+  document.addEventListener('click', ev => {
+    $$('[data-theme-picker][open]').forEach(d => { if (!d.contains(ev.target)) d.removeAttribute('open'); });
+  });
+
   // mobile nav
   const toggle = $('[data-nav-toggle]');
   const nav = $('[data-nav]');

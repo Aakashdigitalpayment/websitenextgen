@@ -1,0 +1,25 @@
+<%# Personal theme picker. Shown only when the cooperative allows users to change the theme. %>
+<% if (locals.theme && theme.allowUser && locals.themeSwatches) { const sw = themeSwatches; %>
+<details class="theme-picker" data-theme-picker>
+  <summary class="btn btn-ghost btn-icon" aria-label="<%= t('रूप (थिम)', 'Theme') %>" title="<%= t('रूप (थिम)', 'Theme') %>"><%- icon(theme.mode === 'dark' ? 'moon' : 'sun') %></summary>
+  <form class="theme-pop" method="post" action="/theme" data-theme-form>
+    <input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>"><input type="hidden" name="next" value="<%= path %>">
+    <div class="theme-label"><%= t('मोड', 'Mode') %></div>
+    <div class="theme-modes" role="radiogroup">
+      <% [['system', 'settings', t('उपकरण', 'System')], ['light', 'sun', t('उज्यालो', 'Light')], ['dark', 'moon', t('अँध्यारो', 'Dark')]].forEach(([k, ic, label]) => { %>
+        <label><input type="radio" name="mode" value="<%= k %>" <%= theme.mode === k ? 'checked' : '' %>><span><%- icon(ic) %><%= label %></span></label>
+      <% }) %>
+    </div>
+    <div class="theme-label"><%= t('रङ', 'Colour') %></div>
+    <div class="theme-swatches" role="radiogroup">
+      <% sw.forEach(p => { %>
+        <label title="<%= t(p.np, p.en) %>"><input type="radio" name="palette" value="<%= p.key %>" data-color="<%= p.color %>" <%= theme.palette === p.key ? 'checked' : '' %>><span style="--sw:<%= p.color %>"></span><b class="sr-only"><%= t(p.np, p.en) %></b></label>
+      <% }) %>
+    </div>
+    <div class="theme-foot">
+      <button class="btn btn-ghost btn-sm" name="reset" value="1" data-theme-reset><%= t('पूर्वनिर्धारित', 'Use default') %></button>
+      <button class="btn btn-primary btn-sm" data-theme-apply><%= t('लागू', 'Apply') %></button>
+    </div>
+  </form>
+</details>
+<% } %>
