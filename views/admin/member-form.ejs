@@ -1,10 +1,16 @@
 <div class="content-head"><div><div class="crumbs"><a href="/admin/members"><%= t('सदस्यहरू', 'Members') %></a></div><h1><%= item ? (item.name_np || item.name) : t('नयाँ सदस्य', 'New member') %></h1></div>
-  <% if (item) { %><div class="flex gap-1">
+  <% if (item) { %><div class="flex gap-1 wrap">
+    <a class="btn btn-ghost btn-sm" href="/admin/members/<%= item.id %>/activities"><%- icon('chart') %><%= t('गतिविधि', 'Activity') %></a>
     <form method="post" action="/admin/members/<%= item.id %>/card"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('नयाँ परिचयपत्र जारी गर्ने? पुरानो रद्द हुनेछ।', 'Issue a new ID card? The old one will be revoked.') %>"><%- icon('id') %><%= t('परिचयपत्र जारी', 'Issue ID card') %></button></form>
-    <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('सदस्य हटाउने?', 'Remove member?') %>"><%- icon('trash') %></button></form><% } %>
+    <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('सदस्यलाई अभिलेखमा सार्ने? (पछि पुनर्स्थापित गर्न सकिन्छ)', 'Move this member to the archive? (can be restored later)') %>"><%- icon('trash') %></button></form><% } %>
   </div><% } %>
 </div>
+<% if (item && item.approval_status === 'pending') { %>
+  <div class="alert alert-warn"><%- icon('alert') %><span><%= t('यो सदस्यको पोर्टल खाता स्वीकृत हुन बाँकी छ।', 'This member portal account is waiting for approval.') %></span>
+    <form method="post" action="/admin/members/<%= item.id %>/approve" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="back" value="/admin/members/<%= item.id %>"><button class="btn btn-primary btn-sm"><%- icon('check') %><%= t('स्वीकृत', 'Approve') %></button></form></div>
+<% } %>
 <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+<div>
 <form class="form-card" method="post" action="/admin/members<%= item ? '/' + item.id : '' %>" novalidate>
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <div class="form-grid">
@@ -15,17 +21,56 @@
     <%- include('../partials/admin-field', { field: { name: 'gender', label: ['लिङ्ग', 'Gender'], type: 'select' }, values: v, errors, options: { gender: [['male','पुरुष','Male'],['female','महिला','Female'],['other','अन्य','Other']] } }) %>
     <%- include('../partials/admin-field', { field: { name: 'address', label: ['ठेगाना', 'Address'], type: 'textarea' }, values: v, errors, options: {} }) %>
     <%- include('../partials/admin-field', { field: { name: 'approval_status', label: ['स्वीकृति', 'Approval'], type: 'select' }, values: v, errors, options: { approval_status: [['pending','बाँकी','Pending'],['approved','स्वीकृत','Approved'],['rejected','अस्वीकृत','Rejected']] } }) %>
+    <div class="field"><label for="f_rejection_reason"><%= t('अस्वीकृतिको कारण (सदस्यलाई देखिन्छ)', 'Rejection reason (shown to the member)') %></label><input class="input" id="f_rejection_reason" name="rejection_reason" value="<%= v.rejection_reason || '' %>" maxlength="500"></div>
+    <% const msv = v.monthly_saving !== undefined ? (v.monthly_saving === '' ? null : Number(v.monthly_saving)) : (v.monthly_saving_regular === null || v.monthly_saving_regular === undefined ? null : Number(v.monthly_saving_regular)); %>
+    <div class="field span-2"><label><%= t('मासिक बचत', 'Monthly saving') %></label>
+      <div class="choices"><% [['1', t('नियमित', 'Regular'), 1], ['0', t('नियमित नभएको', 'Not regular'), 0], ['', t('नतोकिएको', 'Not set'), null]].forEach(([val, label, cmp]) => { %><label class="choice"><input type="radio" name="monthly_saving" value="<%= val %>" <%= msv === cmp ? 'checked' : '' %>> <%= label %></label><% }) %></div></div>
     <div class="field <%= errors.password ? 'has-error' : '' %>"><label><%= item ? t('नयाँ पासवर्ड (खाली = परिवर्तन नगर्ने)', 'New password (blank = keep)') : t('पासवर्ड', 'Password') %></label><input class="input" type="password" name="password" autocomplete="new-password"><% if (errors.password) { %><div class="field-error"><%= errors.password %></div><% } %></div>
     <%- include('../partials/admin-field', { field: { name: 'is_active', label: ['सक्रिय', 'Active'], type: 'bool' }, values: v, errors, options: {} }) %>
     <%- include('../partials/admin-field', { field: { name: 'information_room_enabled', label: ['सूचना कक्ष पहुँच', 'Information room access'], type: 'bool' }, values: v, errors, options: {} }) %>
   </div>
   <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
 </form>
-<% if (item) { %><div class="card"><h3><%= t('परिचयपत्र', 'ID cards') %></h3>
+
+<% if (item) { %>
+<form class="form-card mt-3" id="notify" method="post" action="/admin/members/<%= item.id %>/notify">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="form-section-title"><%= t('यो सदस्यलाई सूचना पठाउनुहोस्', 'Send a notification to this member') %></div>
+  <div class="form-grid">
+    <div class="field"><label for="n_title"><%= t('शीर्षक', 'Title') %> *</label><input class="input" id="n_title" name="title" maxlength="200" required></div>
+    <div class="field"><label for="n_type"><%= t('प्रकार', 'Type') %></label><select class="select" id="n_type" name="type"><option value="info"><%= t('जानकारी', 'Info') %></option><option value="success"><%= t('सफल', 'Success') %></option><option value="warning"><%= t('चेतावनी', 'Warning') %></option><option value="error"><%= t('जरुरी', 'Urgent') %></option></select></div>
+    <div class="field span-2"><label for="n_msg"><%= t('सन्देश', 'Message') %></label><textarea class="textarea" id="n_msg" name="message" rows="3" maxlength="2000"></textarea></div>
+    <div class="field span-2"><div class="choices"><label class="choice"><input type="checkbox" checked disabled> <%= t('पोर्टल + push', 'Portal + push') %></label><% if (item.phone) { %><label class="choice"><input type="checkbox" name="sms" value="1"> SMS (<%= item.phone %>)</label><% } %><% if (item.email) { %><label class="choice"><input type="checkbox" name="email" value="1"> <%= t('इमेल', 'Email') %></label><% } %></div></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-outline"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button></div>
+</form>
+
+<div class="card mt-3">
+  <div class="flex justify-between items-center"><h3 class="mb-0"><%= t('पछिल्ला गतिविधि', 'Recent activity') %></h3><span class="flex gap-1"><a class="btn btn-ghost btn-sm" href="/admin/members/<%= item.id %>/activities"><%= t('सबै', 'All') %> (<%= num(timelineTotal) %>)</a><a class="btn btn-ghost btn-sm" href="/admin/members/<%= item.id %>/activities.csv"><%- icon('download') %>CSV</a></span></div>
+  <% if (!timeline.length) { %><p class="muted small"><%= t('कुनै गतिविधि भेटिएन।', 'No activity yet.') %></p><% } else { %>
+  <ul class="timeline mt-2"><% timeline.forEach(a => { %><li><div class="small faint"><%= a.date ? bsDate(a.date) : '' %> · <%= t(...a.type) %></div><div style="font-weight:500"><% if (a.link) { %><a href="<%= a.link %>"><%= a.detail %></a><% } else { %><%= a.detail %><% } %><% if (a.status) { %> <span class="badge"><%= statusLabel(a.status) %></span><% } %></div></li><% }) %></ul><% } %>
+</div>
+<% } %>
+</div>
+
+<% if (item) { %><div>
+  <div class="card"><h3><%= t('पोर्टल खाता', 'Portal account') %></h3>
+    <div class="kv small">
+      <div><%= t('लगइन', 'Login') %></div><div><%= item.password_hash ? t('पासवर्ड सेट छ', 'Password set') : t('पासवर्ड छैन', 'No password') %><%= item.google_id ? ' · Google' : '' %><%= item.facebook_id ? ' · Facebook' : '' %></div>
+      <div>2FA</div><div><%= Number(item.twofa_enabled) ? t('सुरु', 'On') : t('बन्द', 'Off') %></div>
+      <div><%= t('अन्तिम लगइन', 'Last login') %></div><div><%= item.last_login ? bsDate(item.last_login) : '—' %></div>
+      <% if (item.rejection_reason) { %><div><%= t('अस्वीकृति कारण', 'Rejection reason') %></div><div><%= item.rejection_reason %></div><% } %>
+    </div>
+    <% if (Number(item.twofa_enabled) && roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/2fa-reset" class="mt-2"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('यो सदस्यको 2FA reset गर्ने? (फोन परिवर्तन / QR मिलेन)', 'Reset this member’s 2FA? (new phone / QR mismatch)') %>"><%- icon('shield') %><%= t('2FA reset', 'Reset 2FA') %></button></form><% } %>
+    <% if (locals.resets && resets.length) { %><div class="alert alert-info mt-2"><span><%= t('पासवर्ड रिसेट अनुरोध बाँकी छ।', 'A password reset request is waiting.') %> <a href="/admin/password-requests"><%= t('हेर्नुहोस्', 'Open') %></a></span></div><% } %>
+    <% if (locals.changes && changes.length) { %><div class="alert alert-info mt-2"><span><%= t('मोबाइल परिवर्तन अनुरोध: ', 'Mobile change request: ') %><strong><%= changes[0].new_value %></strong> <a href="/admin/member-portal?tab=changes"><%= t('हेर्नुहोस्', 'Open') %></a></span></div><% } %>
+  </div>
+  <div class="card mt-3"><h3><%= t('परिचयपत्र', 'ID cards') %></h3>
   <% if (!locals.cards || !cards.length) { %><p class="muted small"><%= t('परिचयपत्र जारी भएको छैन।', 'No card issued yet.') %></p><% } else { %>
-  <ul class="list"><% cards.forEach(c => { %><li class="list-item" style="flex-direction:column;gap:2px"><div><strong style="font-weight:500"><%= c.card_no %></strong> <span class="badge <%= c.status === 'active' ? 'badge-ok' : '' %>"><%= c.status %></span></div><div class="small muted"><%= t('कोड', 'Code') %>: <code><%= c.verification_code %></code> · CVV <code><%= c.cvv %></code></div><div class="small faint"><%= bsDate(c.issued_date) %> → <%= c.expiry_date ? bsDate(c.expiry_date) : '' %> · <%= t('प्रमाणीकरण', 'verified') %> <%= num(c.verify_count || 0) %>×</div></li><% }) %></ul><% } %>
-  <div class="small faint mt-2"><%= t('अन्तिम लगइन: ', 'Last login: ') %><%= item.last_login ? bsDate(item.last_login) : '—' %></div>
-  <% if (locals.accounts && accounts.length) { %><h3 class="mt-3"><%= t('खाता (CBS)', 'Accounts (CBS)') %></h3><ul class="list small"><% accounts.forEach(a => { %><li class="list-item" style="padding:6px 0"><code><%= a.account_no %></code><span class="grow"><%= a.product_name || a.kind %></span><span>रु. <%= money(a.balance) %></span></li><% }) %></ul><% } %>
-  <% if (locals.docs && docs.length) { %><h3 class="mt-3"><%= t('कागजात (DMS)', 'Documents (DMS)') %></h3><ul class="list small"><% docs.forEach(d => { %><li class="list-item" style="padding:6px 0"><a class="grow" href="<%= mediaUrl(d.file_path) %>" target="_blank" rel="noopener"><%= d.title %></a><span class="badge"><%= d.doc_type %></span></li><% }) %></ul><% } %>
+  <ul class="list"><% cards.forEach(c => { %><li class="list-item" style="flex-direction:column;gap:2px;align-items:flex-start"><div><strong style="font-weight:500"><%= c.card_no %></strong> <span class="badge <%= c.locked_at ? 'badge-bad' : c.status === 'active' ? 'badge-ok' : '' %>"><%= c.locked_at ? t('LOCK', 'Locked') : c.status %></span><% if (Number(c.unlock_requested)) { %> <span class="badge badge-warn"><%= t('Unlock अनुरोध', 'Unlock requested') %></span><% } %></div><div class="small muted"><%= t('कोड', 'Code') %>: <code><%= c.verification_code %></code> · CVV <code><%= c.cvv %></code></div><div class="small faint"><%= bsDate(c.issued_date) %> → <%= c.expiry_date ? bsDate(c.expiry_date) : '' %> · <%= t('प्रमाणीकरण', 'verified') %> <%= num(c.verify_count || 0) %>× · <%= t('गलत', 'failed') %> <%= num(c.failed_verify_count || 0) %>×</div>
+    <% if (c.locked_at && c.status === 'active' && roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/card/unlock" class="mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-soft btn-sm"><%= t('Unlock गर्नुहोस्', 'Unlock card') %></button></form><% } %></li><% }) %></ul><% } %>
+  </div>
+  <% if (locals.accounts && accounts.length) { %><div class="card mt-3"><h3><%= t('खाता (CBS)', 'Accounts (CBS)') %></h3><ul class="list small"><% accounts.forEach(a => { %><li class="list-item" style="padding:6px 0"><code><%= a.account_no %></code><span class="grow"><%= a.product_name || a.kind %></span><span>रु. <%= money(a.balance) %></span></li><% }) %></ul></div><% } %>
+  <% if (locals.docs && docs.length) { %><div class="card mt-3"><h3><%= t('कागजात (DMS)', 'Documents (DMS)') %></h3><ul class="list small"><% docs.forEach(d => { %><li class="list-item" style="padding:6px 0"><a class="grow" href="<%= mediaUrl(d.file_path) %>" target="_blank" rel="noopener"><%= d.title %></a><span class="badge"><%= d.doc_type %></span></li><% }) %></ul></div><% } %>
 </div><% } %>
 </div>

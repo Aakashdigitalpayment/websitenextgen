@@ -1,0 +1,57 @@
+<div class="content-head"><h1><%= title %></h1><div class="flex gap-1"><a class="btn btn-outline btn-sm" href="/admin/password-requests"><%- icon('shield') %><%= t('पासवर्ड अनुरोध', 'Password requests') %></a><a class="btn btn-outline btn-sm" href="/admin/members?status=pending"><%- icon('users') %><%= t('सदस्य सूची', 'Members list') %></a></div></div>
+<div class="tabs">
+  <a class="tab <%= tab === 'pending' ? 'active' : '' %>" href="?tab=pending"><%= t('दर्ता स्वीकृति', 'Registrations') %> (<%= num(counts.pending) %>)</a>
+  <a class="tab <%= tab === 'changes' ? 'active' : '' %>" href="?tab=changes"><%= t('मोबाइल परिवर्तन', 'Mobile changes') %> (<%= num(counts.changes) %>)</a>
+  <a class="tab <%= tab === 'cards' ? 'active' : '' %>" href="?tab=cards"><%= t('LOCK परिचयपत्र', 'Locked ID cards') %> (<%= num(counts.cards) %>)</a>
+  <% if (roleLevel(admin.role) >= 3) { %><a class="tab <%= tab === 'settings' ? 'active' : '' %>" href="?tab=settings"><%= t('नीति / सेटिङ', 'Policy / settings') %></a><% } %>
+</div>
+
+<% if (tab === 'pending') { %>
+  <% if (!pending.length) { %><div class="empty"><%= t('स्वीकृतिको पर्खाइमा कुनै दर्ता छैन।', 'No registrations waiting for approval.') %></div><% } else { %>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्य', 'Member') %></th><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('सम्पर्क', 'Contact') %></th><th>KYM</th><th><%= t('दर्ता', 'Registered') %></th><th></th></tr></thead><tbody>
+    <% pending.forEach(m => { %><tr>
+      <td><a href="/admin/members/<%= m.id %>" style="font-weight:500"><%= m.name_np || m.name %></a><div class="small faint"><%= m.name %></div></td>
+      <td><%= m.sadasyata_number || '—' %></td>
+      <td class="small"><%= m.phone || '—' %><div class="faint"><%= m.email || '' %></div></td>
+      <td><% if (m.kyc_status) { %><span class="badge <%= m.kyc_status === 'approved' ? 'badge-ok' : m.kyc_status === 'rejected' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(m.kyc_status) %></span><% } else { %><span class="faint small">—</span><% } %></td>
+      <td class="small faint"><%= bsDate(m.created_at) %></td>
+      <td class="text-right">
+        <div class="flex gap-1 wrap" style="justify-content:flex-end">
+          <form method="post" action="/admin/members/<%= m.id %>/approve"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary btn-sm"><%- icon('check') %><%= t('स्वीकृत', 'Approve') %></button></form>
+          <details><summary class="btn btn-ghost btn-sm"><%= t('अस्वीकृत', 'Reject') %></summary>
+            <form method="post" action="/admin/members/<%= m.id %>/reject" class="mt-1 flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="reason" placeholder="<%= t('कारण (सदस्यलाई देखिन्छ)', 'Reason (shown to the member)') %>" maxlength="500"><button class="btn btn-outline btn-sm"><%= t('पठाउनुहोस्', 'Send') %></button></form></details>
+        </div>
+      </td></tr><% }) %>
+  </tbody></table></div>
+  <p class="small faint mt-2"><%= t('स्वीकृत गर्दा सदस्यलाई पोर्टल सूचना, SMS र इमेल जान्छ; कार्डको म्याद ५ वर्ष सुरु हुन्छ। अस्वीकृत गर्दा कारणसहित सूचना र SMS जान्छ।', 'Approving notifies the member in the portal, by SMS and by email, and starts the 5-year card validity. Rejecting sends the reason in the portal and by SMS.') %></p><% } %>
+<% } %>
+
+<% if (tab === 'changes') { %>
+  <% if (!changes.length) { %><div class="empty"><%= t('कुनै अनुरोध छैन।', 'No requests.') %></div><% } else { %>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्य', 'Member') %></th><th><%= t('हालको', 'Current') %></th><th><%= t('नयाँ', 'New') %></th><th><%= t('मिति', 'Date') %></th><th></th></tr></thead><tbody>
+    <% changes.forEach(c => { %><tr><td><a href="/admin/members/<%= c.member_id %>"><%= c.name_np || c.name %></a><div class="small faint"><%= c.sadasyata_number || '' %></div></td><td><%= c.old_value || '—' %></td><td><strong><%= c.new_value %></strong></td><td class="small faint"><%= bsDate(c.created_at) %></td>
+      <td class="text-right"><form method="post" action="/admin/member-portal/changes/<%= c.id %>" class="flex gap-1 wrap" style="justify-content:flex-end"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="note" placeholder="<%= t('टिप्पणी', 'Note') %>" maxlength="500" style="max-width:180px"><button class="btn btn-primary btn-sm" name="action" value="approve" data-confirm="<%= t('सदस्यसँग फोनमा पुष्टि गर्नुभयो?', 'Confirmed with the member by phone?') %>"><%= t('स्वीकृत', 'Approve') %></button><button class="btn btn-ghost btn-sm" name="action" value="reject"><%= t('अस्वीकृत', 'Reject') %></button></form></td></tr><% }) %>
+  </tbody></table></div><% } %>
+<% } %>
+
+<% if (tab === 'cards') { %>
+  <% if (!locked.length) { %><div class="empty"><%= t('कुनै परिचयपत्र LOCK छैन।', 'No locked ID cards.') %></div><% } else { %>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्य', 'Member') %></th><th><%= t('कार्ड', 'Card') %></th><th><%= t('गलत प्रयास', 'Failed tries') %></th><th><%= t('LOCK मिति', 'Locked') %></th><th></th></tr></thead><tbody>
+    <% locked.forEach(c => { %><tr><td><a href="/admin/members/<%= c.member_pk %>"><%= c.name_np || c.name %></a><div class="small faint"><%= c.sadasyata_number || '' %> · <%= c.phone || '' %></div></td><td><code><%= c.verification_code %></code><% if (Number(c.unlock_requested)) { %> <span class="badge badge-warn"><%= t('Unlock अनुरोध', 'Unlock requested') %></span><% } %></td><td class="num"><%= num(c.failed_verify_count || 0) %></td><td class="small faint"><%= bsDate(c.locked_at) %></td>
+      <td class="text-right"><% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= c.member_pk %>/card/unlock"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="back" value="/admin/member-portal?tab=cards"><button class="btn btn-soft btn-sm"><%= t('Unlock', 'Unlock') %></button></form><% } %></td></tr><% }) %>
+  </tbody></table></div><% } %>
+<% } %>
+
+<% if (tab === 'settings' && roleLevel(admin.role) >= 3) { %>
+<form class="form-card maxw-md" method="post" action="/admin/member-portal/settings">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="stack">
+    <label class="choice"><input type="checkbox" name="member_self_register" value="1" <%= s.member_self_register !== '0' ? 'checked' : '' %>> <%= t('सदस्यले अनलाइन पोर्टल दर्ता गर्न पाउने (सदस्यता नं. + दर्ता भएको मोबाइल चाहिन्छ, कार्यालयले स्वीकृत गर्छ)', 'Members may register for the portal online (membership no. + registered mobile; the office approves)') %></label>
+    <label class="choice"><input type="checkbox" name="member_2fa_required" value="1" <%= s.member_2fa_required === '1' ? 'checked' : '' %> <%= roleLevel(admin.role) >= 4 ? '' : 'disabled' %>> <%= t('सबै सदस्यलाई दुई-चरण प्रमाणीकरण (Authenticator एप) अनिवार्य — पासवर्ड, Google र Facebook लगइन सबैमा', 'Require two-step sign-in (authenticator app) for every member — for password, Google and Facebook sign-in') %></label>
+    <% if (roleLevel(admin.role) < 4) { %><div class="field-hint"><%= t('2FA नीति सुपर प्रशासकले मात्र बदल्न सक्छन्।', 'Only a super admin can change the 2FA policy.') %></div><% } %>
+    <div class="field"><label for="ps_prefix"><%= t('परिचयपत्र कोड prefix (३ अक्षर)', 'ID card code prefix (3 letters)') %></label><input class="input" id="ps_prefix" name="card_prefix" maxlength="3" value="<%= s.card_prefix || '' %>" style="max-width:120px;text-transform:uppercase"><div class="field-hint"><%= t('खाली = वेबसाइट नामबाट। नयाँ कार्डमा मात्र लागू हुन्छ, जस्तै AAK-7K2M-9QX4', 'Blank = from the site name. Applies to new cards, e.g. AAK-7K2M-9QX4') %></div></div>
+    <div class="field"><label for="ps_mail"><%= t('पोर्टल सूचना इमेल (कार्यालय)', 'Office email for portal alerts') %></label><input class="input" id="ps_mail" name="admin_notify_email" value="<%= s.admin_notify_email || '' %>" placeholder="office@example.com"><div class="field-hint"><%= t('नयाँ दर्ता, पासवर्ड रिसेट अनुरोध, कार्ड unlock अनुरोध आउँदा इमेल।', 'Emailed on new registrations, password reset requests and card unlock requests.') %></div></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+</form>
+<% } %>

@@ -1,0 +1,32 @@
+<section class="section"><div class="container maxw-sm" style="margin-left:0">
+  <h1 style="font-size:1.4rem"><%= title %></h1>
+  <% if (error) { %>
+    <div class="alert alert-error"><%- icon('alert') %><span><%= error %></span></div>
+    <a class="btn btn-outline" href="/track?mode=contact"><%= t('← Tracker मा फर्किनुहोस्', '← Back to the tracker') %></a>
+  <% } else { const m = member; %>
+    <div class="small muted mb-2"><%- icon('shield') %> <%= t('प्रमाणित पूर्वावलोकन', 'Verified preview') %> · <%= t('म्याद: ', 'expires: ') %><%= new Date(expiresAt).toLocaleTimeString(lang === 'en' ? 'en-GB' : 'ne-NP', { hour: '2-digit', minute: '2-digit' }) %></div>
+    <div style="position:relative;max-width:420px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-lg);user-select:none">
+      <div style="background:var(--brand);color:var(--brand-ink);padding:16px 20px;display:flex;gap:12px;align-items:center">
+        <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt="" style="height:36px;width:auto;border-radius:6px;background:#fff"><% } else { %><span class="brand-mark" style="background:var(--brand-ink);color:var(--brand)"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
+        <div><div style="font-weight:600"><%= siteName %></div><div class="small" style="opacity:.85">DIGITAL MEMBER ID</div></div>
+      </div>
+      <div style="padding:20px;display:flex;gap:16px">
+        <div class="person-photo" style="width:88px;height:104px;border-radius:10px;margin:0"><% if (m.avatar_url && !/_private\//.test(m.avatar_url)) { %><img src="<%= mediaUrl(m.avatar_url) %>" alt=""><% } else { %><%- icon('user', 'icon-lg') %><% } %></div>
+        <div class="grow">
+          <div style="font-weight:600;font-size:1.1rem"><%= m.name_np || m.name %></div>
+          <div class="small muted"><%= m.name %></div>
+          <div class="kv mt-1 small" style="grid-template-columns:90px 1fr">
+            <div><%= t('सदस्यता नं.', 'Member ID') %></div><div><%= m.sadasyata_number || card.card_no %></div>
+            <div><%= t('मोबाइल', 'Mobile') %></div><div><%= m.phone || '—' %></div>
+            <div><%= t('इमेल', 'Email') %></div><div><%= maskedEmail %></div>
+            <div><%= t('जारी मिति', 'Issued') %></div><div><%= bsDate(card.issued_date) %></div>
+            <% if (card.expiry_date) { %><div><%= t('म्याद', 'Valid to') %></div><div><%= bsDate(card.expiry_date) %></div><% } %>
+          </div>
+        </div>
+      </div>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;transform:rotate(-24deg);font-weight:700;font-size:2.2rem;letter-spacing:.2em;color:var(--brand);opacity:.08">PREVIEW</div>
+      <div style="padding:10px 20px;border-top:1px dashed var(--line-strong)" class="small faint"><%= settings.address || '' %> · <%= t('आधिकारिक डिजिटल परिचयपत्र', 'Official digital identity card') %></div>
+    </div>
+    <p class="small faint mt-2"><%= t('यो पूर्वावलोकन १५ मिनेटमा सकिन्छ। प्रिन्ट / डाउनलोडका लागि ', 'This preview expires in 15 minutes. To print or download, sign in to the ') %><a href="/member/login"><%= t('सदस्य पोर्टल', 'member portal') %></a><%= t('मा लगइन गर्नुहोस्।', '.') %></p>
+  <% } %>
+</div></section>

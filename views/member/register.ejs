@@ -1,0 +1,18 @@
+<form class="form-card" method="post" action="/member/register" data-register-form novalidate>
+  <h1 style="font-size:1.35rem"><%= title %></h1>
+  <p class="muted small"><%= t('सहकारीमा दर्ता भएको सदस्यता नम्बर र मोबाइल राख्नुहोस्। नाम र अन्य विवरण तपाईंको KYM बाट स्वतः आउँछ। कार्यालयले स्वीकृत गरेपछि लगइन गर्न सकिन्छ।', 'Use the membership number and mobile registered with the cooperative. Your name and other details come from your KYM. You can sign in once the office approves your account.') %></p>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div style="position:absolute;left:-5000px" aria-hidden="true"><input name="website" tabindex="-1" autocomplete="off"></div>
+  <div class="stack">
+    <div class="field"><label for="r_sid"><%= t('सदस्यता नम्बर', 'Membership number') %> *</label><input class="input" id="r_sid" name="sadasyata_number" value="<%= values.sadasyata_number || '' %>" required autocomplete="off" data-check="sadasyata_number"><div class="field-hint" data-check-msg="sadasyata_number"></div></div>
+    <div class="field"><label for="r_phone"><%= t('मोबाइल (सहकारीमा दर्ता भएको)', 'Mobile (as registered with the cooperative)') %> *</label><input class="input" id="r_phone" name="phone" type="tel" inputmode="numeric" value="<%= values.phone || '' %>" required autocomplete="tel" data-check="phone"><div class="field-hint" data-check-msg="phone"></div></div>
+    <div class="field"><label for="r_email"><%= t('इमेल', 'Email') %> *</label><input class="input" id="r_email" name="email" type="email" value="<%= values.email || '' %>" required autocomplete="email" data-check="email"><div class="field-hint" data-check-msg="email"></div></div>
+    <div class="field"><label for="r_pw"><%= t('पासवर्ड', 'Password') %> *</label><input class="input" id="r_pw" name="password" type="password" required autocomplete="new-password" minlength="8"><div class="field-hint"><%= t('कम्तिमा ८ अक्षर: ठूलो (A-Z), सानो (a-z) अक्षर र अंक (0-9) सहित।', 'At least 8 characters with an upper-case (A-Z), a lower-case (a-z) letter and a digit (0-9).') %></div></div>
+    <div class="field"><label for="r_cf"><%= t('फेरि पासवर्ड', 'Confirm password') %> *</label><input class="input" id="r_cf" name="confirm" type="password" required autocomplete="new-password"></div>
+    <button class="btn btn-primary btn-block btn-lg"><%= t('दर्ता गर्नुहोस्', 'Register') %></button>
+  </div>
+  <div class="flex justify-between small mt-2"><a href="/member/login"><%= t('पहिले नै खाता छ? लगइन', 'Already registered? Sign in') %></a><a href="/apply/membership"><%= t('सदस्य बन्नुहोस्', 'Become a member') %></a></div>
+</form>
+<p class="text-center small mt-2"><a href="/"><%= t('← वेबसाइटमा फर्कनुहोस्', '← Back to website') %></a></p>
+<script src="/static/js/member-register.js" defer></script>

@@ -24,6 +24,7 @@ const EXTRA = [
   ['elections', ['निर्वाचन नतिजा', 'Election results'], 'members', ['/elections']],
   ['marketplace', ['सदस्य बजार', 'Marketplace'], 'members', ['/marketplace']],
   ['password_requests', ['पासवर्ड अनुरोध', 'Password requests'], 'members', ['/password-requests']],
+  ['member_portal', ['सदस्य पोर्टल अनुरोध', 'Member portal requests'], 'members', ['/member-portal']],
   ['settings', ['सेटिङ', 'Settings'], 'system', ['/settings']],
   ['theme', ['रूप / थिम', 'Theme'], 'system', ['/theme']],
   ['notifications', ['SMS/इमेल/Push', 'SMS / email / push'], 'system', ['/notifications']],

@@ -14,7 +14,12 @@ const QRCode = require('qrcode');
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-router.use(ah(async (req, res, next) => { res.locals.googleEnabled = !!(await google.config()); next(); }));
+router.use(require('../lib/legacy-urls').memberRedirects); // old member/*.php links and QR codes
+router.use(ah(async (req, res, next) => {
+  res.locals.googleEnabled = !!(await google.config());
+  res.locals.facebookEnabled = !!(await require('../lib/facebook-oauth').config());
+  next();
+}));
 
 // ---------------------------------------------------------------- auth
 router.get('/login', (req, res) => {
@@ -24,8 +29,9 @@ router.get('/login', (req, res) => {
 
 router.post('/login', ah(async (req, res) => {
   const identifier = nd.toLatinDigits(String(req.body.identifier || '').trim());
-  const { error } = await auth.memberLogin(req, identifier, String(req.body.password || ''));
+  const { error, needs2fa } = await auth.memberLogin(req, identifier, String(req.body.password || ''), res.locals.t);
   if (error) return res.status(401).render('member/login', { layout: 'auth', title: res.locals.t('सदस्य लगइन', 'Member login'), error, identifier });
+  if (needs2fa) return res.redirect('/member/login/2fa' + (req.query.next ? '?next=' + encodeURIComponent(auth.safeNext(req.query.next, '/member')) : ''));
   res.redirect(auth.safeNext(req.query.next, '/member'));
 }));
 
@@ -34,17 +40,8 @@ router.post('/logout', ah(async (req, res) => {
   res.redirect('/');
 }));
 
-router.get('/forgot', (req, res) => res.render('member/forgot', { layout: 'auth', title: res.locals.t('पासवर्ड बिर्सनुभयो?', 'Forgot password?'), done: false }));
-router.post('/forgot', ah(async (req, res) => {
-  const id = nd.toLatinDigits(String(req.body.identifier || '').trim());
-  const m = id ? await db.one('SELECT id FROM members WHERE deleted_at IS NULL AND (phone = $1 OR sadasyata_number = $1 OR lower(email) = lower($1)) LIMIT 1', [id]) : null;
-  if (m) {
-    const open = await db.value("SELECT 1 FROM member_password_reset_requests WHERE member_id = $1 AND status = 'pending'", [m.id]);
-    if (!open) await db.query("INSERT INTO member_password_reset_requests (member_id, status, requested_at) VALUES ($1, 'pending', now())", [m.id]);
-  }
-  // same response whether or not the member exists (no account enumeration)
-  res.render('member/forgot', { layout: 'auth', title: res.locals.t('पासवर्ड बिर्सनुभयो?', 'Forgot password?'), done: true });
-}));
+// registration, availability check, OTP password reset, 2FA step, Facebook sign-in
+router.use(require('./member-account'));
 
 // ---------------------------------------------------------------- Google sign-in (members)
 router.get('/oauth/google', ah(async (req, res) => {
@@ -75,14 +72,11 @@ router.get('/oauth/google/callback', ah(async (req, res) => {
     if (byEmail.length === 1) { m = byEmail[0]; await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, m.id]); }
   }
   if (!m) return fail(res.locals.t('यो Google खातासँग कुनै सदस्य जोडिएको छैन। मोबाइल/पासवर्डले लगइन गरेर प्रोफाइलबाट जोड्नुहोस्।', 'No member is linked to this Google account. Sign in with your mobile and password, then link it from your profile.'));
-  if (!m.is_active) return fail(res.locals.t('तपाईंको खाता निष्क्रिय छ।', 'Your account is inactive.'));
-  if (m.approval_status && m.approval_status !== 'approved') return fail(res.locals.t('तपाईंको खाता स्वीकृत हुन बाँकी छ।', 'Your account is awaiting approval.'));
-  await auth.regenerate(req);
-  req.session.tenantId = req.tenant.id;
-  req.session.memberId = m.id;
-  await db.query('UPDATE members SET last_login = now() WHERE id = $1', [m.id]);
+  const gate = require('../lib/member-portal').eligibilityError(m, res.locals.t);
+  if (gate) return fail(gate);
+  const started = await auth.startMemberSession(req, m); // never skips the member's authenticator (2FA)
   await auth.audit(req, 'login_google', 'members', m.id, 'Member login (Google)', { actorId: m.id, actorName: m.name });
-  res.redirect('/member');
+  res.redirect(started.needs2fa ? '/member/login/2fa' : '/member');
 }));
 
 router.use(auth.requireMember);
@@ -99,6 +93,7 @@ router.use((req, res, next) => {
   return res.status(403).render('public/error', { title: 'Change password', code: 403, message: res.locals.t('पहिले पासवर्ड परिवर्तन गर्नुहोस्।', 'Change your password first.') });
 });
 router.use('/marketplace', require('./marketplace').member);
+router.use(require('./member-self')); // profile details / KYC documents / 2FA / Facebook link / QR scanner / card unlock
 
 /** All submissions that belong to this member (matched by member number or phone). */
 async function myRequests(member) {
@@ -165,34 +160,9 @@ router.get('/notifications', ah(async (req, res) => {
   res.render('member/notifications', { title: res.locals.t('सूचनाहरू', 'Notifications'), rows });
 }));
 
-// ---------------------------------------------------------------- profile
-router.get('/profile', (req, res) => res.render('member/profile', { title: res.locals.t('मेरो विवरण', 'My profile'), errors: {}, values: req.member }));
-router.post('/profile', ah(async (req, res) => {
-  const errors = {};
-  const email = String(req.body.email || '').trim() || null;
-  const address = String(req.body.address || '').trim().slice(0, 500) || null;
-  if (email && !util.isEmail(email)) errors.email = res.locals.t('इमेल मिलेन', 'Invalid email');
-  const data = { email, address };
-  const pw = String(req.body.password || '');
-  if (pw) {
-    if (!(await auth.checkPassword(req.body.current, req.member.password_hash))) errors.current = res.locals.t('हालको पासवर्ड मिलेन', 'Current password is wrong');
-    else if (pw.length < 8) errors.password = res.locals.t('कम्तीमा ८ अक्षर', 'At least 8 characters');
-    else if (pw !== req.body.confirm) errors.confirm = res.locals.t('पासवर्ड मिलेन', 'Passwords do not match');
-    else { data.password_hash = await auth.hashPassword(pw); data.must_change_password = 0; }
-  }
-  if (Object.keys(errors).length) return res.status(422).render('member/profile', { title: res.locals.t('मेरो विवरण', 'My profile'), errors, values: { ...req.member, ...req.body } });
-  try {
-    await db.update('members', req.member.id, data);
-    if (data.password_hash) await auth.bumpSessionVersion('members', req.member.id, req); // sign out other devices
-  } catch (e) {
-    if (e.code === '23505') return res.status(422).render('member/profile', { title: res.locals.t('मेरो विवरण', 'My profile'), errors: { email: res.locals.t('यो इमेल पहिले नै प्रयोगमा छ', 'Email already in use') }, values: { ...req.member, ...req.body } });
-    throw e;
-  }
-  flash(req, 'success', res.locals.t('विवरण सुरक्षित भयो।', 'Profile saved.'));
-  res.redirect('/member/profile');
-}));
+// profile: see ./member-self.js
 
-// ---------------------------------------------------------------- digital ID card
+// ---------------------------------------------------------------- Google link
 router.get('/oauth/google/link', ah(async (req, res) => {
   const url = await google.start(req, 'link');
   res.redirect(url || '/member/profile');

@@ -1,0 +1,15 @@
+<div class="content-head"><div><div class="crumbs"><a href="/admin/members"><%= t('सदस्यहरू', 'Members') %></a></div><h1><%= title %></h1></div></div>
+<div class="card mb-3 flex justify-between items-center wrap gap-2">
+  <div>
+    <h3 class="mb-0"><%= t('सदस्यता नम्बरमा UNIQUE guard', 'Unique guard on membership numbers') %></h3>
+    <div class="small muted"><%= guard ? t('सुरु छ — एउटै सदस्यता नम्बर दुई सक्रिय सदस्यमा राख्न मिल्दैन।', 'On — two active members cannot share a membership number.') : t('बन्द छ — दोहोरो नम्बर मिलाएपछि थप्नुहोस्। (सदस्य सम्पादन र आयातले पहिले नै दोहोरो रोक्छ।)', 'Off — add it once the duplicates below are fixed. (Member edit and import already refuse duplicates.)') %></div>
+    <div class="small faint"><%= t('खाली सदस्यता नम्बर भएका सदस्य: ', 'Members without a membership number: ') %><%= num(empty) %></div>
+  </div>
+  <% if (!guard) { %><form method="post" action="/admin/members/duplicates/guard"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary btn-sm" <%= dups.length ? 'disabled' : '' %>><%- icon('shield') %><%= t('UNIQUE guard थप्नुहोस्', 'Add unique guard') %></button></form><% } else { %><span class="badge badge-ok"><%- icon('check') %> UNIQUE</span><% } %>
+</div>
+<% if (!dups.length) { %><div class="empty"><%= t('दोहोरो सदस्यता नम्बर छैन।', 'No duplicate membership numbers.') %></div><% } else { %>
+<p class="small muted"><%= t('एउटै नम्बर भएका सदस्य तल छन्। सही सदस्य राखेर अरूको नम्बर सच्याउनुहोस् वा अभिलेखमा सार्नुहोस्।', 'Members sharing a number are listed below. Keep the right one and correct or archive the others.') %></p>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्यता नं.', 'Member no.') %></th><th class="num"><%= t('संख्या', 'Count') %></th><th><%= t('सदस्यहरू', 'Members') %></th></tr></thead><tbody>
+  <% dups.forEach(d => { %><tr><td><code><%= d.sadasyata_number %></code></td><td class="num"><%= num(d.cnt) %></td>
+    <td><ul class="list small"><% d.members.forEach(m => { %><li class="list-item" style="padding:4px 0"><a href="/admin/members/<%= m.id %>">#<%= m.id %> <%= m.name %></a><span class="grow faint"><%= m.phone || '' %></span><span class="badge"><%= statusLabel(m.status || 'pending') %></span><% if (m.has_password) { %><span class="badge badge-ok"><%= t('पोर्टल', 'Portal') %></span><% } %></li><% }) %></ul></td></tr><% }) %>
+</tbody></table></div><% } %>
