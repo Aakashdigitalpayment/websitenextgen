@@ -1,5 +1,5 @@
 <div class="content-head"><h1><%= title %></h1><a class="btn btn-outline btn-sm" href="/marketplace" target="_blank" rel="noopener"><%- icon('globe') %><%= t('सार्वजनिक पृष्ठ', 'Public page') %></a></div>
-<div class="tabs"><% ['pending','approved','rejected','withdrawn'].forEach(s => { %><a class="tab <%= status === s ? 'active' : '' %>" href="?status=<%= s %>"><%= statusLabel(s) %> (<%= num(counts[s] || 0) %>)</a><% }) %></div>
+<div class="tabs"><% ['pending','approved','rejected','expired','withdrawn'].forEach(s => { %><a class="tab <%= status === s ? 'active' : '' %>" href="?status=<%= s %>"><%= statusLabel(s) %> (<%= num(counts[s] || 0) %>)</a><% }) %></div>
 <% if (!rows.length) { %><div class="empty"><%= t('कुनै सूची छैन।', 'No listings.') %></div><% } %>
 <div class="stack"><% rows.forEach(l => { %>
   <div class="card flex gap-2 wrap">
@@ -16,8 +16,16 @@
       <div class="flex gap-1">
         <% if (l.status !== 'approved') { %><button class="btn btn-soft btn-sm" name="action" value="approve"><%= t('स्वीकृत', 'Approve') %></button><% } %>
         <% if (l.status !== 'rejected') { %><button class="btn btn-ghost btn-sm" name="action" value="reject"><%= t('अस्वीकृत', 'Reject') %></button><% } %>
+        <% if (l.status === 'approved') { %><button class="btn btn-ghost btn-sm" name="action" value="expire" data-confirm="<%= t('सार्वजनिकबाट हटाउने?', 'Take off the public site?') %>"><%= t('अवधि सकियो', 'Expire') %></button><% } %>
         <button class="btn btn-ghost btn-sm" name="action" value="delete" data-confirm="<%= t('स्थायी रूपमा हटाउने?', 'Delete permanently?') %>"><%- icon('trash') %></button>
       </div>
     </form>
+    <% if (['approved', 'expired', 'pending'].includes(l.status)) { const u = l.available_until ? new Date(new Date(l.available_until).getTime() - new Date(l.available_until).getTimezoneOffset() * 60000).toISOString() : ''; %>
+    <form method="post" action="/admin/marketplace/<%= l.id %>?back=<%= status %>" class="stack" style="min-width:220px">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="extend">
+      <div class="small muted"><%= t('उपलब्ध सम्म', 'Available until') %>: <%= l.available_until ? bsDate(l.available_until) + ' ' + u.slice(11, 16) : t('तोकिएको छैन', 'not set') %></div>
+      <div class="flex gap-1"><input class="input" type="date" name="until_date" value="<%= u.slice(0, 10) %>" aria-label="<%= t('मिति', 'Date') %>"><input class="input" type="time" name="until_time" value="<%= u.slice(11, 16) || '23:59' %>" style="max-width:110px" aria-label="<%= t('समय', 'Time') %>"></div>
+      <button class="btn btn-outline btn-sm"><%= l.status === 'expired' ? t('मिति बढाई पुनः समीक्षामा', 'Extend & send to review') : t('मिति बढाउनुहोस्', 'Extend') %></button>
+    </form><% } %>
   </div>
 <% }) %></div>

@@ -4,7 +4,7 @@
 %>
 <div class="content-head">
   <div><div class="crumbs"><a href="/admin/programs"><%= t('कार्यक्रम', 'Programmes') %></a></div><h1><%= p.title %></h1><div class="small muted"><%= p.event_date ? bsDate(p.event_date) : '' %> <%= p.event_time || '' %> · <%= p.location || '' %></div></div>
-  <div class="flex gap-1"><a class="btn btn-outline btn-sm" href="/admin/r/upcoming_programs/<%= p.id %>/edit"><%- icon('edit') %><%= t('सम्पादन', 'Edit') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/<%= p.id %>/attendance.csv"><%- icon('download') %>CSV</a></div>
+  <div class="flex gap-1 wrap"><a class="btn btn-outline btn-sm" href="/admin/programs/dashboard?program_id=<%= p.id %>"><%- icon('chart') %><%= t('लाइभ', 'Live') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/reports/consolidated?program_id=<%= p.id %>"><%- icon('file') %><%= t('रिपोर्ट', 'Reports') %></a><a class="btn btn-outline btn-sm" href="/admin/r/upcoming_programs/<%= p.id %>/edit"><%- icon('edit') %><%= t('सम्पादन', 'Edit') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/<%= p.id %>/attendance.csv"><%- icon('download') %>CSV</a></div>
 </div>
 <div class="kpis">
   <div class="kpi"><div class="l"><%= t('उपस्थित', 'Checked in') %></div><div class="v"><%= num(valid.length) %></div></div>
@@ -37,10 +37,30 @@
     <form method="post" action="/admin/programs/<%= p.id %>/desk" class="stack">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="field"><label><%= t('सदस्यता नं. / कार्ड नं. / मोबाइल', 'Member no. / card no. / mobile') %></label><input class="input" name="q" required autofocus autocomplete="off" style="font-size:1.1rem"></div>
+      <% const activeDesks = desks.filter(d => Number(d.is_active)); const curDesk = Number(query.desk) || myDeskId; if (activeDesks.length) { %><div class="field"><label><%= t('डेस्क', 'Desk') %></label><select class="select" name="desk_id"><option value=""><%= t('— डेस्क बिना —', '— no desk —') %></option><% activeDesks.forEach(d => { %><option value="<%= d.id %>" <%= curDesk === d.id ? 'selected' : '' %>><%= d.desk_label %><%= d.location_name ? ' — ' + d.location_name : '' %><%= d.staff_name ? ' (' + d.staff_name + ')' : '' %></option><% }) %></select></div><% } %>
       <% if (occurrences.length) { %><div class="field"><label><%= t('स्थान', 'Location') %></label><select class="select" name="occurrence_id"><option value="">—</option><% occurrences.filter(o => o.is_active).forEach(o => { %><option value="<%= o.id %>"><%= o.location_name %></option><% }) %></select></div><% } %>
       <button class="btn btn-primary"><%- icon('check') %><%= t('उपस्थिति दर्ता', 'Check in') %></button>
     </form>
   </div>
+</div>
+
+<% const isAdmin = roleLevel(admin.role) >= 3; %>
+<div class="card mt-3" id="desks">
+  <h3><%= t('दर्ता डेस्कहरू', 'Registration desks') %></h3>
+  <% if (!desks.length) { %><p class="small muted"><%= t('डेस्क बनाएर स्टाफ तोक्दा रिपोर्टमा «कुन डेस्क / स्टाफबाट कति दर्ता» देखिन्छ। एउटै स्टाफ भए डेस्क नबनाए पनि हुन्छ।', 'Named desks with assigned staff show “check-ins per desk / staff” in reports. Optional for a single desk.') %></p><% } else { %>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('डेस्क', 'Desk') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('स्टाफ', 'Staff') %></th><th class="text-right"><%= t('दर्ता', 'Check-ins') %></th><th></th></tr></thead><tbody>
+    <% desks.forEach(d => { const on = Number(d.is_active); %><tr style="<%= on ? '' : 'opacity:.55' %>"><td><strong style="font-weight:500"><%= d.desk_label %></strong><% if (!on) { %> <span class="badge"><%= t('बन्द', 'off') %></span><% } %></td><td class="small"><%= d.location_name || t('सबै स्थान', 'All locations') %></td>
+      <td><% if (isAdmin) { %><form method="post" action="/admin/programs/<%= p.id %>/desks/<%= d.id %>" class="flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="assign"><select class="select" name="staff_id" style="min-width:150px" data-autosubmit><option value="">—</option><% staff.forEach(s => { %><option value="<%= s.id %>" <%= s.id === d.assigned_staff_admin_id ? 'selected' : '' %>><%= s.full_name || s.username %></option><% }) %></select><noscript><button class="btn btn-ghost btn-sm"><%= t('तोक्नुहोस्', 'Assign') %></button></noscript></form><% } else { %><%= d.staff_name || '—' %><% } %></td>
+      <td class="text-right"><%= num(d.attended_count) %></td>
+      <td class="text-right"><% if (isAdmin) { %><form method="post" action="/admin/programs/<%= p.id %>/desks/<%= d.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="toggle"><button class="btn btn-ghost btn-sm"><%= on ? t('बन्द', 'Disable') : t('सक्रिय', 'Enable') %></button></form><% } %></td></tr><% }) %>
+  </tbody></table></div><% } %>
+  <% if (isAdmin) { %><form method="post" action="/admin/programs/<%= p.id %>/desks" class="flex gap-1 wrap items-center mt-2">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input class="input" name="desk_label" value="Desk <%= desks.length + 1 %>" maxlength="60" required style="max-width:180px" aria-label="<%= t('डेस्कको नाम', 'Desk name') %>">
+    <% if (occurrences.length) { %><select class="select" name="occurrence_id" style="max-width:200px" aria-label="<%= t('स्थान', 'Location') %>"><option value=""><%= t('सबै स्थान', 'All locations') %></option><% occurrences.filter(o => o.is_active).forEach(o => { %><option value="<%= o.id %>"><%= o.location_name %></option><% }) %></select><% } %>
+    <select class="select" name="staff_id" style="max-width:200px" aria-label="<%= t('स्टाफ', 'Staff') %>"><option value=""><%= t('— स्टाफ —', '— staff —') %></option><% staff.forEach(s => { %><option value="<%= s.id %>"><%= s.full_name || s.username %></option><% }) %></select>
+    <button class="btn btn-outline"><%- icon('plus') %><%= t('डेस्क थप्नुहोस्', 'Add desk') %></button>
+  </form><% } %>
 </div>
 
 <div class="card mt-3">
@@ -62,7 +82,12 @@
 <% if (requests.length) { %>
 <div class="card mt-3" id="requests"><h3><%= t('उपस्थिति अनुरोध', 'Check-in requests') %></h3>
   <div class="table-wrap"><table class="table"><tbody><% requests.forEach(r => { %><tr><td><strong style="font-weight:500"><%= r.member_name %></strong><div class="small faint"><%= r.member_card_no || '' %> · <%= r.member_phone || '' %></div></td><td class="small"><%= bsDate(r.requested_at) %> <%= new Date(r.requested_at).toTimeString().slice(0,5) %></td>
-    <td><div class="row-actions"><% ['approve', 'reject'].forEach(a => { %><form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button class="btn btn-sm <%= a === 'approve' ? 'btn-soft' : 'btn-ghost' %>"><%= a === 'approve' ? t('स्वीकृत', 'Approve') : t('अस्वीकृत', 'Reject') %></button></form><% }) %></div></td></tr><% }) %></tbody></table></div></div>
+    <td><% if (!(Number(r.member_id) > 0)) { %>
+      <div class="small"><span class="badge"><%= t('सदस्य जोडिएको छैन', 'Not linked to a member') %></span></div>
+      <form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>/link" class="flex gap-1 mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="member_no" placeholder="<%= t('सदस्यता नं.', 'Member no.') %>" required style="max-width:150px"><button class="btn btn-ghost btn-sm"><%- icon('link') %><%= t('जोड्नुहोस्', 'Link') %></button></form>
+      <% if (isAdmin) { %><form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>/create-member" class="mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('यो विवरणबाट नयाँ सदस्य बनाउने?', 'Create a new member from these details?') %>"><%- icon('plus') %><%= t('नयाँ सदस्य बनाउनुहोस्', 'Create member') %></button></form><% } %>
+    <% } %></td>
+    <td><div class="row-actions"><% ['approve', 'reject'].forEach(a => { if (a === 'approve' && !(Number(r.member_id) > 0)) return; %><form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button class="btn btn-sm <%= a === 'approve' ? 'btn-soft' : 'btn-ghost' %>"><%= a === 'approve' ? t('स्वीकृत', 'Approve') : t('अस्वीकृत', 'Reject') %></button></form><% }) %></div></td></tr><% }) %></tbody></table></div></div>
 <% } %>
 
 <div class="card mt-3" id="attendance"><h3><%= t('उपस्थिति सूची', 'Attendance') %></h3>
@@ -73,5 +98,18 @@
   </tbody></table></div><% } %>
 </div>
 
-<% if (prereg.length) { %><div class="card mt-3"><h3><%= t('पूर्व दर्ता', 'Pre-registrations') %> (<%= num(prereg.length) %>)</h3>
-  <div class="table-wrap"><table class="table"><tbody><% prereg.forEach(r => { %><tr><td><%= r.member_name %></td><td class="small"><%= r.member_card_no || '' %></td><td class="small"><%= r.phone || '' %></td><td class="small faint"><%= bsDate(r.created_at) %></td></tr><% }) %></tbody></table></div></div><% } %>
+<% if (prereg.length) { %><div class="card mt-3" id="prereg"><h3><%= t('पूर्व दर्ता', 'Pre-registrations') %> (<%= num(prereg.length) %>)</h3>
+  <% if (smsResult) { %><div class="alert alert-<%= smsResult.type %>"><%= smsResult.text %></div><% } %>
+  <% if (isAdmin) { %><form method="post" action="/admin/programs/<%= p.id %>/prereg/notify" id="prereg-notify" class="stack mb-2">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="field"><label for="bulk_msg"><%= t('सन्देश (छानिएका सदस्यलाई)', 'Message (to the selected members)') %></label><textarea class="textarea" id="bulk_msg" name="message" rows="2" maxlength="600" required><%= t('तपाईंले पूर्व दर्ता गर्नुभएको कार्यक्रमको सम्झना।', 'Reminder of the programme you pre-registered for.') %></textarea><div class="field-hint"><%= t('कार्यक्रम, मिति र स्थान आफैं थपिन्छ।', 'Programme, date and venue are appended automatically.') %></div></div>
+    <div class="flex gap-1 wrap items-center">
+      <select class="select" name="channel" style="max-width:160px" aria-label="<%= t('माध्यम', 'Channel') %>"><option value="sms">SMS</option><option value="email"><%= t('इमेल', 'Email') %></option><option value="both">SMS + <%= t('इमेल', 'email') %></option></select>
+      <button class="btn btn-ghost btn-sm" name="mode" value="test"><%= t('परीक्षण (पहिलो छानिएको मात्र)', 'Test (first selected only)') %></button>
+      <button class="btn btn-primary btn-sm" name="mode" value="send" data-confirm="<%= t('छानिएका सबैलाई पठाउने?', 'Send to all selected?') %>"><%- icon('message') %><%= t('पठाउनुहोस्', 'Send') %></button>
+    </div>
+  </form><% } %>
+  <div class="table-wrap"><table class="table"><thead><tr><% if (isAdmin) { %><th style="width:32px"></th><% } %><th><%= t('सदस्य', 'Member') %></th><th><%= t('फोन', 'Phone') %></th><th><%= t('दर्ता मिति', 'Registered') %></th><th></th></tr></thead><tbody><% prereg.forEach(r => { %><tr>
+    <% if (isAdmin) { %><td><input type="checkbox" name="prereg_ids" value="<%= r.id %>" form="prereg-notify" checked aria-label="<%= r.member_name %>"></td><% } %>
+    <td><%= r.member_name %><div class="small faint"><%= r.member_card_no || '' %></div></td><td class="small"><%= r.phone || '' %></td><td class="small faint"><%= bsDate(r.created_at) %></td>
+    <td class="text-right"><% if (r.attended) { %><span class="badge badge-ok"><%= t('उपस्थित', 'Attended') %></span><% } else if (!occurrences.some(o => o.is_active)) { %><form method="post" action="/admin/programs/<%= p.id %>/prereg/<%= r.id %>/attend"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm"><%- icon('check') %><%= t('उपस्थित गराउनुहोस्', 'Mark attended') %></button></form><% } %></td></tr><% }) %></tbody></table></div></div><% } %>

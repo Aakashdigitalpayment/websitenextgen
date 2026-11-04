@@ -224,7 +224,16 @@ router.get('/reports', ah(async (req, res) => {
 
 router.get('/institutional-profile', ah(async (req, res) => {
   const rows = await db.many(`SELECT * FROM institutional_profile WHERE ${ACTIVE} ${req.member ? '' : "AND access_level = 'none'"} ORDER BY fiscal_year DESC, report_month DESC NULLS LAST, id DESC LIMIT 24`);
-  res.render('public/institutional-profile', { title: res.locals.t('संस्थागत विवरण', 'Institutional profile'), rows, latest: rows[0] });
+  const welfare = rows[0] ? await require('../lib/welfare').forProfile(rows[0]) : [];
+  res.render('public/institutional-profile', { title: res.locals.t('संस्थागत विवरण', 'Institutional profile'), rows, latest: rows[0], welfare });
+}));
+
+// report attachment through an access check — members-only reports never sit under public /uploads (legacy institutional-profile-file.php)
+router.get('/institutional-profile/:id/file', ah(async (req, res, next) => {
+  const row = await db.one('SELECT id, fiscal_year, attachment_path, access_level, is_active FROM institutional_profile WHERE id = $1', [util.int(req.params.id)]);
+  if (!row || !row.attachment_path || (!Number(row.is_active) && !req.admin)) return next();
+  if (row.access_level === 'member' && !req.member && !req.admin) return res.redirect('/member/login?next=' + encodeURIComponent(req.originalUrl));
+  require('../lib/uploads').sendStored(req, res, next, row.attachment_path);
 }));
 
 router.get('/important-links', ah(async (req, res) => {
@@ -451,11 +460,40 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
   if (card) {
     await db.query('UPDATE member_id_cards SET verify_count = COALESCE(verify_count, 0) + 1, last_verified_at = now() WHERE id = $1', [card.id]);
     // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
-    member = await db.one(`SELECT name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members
+    member = await db.one(`SELECT id, name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members
                            WHERE (id::text = $1 OR sadasyata_number = $1 OR member_card_no = $1) AND deleted_at IS NULL
                            ORDER BY (id::text = $1) DESC, id LIMIT 1`, [card.member_id]);
   }
-  res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: card ? { card, member } : false, code });
+  // a valid card opens a 30-minute window in which a partner desk may log a service for this member (legacy verify.php)
+  if (card && member && card.status === 'active') req.session.partnerVerify = { mid: member.id, card: card.card_no || member.sadasyata_number || '', code, at: Date.now() };
+  res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: card ? { card, member } : false, code, partners: await verifyPartners(card, member), log: null });
+}));
+
+const verifyPartners = (card, member) => (card && member && card.status === 'active'
+  ? db.many(`SELECT id, partner_name, partner_name_en, (pin_hash IS NOT NULL AND pin_hash <> '') AS has_pin FROM partner_facilities WHERE ${ACTIVE} ORDER BY display_order, partner_name`) : []);
+
+// partner desk: log a service used by the member verified above (legacy verify.php log_service + logMemberPartnerService)
+const serviceLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 40, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip), standardHeaders: 'draft-7', legacyHeaders: false });
+router.post('/verify/service', serviceLimiter, ah(async (req, res) => {
+  const pv = req.session.partnerVerify;
+  const title = res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card');
+  const fresh = pv && Number(pv.mid) === util.int(req.body.member_id) && Date.now() - pv.at <= 30 * 60_000;
+  if (!fresh) return res.status(403).render('public/verify', { title, result: null, code: '', partners: [], log: { ok: false, text: res.locals.t('पहिले सदस्य प्रमाणित गर्नुहोस्, अनि मात्र सेवा लग गर्नुहोस्।', 'Please verify the member first, then log the service.') } });
+  const partnerId = util.int(req.body.partner_id, 0);
+  const r = partnerId ? await require('../lib/partners').logService({
+    memberId: pv.mid, cardNo: pv.card, partnerId, serviceName: req.body.service_name, taken: req.body.service_taken !== 'no', note: req.body.service_note, pin: req.body.partner_pin, ip: req.ip,
+  }) : { ok: false, error: 'partner' };
+  const errors = {
+    pin: res.locals.t('साझेदार डेस्क PIN गलत भयो।', 'Partner desk PIN is incorrect.'), partner: res.locals.t('साझेदार संस्था छान्नुहोस्।', 'Please select a partner organisation.'),
+    duplicate: res.locals.t('यो साझेदारमा भर्खरै लग भइसकेको छ (९० सेकेन्ड)।', 'Already logged for this partner just now (90 s).'), invalid: res.locals.t('सेवा लग असफल।', 'Service log failed.'),
+  };
+  if (r.ok) pv.at = Date.now();
+  const card = await db.one('SELECT * FROM member_id_cards WHERE upper(verification_code) = $1', [String(pv.code || '').toUpperCase()]);
+  const member = await db.one('SELECT id, name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members WHERE id = $1', [pv.mid]);
+  res.status(r.ok ? 200 : 422).render('public/verify', {
+    title, code: pv.code, result: card && member ? { card, member } : null, partners: await verifyPartners(card || { status: 'active' }, member),
+    log: r.ok ? { ok: true, text: res.locals.t(`सेवा लग भयो — ${r.partner.partner_name}।`, `Service logged — ${r.partner.partner_name_en || r.partner.partner_name}.`) } : { ok: false, text: errors[r.error] || errors.invalid },
+  });
 }));
 
 router.use('/marketplace', require('./marketplace').pub);

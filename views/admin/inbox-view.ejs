@@ -1,6 +1,7 @@
 <div class="content-head">
   <div><div class="crumbs"><a href="/admin/inbox/<%= m.key %>"><%= title %></a></div><h1><%= row[m.nameCol] %></h1><div class="small muted"><%= row.tracking_id || '#' + row.id %> · <%= bsDate(row.created_at) %></div></div>
   <div class="flex gap-1 no-print">
+    <% if (m.key === 'vendor' && roleLevel(admin.role) >= 3) { %><% if (row.linked_partner_id) { %><a class="btn btn-outline btn-sm" href="/admin/r/partner_facilities/<%= row.linked_partner_id %>/edit"><%- icon('store') %><%= t('साझेदार सुविधा', 'Partner facility') %></a><% } else { %><form method="post" action="/admin/partners/promote-vendor/<%= row.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('यो भेन्डरलाई स्वीकृत गरी साझेदार सुविधामा थप्ने?', 'Approve this vendor and add it as a partner facility?') %>"><%- icon('store') %><%= t('साझेदार बनाउनुहोस्', 'Make partner') %></button></form><% } %><% } %>
     <button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button>
     <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('पक्का हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form><% } %>
   </div>

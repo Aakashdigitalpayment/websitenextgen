@@ -6,10 +6,17 @@
       <div class="card card-flat"><div class="small muted"><%= label %></div><div class="stat-value mt-1"><%= isMoney ? t('रु. ', 'Rs. ') + money(latest[k]) : (k === 'npa_percent' ? num(latest[k]) + '%' : num(Number(latest[k]).toLocaleString('en-IN'))) %></div></div>
     <% } }) %>
   </div>
+  <% if (latest.attachment_path) { %><p class="mt-2"><a class="btn btn-outline btn-sm" href="/institutional-profile/<%= latest.id %>/file" target="_blank" rel="noopener"><%- icon('file') %><%= t('प्रतिवेदन हेर्नुहोस्', 'View report') %></a></p><% } %>
+  <% if (locals.welfare && welfare.length) { const top = Math.max(1, ...welfare.map(w => w.amount)); %>
+  <h2 class="mt-4"><%= t('सदस्य राहत (कुल)', 'Member welfare paid (cumulative)') %></h2>
+  <div class="card mt-2"><% welfare.forEach(w => { %>
+    <div class="mb-2"><div class="flex justify-between small"><span><%= t(w.label[0], w.label[1]) %> · <%= num(w.count) %> <%= t('जना', 'claims') %></span><strong style="font-weight:600"><%= t('रु. ', 'Rs. ') %><%= money(w.amount) %></strong></div>
+      <div style="height:8px;background:var(--surface-2);border-radius:4px" aria-hidden="true"><div style="height:8px;width:<%= Math.max(2, Math.round(w.amount / top * 100)) %>%;background:<%= /^#[0-9a-f]{3,8}$/i.test(w.color) ? w.color : 'var(--brand)' %>;border-radius:4px"></div></div></div>
+  <% }) %></div><% } %>
   <% if (rows.length > 1) { %>
   <h2 class="mt-4"><%= t('विगतका विवरण', 'History') %></h2>
   <div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('आ.व.', 'FY') %></th><th><%= t('महिना', 'Month') %></th><th class="num"><%= t('सदस्य', 'Members') %></th><th class="num"><%= t('बचत', 'Deposits') %></th><th class="num"><%= t('ऋण', 'Loans') %></th><th class="num"><%= t('सम्पत्ति', 'Assets') %></th></tr></thead><tbody>
-    <% rows.forEach(r => { %><tr><td><%= num(r.fiscal_year) %></td><td><%= r.report_month ? (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[r.report_month - 1] : '' %></td><td class="num"><%= num(r.total_members || '') %></td><td class="num"><%= money(r.deposit) %></td><td class="num"><%= money(r.loan) %></td><td class="num"><%= money(r.total_assets) %></td></tr><% }) %>
+    <% rows.forEach(r => { %><tr><td><%= num(r.fiscal_year) %></td><td><%= r.report_month ? (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[r.report_month - 1] : '' %></td><td class="num"><%= num(r.total_members || '') %></td><td class="num"><%= money(r.deposit) %></td><td class="num"><%= money(r.loan) %></td><td class="num"><%= money(r.total_assets) %><% if (r.attachment_path) { %> <a href="/institutional-profile/<%= r.id %>/file" target="_blank" rel="noopener" title="<%= t('प्रतिवेदन', 'Report') %>"><%- icon('file') %></a><% } %></td></tr><% }) %>
   </tbody></table></div><% } %>
   <% } %>
 </div></section>

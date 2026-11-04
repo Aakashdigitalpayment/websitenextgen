@@ -110,7 +110,10 @@ const resources = {
     N('total_members', 'कुल सदस्य', 'Members', { list: true }), N('share_capital', 'शेयर पुँजी', 'Share capital'), N('deposit', 'कुल बचत', 'Deposits', { list: true }), N('loan', 'कुल ऋण', 'Loans', { list: true }),
     N('total_loan_members', 'ऋणी सदस्य', 'Borrowers'), N('total_assets', 'कुल सम्पत्ति', 'Total assets'), N('other_fund', 'अन्य कोष', 'Other funds'), N('bank_cash_balance', 'बैंक/नगद', 'Bank & cash'),
     N('fixed_assets', 'स्थिर सम्पत्ति', 'Fixed assets'), N('npa_percent', 'NPA %', 'NPA %', { step: '0.01' }), N('profit_loss', 'नाफा/नोक्सान', 'Profit / loss'),
-    SEL('access_level', 'पहुँच', 'Access', [['none', 'सबै', 'Public'], ['member', 'सदस्य मात्र', 'Members only']], { default: 'none' }), ACTIVE] },
+    SEL('access_level', 'पहुँच', 'Access', [['none', 'सबै', 'Public'], ['member', 'सदस्य मात्र', 'Members only']], { default: 'none' }),
+    FILE('attachment_path', 'प्रतिवेदन फाइल', 'Report file', { hint: '/institutional-profile/:id/file बाट मात्र खुल्छ (पहुँच अनुसार) / served only through the gated link' }), ACTIVE],
+  // attachments are private: members-only reports must not be reachable under /uploads (legacy institutional-profile-file.php)
+  privateFiles: true },
   why_choose_features: { group: 'org', icon: 'check', title: ['हाम्रो विशेषता', 'Why choose us'], order: 'sort_order, id', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), TA('desc_np', 'विवरण (नेपाली)', 'Description (Nepali)'), TA('desc_en', 'विवरण (English)', 'Description (English)'),
     N('sort_order', 'क्रम', 'Order', { default: 0 }), ACTIVE] },
@@ -140,7 +143,16 @@ const resources = {
     T('title', 'शीर्षक', 'Title', { required: true, list: true }),
     SEL('program_type', 'प्रकार', 'Type', [['General', 'सामान्य', 'General'], ['AGM', 'वार्षिक साधारण सभा', 'AGM'], ['SGM', 'विशेष साधारण सभा', 'SGM'], ['Orientation', 'अभिमुखीकरण', 'Orientation'], ['Training', 'तालिम', 'Training'], ['Seminar', 'गोष्ठी', 'Seminar'], ['Workshop', 'कार्यशाला', 'Workshop'], ['Financial_Literacy', 'वित्तीय साक्षरता', 'Financial literacy'], ['Other', 'अन्य', 'Other']], { default: 'General', list: true }),
     D('event_date', 'मिति', 'Date', { list: true }), T('event_time', 'समय', 'Time'),
-    T('location', 'स्थान', 'Location', { list: true }), TA('description', 'विवरण', 'Description'), B('pre_registration_open', 'पूर्व दर्ता खुला', 'Pre-registration open'), ACTIVE] },
+    T('location', 'स्थान', 'Location', { list: true }), TA('description', 'विवरण', 'Description'), B('pre_registration_open', 'पूर्व दर्ता खुला', 'Pre-registration open'), ACTIVE],
+  // new programmes take the defaults from Programme settings (legacy admin/programs.php + program-settings.php)
+  beforeSave: async (data, { existing }) => {
+    if (existing) return {};
+    const s = await require('../lib/settings').all();
+    data.instant_attendance = s.program_default_instant_attendance === '1' ? 1 : 0;
+    data.shared_qr_mode = (s.program_default_shared_qr ?? '1') === '0' ? 0 : 1;
+    data.eligible_member_scope = ['all_active', 'shareholders', 'voters'].includes(s.program_default_eligible_scope) ? s.program_default_eligible_scope : 'all_active';
+    return {};
+  } },
   sahakari_calendar_events: { group: 'engage', icon: 'calendar', title: ['पात्रो कार्यक्रम', 'Calendar events'], order: 'bs_month, bs_day', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'),
     N('bs_year', 'वि.सं. वर्ष (खाली = हरेक वर्ष)', 'BS year (blank = every year)'), N('bs_month', 'महिना (१–१२)', 'Month (1–12)', { required: true, list: true }), N('bs_day', 'गते', 'Day', { required: true, list: true }),
@@ -156,10 +168,38 @@ const resources = {
     B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE] },
   election_cycles: { minRole: 'admin', group: 'engage', icon: 'vote', title: ['निर्वाचन', 'Elections'], order: 'sort_order, date_from DESC NULLS LAST', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('period_label', 'अवधि', 'Period'),
-    D('date_from', 'देखि', 'From'), D('date_to', 'सम्म', 'To'), TA('intro_np', 'परिचय', 'Introduction'), B('is_published', 'प्रकाशित', 'Published', { list: true }), N('sort_order', 'क्रम', 'Order', { default: 0 })] },
+    D('date_from', 'देखि', 'From'), D('date_to', 'सम्म', 'To'), TA('intro_np', 'परिचय', 'Introduction'), B('is_published', 'प्रकाशित', 'Published', { list: true }), N('sort_order', 'क्रम', 'Order', { default: 0 }),
+    B('voting_enabled', 'अनलाइन मतदान सक्रिय', 'Voting enabled', { list: true }), T('vote_start_at', 'मतदान खुल्ने समय', 'Voting opens', { type: 'datetime', hint: 'नेपाल समय / Nepal time' }),
+    T('vote_end_at', 'मतदान बन्द हुने समय', 'Voting closes', { type: 'datetime' })],
+  // legacy election-information.php: enabling voting needs both times, and closing must follow opening
+  beforeSave: async data => {
+    const errors = {};
+    if (Number(data.voting_enabled) && (!data.vote_start_at || !data.vote_end_at)) errors.vote_start_at = 'मतदान सक्रिय गर्न खुल्ने/बन्द समय अनिवार्य / both times are required to enable voting';
+    if (data.vote_start_at && data.vote_end_at && Date.parse(data.vote_end_at) < Date.parse(data.vote_start_at)) errors.vote_end_at = 'बन्द समय खुल्ने समयभन्दा पछि हुनुपर्छ / must be after the opening time';
+    return errors;
+  } },
+  election_posts: { minRole: 'admin', group: 'engage', icon: 'layers', title: ['निर्वाचन पद मास्टर', 'Election post master'], order: 'display_order, id', fields: [
+    REF('designation_id', 'पद/दर्जा (मास्टर)', 'Designation (master)', 'designations', 'title_np', { required: true, list: true }), T('title_np', 'पद (नेपाली)', 'Post (Nepali)', { list: true, hint: 'खाली = मास्टरबाट / blank = from designation' }), T('title_en', 'पद (English)', 'Post (English)'),
+    REF('committee_type_id', 'समिति', 'Committee', 'committee_types', 'name_np', { list: true }), N('default_seats', 'पद संख्या', 'Default seats', { default: 1, list: true }), N('default_max_votes', 'अधिकतम मत', 'Default max votes', { default: 1 }), ORDER, ACTIVE],
+  // legacy election-posts.php: titles come from the designation master; a post used by an election cannot be deleted
+  beforeSave: async (data, { db }) => {
+    const d = data.designation_id ? await db.one('SELECT title_np, title_en FROM designations WHERE id = $1 AND is_active = 1', [Number(data.designation_id)]) : null;
+    if (!d) return { designation_id: 'पद मास्टरबाट पद छान्नुहोस् / choose a designation' };
+    data.title_np = data.title_np || d.title_np; data.title_en = data.title_en || d.title_en || '';
+    data.default_seats = Math.max(1, Number(data.default_seats) || 1); data.default_max_votes = Math.max(1, Number(data.default_max_votes) || 1);
+    return {};
+  },
+  beforeDelete: async (id, { db }) => ((await db.value('SELECT count(*) FROM election_positions WHERE post_id = $1', [id])) > 0 ? ['यो पद कुनै चक्रमा प्रयोग भएको छ — मेटाउन मिलेन।', 'This post is used by an election and cannot be deleted.'] : null) },
   election_positions: { minRole: 'admin', group: 'engage', icon: 'vote', title: ['निर्वाचन पद', 'Election positions'], order: 'cycle_id DESC, display_order', fields: [
-    REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true, list: true }), T('title_np', 'पद (नेपाली)', 'Position (Nepali)', { required: true, list: true }), T('title_en', 'पद (English)', 'Position (English)'),
-    N('seats', 'पद संख्या', 'Seats', { default: 1, list: true }), N('max_votes_per_voter', 'अधिकतम मत', 'Max votes', { default: 1 }), ORDER, ACTIVE] },
+    REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true, list: true }), REF('post_id', 'पद मास्टर', 'Post master', 'election_posts', 'title_np', { hint: 'छानेमा खाली विवरण मास्टरबाट भरिन्छ / fills blank fields' }),
+    T('title_np', 'पद (नेपाली)', 'Position (Nepali)', { list: true }), T('title_en', 'पद (English)', 'Position (English)'),
+    N('seats', 'पद संख्या', 'Seats', { list: true }), N('max_votes_per_voter', 'अधिकतम मत', 'Max votes'), REF('committee_type_id', 'समिति (विजेता यहाँ जान्छन्)', 'Committee (winners go here)', 'committee_types', 'name_np'), ORDER, ACTIVE],
+  // legacy election-candidates.php save_position: auto-fill from the post master
+  beforeSave: async (data, { body }) => {
+    await require('../lib/elections').applyPostDefaults(data, body);
+    data.seats = Math.max(1, Number(data.seats) || 1); data.max_votes_per_voter = Math.max(1, Number(data.max_votes_per_voter) || 1);
+    return data.title_np ? {} : { title_np: 'आवश्यक छ / required' };
+  } },
   election_candidates: { minRole: 'admin', group: 'engage', icon: 'user', title: ['उम्मेदवार', 'Candidates'], order: 'cycle_id DESC, position_id, display_order', fields: [
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true }), REF('position_id', 'पद', 'Position', 'election_positions', 'title_np', { required: true, list: true }),
     IMG('photo', 'फोटो', 'Photo', { list: true }), T('name', 'नाम', 'Name', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'), T('symbol_no', 'चिन्ह नं.', 'Symbol no.'),

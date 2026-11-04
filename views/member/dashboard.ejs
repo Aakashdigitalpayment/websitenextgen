@@ -1,6 +1,6 @@
 <div class="content-head"><div><h1><%= t('नमस्ते', 'Namaste') %>, <%= member.name_np || member.name %></h1><div class="muted small"><%= nd.formatBs(nd.todayBs(), lang) %></div></div></div>
 <div class="alert alert-info" data-push-box hidden><%- icon('bell') %><span class="grow"><%= t('नयाँ सूचना फोन/कम्प्युटरमा पाउन चाहनुहुन्छ?', 'Get notifications on this device?') %></span><button class="btn btn-primary btn-sm" data-push-enable data-csrf="<%= csrfToken %>"><%= t('सक्रिय गर्नुहोस्', 'Enable') %></button></div>
-<% elections.forEach(e => { %><div class="alert alert-info"><%- icon('vote') %><span><%= f(e, 'title') %> — <a href="/member/elections/<%= e.id %>"><%= t('अनलाइन मतदान गर्नुहोस्', 'Vote online') %></a></span></div><% }) %>
+<% elections.forEach(e => { %><div class="alert alert-info"><%- icon('vote') %><span><%= f(e, 'title') %> — <a href="/member/elections/<%= e.id %>"><%= e.voted ? t('मतदान गरिसकियो', 'Already voted') : t('अनलाइन मतदान गर्नुहोस्', 'Vote online') %></a></span></div><% }) %>
 <div class="kpis">
   <div class="kpi"><div class="l"><%= t('सदस्यता नं.', 'Membership no.') %></div><div class="v" style="font-size:1.2rem"><%= member.sadasyata_number || '—' %></div></div>
   <div class="kpi"><div class="l"><%= t('आवेदन', 'Applications') %></div><div class="v"><%= num(requests.length) %></div></div>
@@ -17,3 +17,12 @@
     <ul class="list"><% notes.forEach(n => { %><li class="list-item" style="flex-direction:column;gap:2px"><div style="font-weight:<%= n.is_read ? 400 : 500 %>"><%= n.title %></div><% if (n.message) { %><div class="small muted"><%= n.message %></div><% } %><div class="small faint"><%= bsDate(n.created_at) %></div></li><% }) %></ul>
   </div>
 </div>
+<% if (locals.partnerHistory && partnerHistory.length) { %>
+<div class="card mt-3" id="partner-services"><h3><%= t('साझेदार सुविधा प्रयोग', 'Partner services used') %></h3>
+  <div class="flex gap-1 wrap mb-2"><% partnerSummary.forEach(s => { %><span class="badge"><%= s.name %> · <%= num(s.taken) %>/<%= num(s.total) %></span><% }) %></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('साझेदार', 'Partner') %></th><th><%= t('सेवा', 'Service') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('मिति', 'Date') %></th></tr></thead><tbody>
+  <% partnerHistory.forEach(h => { %><tr><td><%= lang === 'en' && h.partner_name_en ? h.partner_name_en : h.partner_name %><% if (h.facility_type) { %><div class="small faint"><%= h.facility_type %></div><% } %></td><td><%= h.service_name || '—' %><% if (h.service_note) { %><div class="small faint"><%= h.service_note %></div><% } %></td>
+    <td><span class="badge <%= Number(h.service_taken) ? 'badge-ok' : '' %>"><%= Number(h.service_taken) ? t('सेवा लिइयो', 'Service taken') : t('भ्रमण मात्र', 'Visit only') %></span></td><td class="small"><%= bsDate(h.created_at) %></td></tr><% }) %>
+  </tbody></table></div>
+</div>
+<% } %>

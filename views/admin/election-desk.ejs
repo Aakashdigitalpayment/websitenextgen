@@ -1,0 +1,35 @@
+<% const isAdmin = roleLevel(admin.role) >= 3; %>
+<div class="content-head"><div><div class="crumbs"><a href="/admin/elections"><%= t('निर्वाचन', 'Elections') %></a> / <a href="/admin/elections/<%= cycle.id %>"><%= f(cycle, 'title') %></a></div><h1><%= t('मतदान उपस्थिति डेस्क', 'In-person voting desk') %></h1></div></div>
+<div class="alert <%= open ? 'alert-success' : 'alert-warn' %>"><%- icon(open ? 'check' : 'alert') %><span>
+  <%= open ? t('मतदान समय खुला छ — म्यानुअल मतपत्र पनि दर्ता गर्न मिल्छ।', 'Voting is open — manual ballots can be recorded too.') : t('मतदान समय बन्द छ — उपस्थिति मात्र दर्ता हुन्छ; मतपत्र होइन।', 'Voting is closed — only attendance can be recorded, not ballots.') %>
+  <span class="small"> · <%= t('मतपत्र', 'Ballots') %> <%= num(counts.ballots) %> · <%= t('डिजिटल', 'Digital') %> <%= num(counts.digital) %> · <%= t('म्यानुअल', 'Manual') %> <%= num(counts.manual) %> · <%= t('उपस्थिति मात्र', 'Attendance only') %> <%= num(counts.attendance) %></span></span></div>
+<div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px">
+  <div class="card"><h3><%= t('सदस्य दर्ता', 'Record a member') %></h3>
+    <% if (!isAdmin) { %><p class="small muted"><%= t('दर्ता गर्न प्रशासक अनुमति चाहिन्छ।', 'Recording requires the admin role.') %></p><% } else { %>
+    <form method="post" action="/admin/elections/<%= cycle.id %>/desk" class="stack">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-grid">
+        <div class="field"><label for="mk"><%= t('सदस्यता नं. / ID', 'Member no. / ID') %></label><input class="input" id="mk" name="member_key" autocomplete="off" autofocus></div>
+        <div class="field"><label for="ph"><%= t('फोन', 'Phone') %></label><input class="input" id="ph" name="phone" inputmode="numeric" placeholder="98XXXXXXXX"></div>
+        <div class="field"><label for="pt"><%= t('प्रमाण', 'Proof shown') %></label><select class="select" id="pt" name="proof_type"><% PROOF_TYPES.forEach(p => { %><option value="<%= p[0] %>"><%= t(p[1], p[2]) %></option><% }) %></select></div>
+        <div class="field"><label for="nt"><%= t('टिप्पणी', 'Note') %></label><input class="input" id="nt" name="note" maxlength="500"></div>
+      </div>
+      <div class="alert alert-info small"><%- icon('info') %><span><strong><%= t('उपस्थिति मात्र', 'Attendance only') %></strong> (<%= t('उम्मेदवार खाली', 'no candidates') %>) — <%= t('सदस्यले पोर्टलबाट अझै मत हाल्न सक्छ।', 'the member can still vote online.') %> <strong><%= t('म्यानुअल मतपत्र', 'Manual ballot') %></strong> (<%= t('उम्मेदवार छानेपछि', 'candidates chosen') %>) — <%= t('फेरि मत हाल्न मिल्दैन।', 'no further vote is possible.') %></span></div>
+      <% if (open) positions.forEach(p => { const list = candidates.filter(c => c.position_id === p.id); const max = Math.max(1, p.max_votes_per_voter || 1); %>
+        <fieldset class="card card-flat"><legend class="small" style="font-weight:500"><%= f(p, 'title') %> <span class="badge"><%= t('बढीमा', 'max') %> <%= num(max) %></span></legend>
+          <div class="choices"><% list.forEach(c => { %><label class="choice"><input type="<%= max > 1 ? 'checkbox' : 'radio' %>" name="pos_<%= p.id %>" value="<%= c.id %>"> <%= f(c, 'name') %></label><% }) %>
+          <% if (!list.length) { %><span class="small muted"><%= t('उम्मेदवार छैन।', 'No candidates.') %></span><% } %></div></fieldset>
+      <% }) %>
+      <button class="btn btn-primary" data-confirm="<%= t('पक्का गर्ने?', 'Confirm?') %>"><%- icon('check') %><%= t('पुष्टि गर्नुहोस्', 'Confirm') %></button>
+    </form><% } %>
+  </div>
+  <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('मतदाता सूची (पछिल्ला)', 'Recent voters') %></h3>
+    <% if (!recent.length) { %><p class="muted small" style="padding:0 20px 16px"><%= t('अझै मतदान/उपस्थिति छैन।', 'No voting attendance yet.') %></p><% } else { %>
+    <div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्य', 'Member') %></th><th><%= t('स्रोत', 'Source') %></th><th><%= t('प्रमाण', 'Proof') %></th><th><%= t('प्रमाणित गर्ने', 'Verified by') %></th><th><%= t('समय', 'Time') %></th></tr></thead><tbody>
+      <% recent.forEach(r => { %><tr><td><%= r.name_np || r.name || '—' %><div class="small faint"><%= r.sadasyata_number || '' %> <%= r.phone || '' %></div></td>
+        <td class="small"><%= r.source %> <span class="badge <%= Number(r.is_ballot) ? 'badge-ok' : '' %>"><%= Number(r.is_ballot) ? t('मतपत्र', 'ballot') : t('उपस्थिति', 'attendance') %></span></td>
+        <% const pt = PROOF_TYPES.find(p => p[0] === r.proof_type); %><td class="small"><%= pt ? t(pt[1], pt[2]) : (r.proof_type || '—') %></td>
+        <td class="small"><%= r.verified_by_name || '—' %></td><td class="small faint"><%= bsDate(r.submitted_at) %> <%= new Date(r.submitted_at).toTimeString().slice(0, 5) %></td></tr><% }) %>
+    </tbody></table></div><% } %>
+  </div>
+</div>

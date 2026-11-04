@@ -16,4 +16,20 @@
       <div class="kv mt-2"><div><%= t('जारी मिति', 'Issued') %></div><div><%= bsDate(c.issued_date) %></div><% if (c.expiry_date) { %><div><%= t('म्याद', 'Expires') %></div><div><%= bsDate(c.expiry_date) %></div><% } %></div>
     </div>
   <% } %>
+  <% if (locals.log) { %><div class="alert <%= log.ok ? 'alert-success' : 'alert-error' %> mt-3"><%- icon(log.ok ? 'check' : 'alert') %><span><%= log.text %></span></div><% } %>
+  <% if (result && result.member && locals.partners && partners.length) { %>
+    <form class="form-card mt-3" method="post" action="/verify/service" id="partner-service">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="member_id" value="<%= result.member.id %>">
+      <h3 class="mb-1"><%= t('साझेदार डेस्क: सेवा लग', 'Partner desk: log a service') %></h3>
+      <p class="small muted"><%= t('यो सदस्यले तपाईंको संस्थामा लिएको सेवा/छुट दर्ता गर्नुहोस्।', 'Record the service or discount this member used at your organisation.') %></p>
+      <div class="form-grid">
+        <div class="field"><label for="ps_partner"><%= t('साझेदार संस्था', 'Partner organisation') %></label><select class="select" id="ps_partner" name="partner_id" required><option value="">—</option><% partners.forEach(p => { %><option value="<%= p.id %>"><%= lang === 'en' && p.partner_name_en ? p.partner_name_en : p.partner_name %></option><% }) %></select></div>
+        <div class="field"><label for="ps_pin"><%= t('डेस्क PIN', 'Desk PIN') %></label><input class="input" id="ps_pin" name="partner_pin" type="password" autocomplete="off" inputmode="numeric"><div class="field-hint"><%= t('कार्यालयले दिएको PIN (सेट भएमा)।', 'The PIN issued by the office (if set).') %></div></div>
+        <div class="field"><label for="ps_service"><%= t('सेवा', 'Service') %></label><input class="input" id="ps_service" name="service_name" maxlength="255" placeholder="<%= t('उदा. स्वास्थ्य जाँच', 'e.g. health check-up') %>"></div>
+        <div class="field"><label for="ps_taken"><%= t('सेवा लिइयो?', 'Service taken?') %></label><select class="select" id="ps_taken" name="service_taken"><option value="yes"><%= t('हो', 'Yes') %></option><option value="no"><%= t('भ्रमण मात्र', 'Visit only') %></option></select></div>
+        <div class="field span-2"><label for="ps_note"><%= t('टिप्पणी', 'Note') %></label><input class="input" id="ps_note" name="service_note" maxlength="500"></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सेवा लग गर्नुहोस्', 'Log service') %></button></div>
+    </form>
+  <% } %>
 </div></section>

@@ -1,0 +1,42 @@
+<% const L = l => t(l[0], l[1]); %>
+<div class="content-head"><div><div class="crumbs"><a href="/admin/programs"><%= t('कार्यक्रम', 'Programmes') %></a></div><h1><%= title %></h1><div class="small muted"><%= t('कार्यक्रम → स्थान/सत्र → दर्ता डेस्क → उपस्थिति → रिपोर्ट', 'Programme → location/session → registration desk → attendance → reports') %></div></div>
+  <div class="flex gap-1 wrap"><a class="btn btn-outline btn-sm" href="/admin/programs/reports<%= prog ? '?program_id=' + prog.id : '' %>"><%- icon('file') %><%= t('रिपोर्ट', 'Reports') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/settings"><%- icon('settings') %><%= t('सेटिङ', 'Settings') %></a></div></div>
+<div class="kpis">
+  <div class="kpi"><div class="l"><%= t('सक्रिय कार्यक्रम', 'Active programmes') %></div><div class="v"><%= num(counts.active) %></div></div>
+  <div class="kpi"><div class="l"><%= t('स्वीकृति बाँकी', 'Pending requests') %></div><div class="v"><%= num(counts.pending) %></div></div>
+  <div class="kpi"><div class="l"><%= t('आजको उपस्थिति', 'Today’s check-ins') %></div><div class="v"><%= num(counts.today) %></div></div>
+  <div class="kpi"><div class="l"><%= t('दोहोरो प्रयास', 'Duplicate attempts') %></div><div class="v"><%= num(counts.duplicates) %></div></div>
+</div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+  <div>
+    <div class="card mb-2" id="live" <% if (prog) { %>data-live-url="/admin/programs/<%= prog.id %>/live.json"<% } %>>
+      <div class="flex justify-between items-center wrap gap-1"><h3 class="mb-0"><%= t('लाइभ उपस्थिति', 'Live attendance') %></h3>
+        <form method="get" class="flex gap-1"><select class="select" name="program_id" data-autosubmit style="min-width:220px" aria-label="<%= t('कार्यक्रम', 'Programme') %>"><option value=""><%= t('— कार्यक्रम छान्नुहोस् —', '— choose a programme —') %></option><% list.forEach(p => { %><option value="<%= p.id %>" <%= prog && prog.id === p.id ? 'selected' : '' %>><%= p.title %></option><% }) %><% if (prog && !list.some(p => p.id === prog.id)) { %><option value="<%= prog.id %>" selected><%= prog.title %></option><% } %></select><noscript><button class="btn btn-ghost btn-sm">→</button></noscript></form></div>
+      <% if (!live) { %><p class="muted small mt-2"><%= t('लाइभ तथ्यांक हेर्न कार्यक्रम छान्नुहोस्।', 'Choose a programme to see live numbers.') %></p><% } else { %>
+        <div class="kpis mt-2">
+          <div class="kpi"><div class="l"><%= t('उपस्थित (एकपटक गणना)', 'Unique attended') %></div><div class="v" data-live="attended"><%= live.attended %></div></div>
+          <div class="kpi"><div class="l"><%= t('पूर्व दर्ता', 'Pre-registered') %></div><div class="v" data-live="prereg"><%= live.prereg %></div></div>
+          <div class="kpi"><div class="l"><%= t('प्रतिशत', 'Percentage') %></div><div class="v"><span data-live="pct"><%= live.pct %></span>%</div><div class="small faint"><%= t('योग्य', 'of') %> <span data-live="eligible"><%= live.eligible %></span></div></div>
+        </div>
+        <div style="height:10px;background:var(--surface-2);border-radius:5px" aria-hidden="true"><div data-live-bar style="height:10px;width:<%= Math.min(100, live.pct) %>%;background:var(--brand);border-radius:5px;transition:width .4s"></div></div>
+        <% if (live.occurrences.length) { %><div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('स्थान', 'Location') %></th><th><%= t('मिति', 'Date') %></th><th class="text-right"><%= t('उपस्थित', 'Attended') %></th></tr></thead><tbody data-live="occurrences">
+          <% live.occurrences.forEach(o => { %><tr data-occ="<%= o.id %>"><td><%= o.location_name %></td><td class="small"><%= o.event_date ? bsDate(o.event_date) : '—' %></td><td class="text-right" data-occ-count><%= o.attended_count %></td></tr><% }) %></tbody></table></div><% } %>
+        <div class="small faint mt-1"><%= t('हरेक १५ सेकेन्डमा आफैं अद्यावधिक हुन्छ।', 'Refreshes every 15 seconds.') %> <span data-live="updated"></span></div>
+      <% } %>
+    </div>
+    <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('भर्खरको उपस्थिति', 'Latest check-ins') %></h3><div class="table-wrap"><table class="table"><tbody>
+      <% recent.forEach(r => { %><tr><td><%= r.member_name_np || r.member_name || r.member_card_no %></td><td class="small"><%= r.program_title %></td><td class="small"><%= r.location_label || '—' %></td><td><span class="badge"><%= L(rep.methodLabel(r.attendance_method)) %></span></td><td class="small faint"><%= bsDate(r.attended_at) %> <%= new Date(r.attended_at).toTimeString().slice(0, 5) %></td></tr><% }) %>
+      <% if (!recent.length) { %><tr><td class="muted small"><%= t('अहिले कुनै रेकर्ड छैन।', 'No records yet.') %></td></tr><% } %></tbody></table></div></div>
+  </div>
+  <div>
+    <div class="card mb-2"><h3><%= t('कार्यक्रम दिनको क्रम', 'Event-day workflow') %></h3><ol class="small" style="padding-left:18px;margin:0">
+      <li class="mb-1"><strong style="font-weight:500"><%= t('दर्ता डेस्क', 'Registration desk') %></strong> — <%= t('कार्डको सदस्यता नं. टाइप → तुरुन्त दर्ता', 'type the member no. on the card → checked in') %></li>
+      <li class="mb-1"><strong style="font-weight:500"><%= t('सदस्य QR', 'Member QR') %></strong> — <%= t('तुरुन्त गणना भए सिधै; नभए स्क्यान → प्रशासक स्वीकृति', 'instant mode counts at once; otherwise scan → admin approval') %></li>
+      <li><strong style="font-weight:500"><%= t('रिपोर्ट / पूर्व दर्ता', 'Reports / pre-registration') %></strong> — <%= t('स्वीकृति, सूची, समेकित रिपोर्ट', 'approvals, lists, consolidated reports') %></li></ol>
+      <% if (counts.pending) { %><div class="alert alert-warn mt-2"><%- icon('alert') %><span><%= t(`${counts.pending} वटा अनुरोध बाँकी छ।`, `${counts.pending} request(s) pending.`) %></span></div><% } %></div>
+    <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('सक्रिय कार्यक्रम', 'Active programmes') %></h3><ul class="list">
+      <% list.forEach(p => { %><li class="list-item"><a href="/admin/programs/<%= p.id %>"><%= p.title %></a><% if (Number(p.is_multi_location)) { %> <span class="badge"><%= t('बहु-स्थान', 'multi') %></span><% } %><span class="small faint" style="margin-left:auto"><%= p.event_date ? bsDate(p.event_date) : '' %></span></li><% }) %>
+      <% if (!list.length) { %><li class="list-item muted small"><%= t('कुनै सक्रिय कार्यक्रम छैन।', 'No active programmes.') %></li><% } %></ul></div>
+  </div>
+</div>
+<% if (prog) { %><script src="/static/js/program-live.js" defer></script><% } %>
