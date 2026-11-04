@@ -9,6 +9,7 @@
     <% if (locals.operator) { %><div class="who"><b><%= operator.full_name || operator.username %></b>operator</div><form method="post" action="/platform/logout"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-icon" aria-label="Log out"><%- icon('logout') %></button></form><% } %></header>
   <main class="content" style="margin:0 auto">
     <% (locals.flash || []).forEach(m => { %><div class="alert alert-<%= m.type %>"><%= m.message %></div><% }) %>
+    <% if (locals.operator && !operator.twofa_enabled && path !== '/platform/2fa') { %><div class="alert alert-warn">Your operator account has no 2FA. <a href="/platform/2fa">Turn it on now</a>.</div><% } %>
     <%- body %>
   </main>
   <script src="/static/js/app.js" defer></script>

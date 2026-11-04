@@ -105,7 +105,8 @@ router.post('/:id/desk', ah(loadProgram), ah(async (req, res) => {
 }));
 
 router.post('/:id/attendance/:aid/void', ah(loadProgram), ah(async (req, res) => {
-  const row = await att.voidAttendance(util.int(req.params.aid), req.admin.id, req.body.reason || 'admin void');
+  const belongs = await db.value('SELECT 1 FROM member_program_attendance WHERE id = $1 AND program_id = $2', [util.int(req.params.aid), req.program.id]);
+  const row = belongs ? await att.voidAttendance(util.int(req.params.aid), req.admin.id, req.body.reason || 'admin void') : null;
   if (row) await auth.audit(req, 'attendance_void', 'member_program_attendance', row.id, `Voided attendance of member #${row.member_id}`);
   res.redirect('/admin/programs/' + req.program.id + '#attendance');
 }));
@@ -129,8 +130,7 @@ router.get('/:id/attendance.csv', ah(loadProgram), ah(async (req, res) => {
   const rows = await db.many(`SELECT a.attended_at, a.attendance_status, a.attendance_method, a.location_label, m.sadasyata_number, m.name, m.name_np, m.phone, a.void_reason
                               FROM member_program_attendance a LEFT JOIN members m ON m.id = a.member_id WHERE a.program_id = $1 ORDER BY a.attended_at`, [req.program.id]);
   const cols = ['attended_at', 'attendance_status', 'attendance_method', 'location_label', 'sadasyata_number', 'name', 'name_np', 'phone', 'void_reason'];
-  const esc = v => { const s = v == null ? '' : v instanceof Date ? v.toISOString() : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : /^[=+\-@]/.test(s) ? "'" + s : s; };
-  res.type('text/csv; charset=utf-8').attachment(`attendance-${req.program.id}.csv`).send('﻿' + [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n'));
+  res.type('text/csv; charset=utf-8').attachment(`attendance-${req.program.id}.csv`).send(util.toCsv(cols, rows));
 }));
 
 module.exports = router;

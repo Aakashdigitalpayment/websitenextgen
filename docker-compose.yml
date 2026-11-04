@@ -28,6 +28,7 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://coop:${POSTGRES_PASSWORD:-coop}@db:5432/coop
       TRUST_PROXY: "1"
+      HOST: 0.0.0.0
       TLS_ASK_ALLOW: "172.,10.,192.168."   # caddy reaches the app over the private docker network
     volumes: [uploads:/app/uploads]
     networks: [internal]              # not published to the host — only caddy is

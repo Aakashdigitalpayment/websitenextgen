@@ -3,7 +3,10 @@ const crypto = require('crypto');
 
 /** Synchronizer-token CSRF protection, token stored in the session. */
 function csrfToken(req) {
-  if (!req.session.csrf) req.session.csrf = crypto.randomBytes(24).toString('base64url');
+  if (!req.session.csrf) {
+    req.session.csrf = crypto.randomBytes(24).toString('base64url');
+    if (req.tenant) req.session.tenantId = req.tenant.id; // bind even form-only sessions to their tenant
+  }
   return req.session.csrf;
 }
 
@@ -21,7 +24,9 @@ function csrfValid(req) {
  * routes re-check the body token after multer as well.
  */
 function csrf(req, res, next) {
-  res.locals.csrfToken = csrfToken(req);
+  // lazy: only pages that actually render a form create (and persist) a session
+  // a value that only mints the token when a template actually prints it (copying locals does not)
+  res.locals.csrfToken = { toString: () => csrfToken(req), toJSON: () => csrfToken(req) };
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   if (!csrfValid(req)) return res.status(403).render('public/error', { layout: req.tenant ? undefined : false, title: 'Session expired', code: 403, message: 'फारमको समय सकियो। पृष्ठ रिफ्रेस गरेर फेरि प्रयास गर्नुहोस्। (Form expired — please reload and try again.)' });
   next();

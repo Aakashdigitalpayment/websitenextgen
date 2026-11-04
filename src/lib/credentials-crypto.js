@@ -25,7 +25,7 @@ function encrypt(plain) {
 
 function decrypt(row) {
   if (row.password_tag) {
-    const d = crypto.createDecipheriv('aes-256-gcm', tenantKey(), Buffer.from(row.password_iv, 'hex'));
+    const d = crypto.createDecipheriv('aes-256-gcm', tenantKey(), Buffer.from(row.password_iv, 'hex'), { authTagLength: 16 });
     d.setAuthTag(Buffer.from(row.password_tag, 'hex'));
     return { plain: Buffer.concat([d.update(Buffer.from(row.password_enc, 'base64')), d.final()]).toString('utf8'), legacy: false };
   }

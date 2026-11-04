@@ -1,0 +1,10 @@
+<form class="form-card maxw-sm mx-auto mt-4" method="post" action="/platform/login/2fa">
+  <h1 style="font-size:1.35rem">Two-step verification</h1>
+  <p class="muted small">Enter the 6-digit code from your authenticator app.</p>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="stack">
+    <input class="input" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus style="font-size:1.3rem;letter-spacing:.2em;text-align:center">
+    <button class="btn btn-primary btn-block">Verify</button>
+  </div>
+</form>

@@ -14,6 +14,7 @@ async function keys() {
 }
 
 async function sendTo(subs, payload, notifId = null) {
+  subs = subs.filter(s => allowedEndpoint(s.endpoint)); // also drops legacy rows pointing elsewhere
   if (!subs.length) return { sent: 0, failed: 0 };
   const k = await keys();
   const vapid = { subject: /@/.test(k.subject || '') ? 'mailto:' + k.subject : 'mailto:admin@example.com', publicKey: k.publicKey, privateKey: k.privateKey };
@@ -42,15 +43,32 @@ async function sendToAll(payload) {
   return sendTo(subs, payload);
 }
 
+// Only real browser push services may be used as endpoints (no SSRF to internal hosts)
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^[a-z0-9-]+\.notify\.windows\.com$/, /^web\.push\.apple\.com$/, /^[a-z0-9-]+\.push\.apple\.com$/];
+const MAX_SUBS_PER_MEMBER = 5;
+function allowedEndpoint(endpoint) {
+  try {
+    const u = new URL(endpoint);
+    return u.protocol === 'https:' && !u.port && !u.username && PUSH_HOSTS.some(re => re.test(u.hostname));
+  } catch { return false; }
+}
+
 async function subscribe(memberId, sub, ua) {
-  if (!sub || typeof sub.endpoint !== 'string' || !/^https:\/\//.test(sub.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth) throw new Error('bad subscription');
+  if (!sub || typeof sub.endpoint !== 'string' || sub.endpoint.length > 2000 || !allowedEndpoint(sub.endpoint)
+      || typeof sub.keys?.p256dh !== 'string' || typeof sub.keys?.auth !== 'string') throw new Error('bad subscription');
+  const owner = await db.one('SELECT id, member_id FROM member_push_subscriptions WHERE md5(endpoint) = md5($1)', [sub.endpoint]);
+  if (owner && owner.member_id !== memberId) throw new Error('endpoint belongs to another member');
+  if (!owner) {
+    // keep only the newest few devices per member
+    await db.query(`DELETE FROM member_push_subscriptions WHERE id IN (SELECT id FROM member_push_subscriptions WHERE member_id = $1 ORDER BY created_at DESC OFFSET $2)`, [memberId, MAX_SUBS_PER_MEMBER - 1]);
+  }
   await db.query(`INSERT INTO member_push_subscriptions (member_id, endpoint, p256dh, auth, user_agent, created_at) VALUES ($1, $2, $3, $4, $5, now())
-                  ON CONFLICT (md5(endpoint)) DO UPDATE SET member_id = EXCLUDED.member_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
-    [memberId, sub.endpoint.slice(0, 2000), String(sub.keys.p256dh).slice(0, 255), String(sub.keys.auth).slice(0, 255), String(ua || '').slice(0, 255)]);
+                  ON CONFLICT (md5(endpoint)) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth WHERE member_push_subscriptions.member_id = EXCLUDED.member_id`,
+    [memberId, sub.endpoint, String(sub.keys.p256dh).slice(0, 255), String(sub.keys.auth).slice(0, 255), String(ua || '').slice(0, 255)]);
 }
 
 async function unsubscribe(memberId, endpoint) {
   await db.query('DELETE FROM member_push_subscriptions WHERE member_id = $1 AND endpoint = $2', [memberId, String(endpoint || '')]);
 }
 
-module.exports = { keys, sendToMember, sendToAll, subscribe, unsubscribe };
+module.exports = { allowedEndpoint, keys, sendToMember, sendToAll, subscribe, unsubscribe };

@@ -1,0 +1,13 @@
+<div class="content-head"><h1><%= title %></h1><a class="btn btn-ghost btn-sm" href="/platform">← Tenants</a></div>
+<% if (enabled) { %><div class="alert alert-success">2FA is on for this operator account.</div><% } else { %>
+<div class="card maxw-md">
+  <p class="muted">Operator accounts control every cooperative. Scan the QR code with an authenticator app, then confirm with your password and the 6-digit code.</p>
+  <div class="flex gap-2 wrap items-center">
+    <img src="<%= qr %>" alt="QR code" width="220" height="220" style="border-radius:12px;border:1px solid var(--line);background:#fff">
+    <div class="grow"><div class="small muted">Key</div><code style="word-break:break-all"><%= secret.replace(/(.{4})/g, '$1 ').trim() %></code>
+      <form method="post" action="/platform/2fa" class="stack mt-2"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input class="input" name="code" inputmode="numeric" placeholder="123456" required>
+        <input class="input" type="password" name="password" placeholder="Your password" autocomplete="current-password" required>
+        <button class="btn btn-primary">Turn on 2FA</button></form></div>
+  </div>
+</div><% } %>

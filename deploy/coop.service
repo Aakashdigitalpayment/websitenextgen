@@ -10,7 +10,7 @@ User=coop
 Group=coop
 WorkingDirectory=/opt/websitenextgen
 EnvironmentFile=/opt/websitenextgen/.env
-Environment=NODE_ENV=production HOST=127.0.0.1
+Environment=NODE_ENV=production HOST=127.0.0.1 TRUST_PROXY=loopback
 ExecStart=/usr/bin/node src/server.js
 Restart=always
 RestartSec=3

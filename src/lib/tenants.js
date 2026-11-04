@@ -12,8 +12,8 @@ const config = require('../config');
 const DB_DIR = path.join(config.rootDir, 'db');
 const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
 
-const cache = new Map(); // host -> { tenant, at }
-const CACHE_MS = 30_000;
+const cache = new Map(); // host -> { tenant, at }  (only hosts that resolve to a tenant; bounded)
+const CACHE_MS = 30_000, CACHE_MAX = 2000;
 
 function clearCache() { cache.clear(); }
 
@@ -36,7 +36,10 @@ async function resolveHost(rawHost) {
   if (!tenant && config.defaultTenant && host !== config.platformHost) {
     tenant = await db.one('SELECT * FROM platform.tenants WHERE slug = $1', [config.defaultTenant]);
   }
-  cache.set(host, { tenant, at: Date.now() });
+  if (tenant && host.length <= 253) {
+    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value);
+    cache.set(host, { tenant, at: Date.now() });
+  }
   return tenant;
 }
 

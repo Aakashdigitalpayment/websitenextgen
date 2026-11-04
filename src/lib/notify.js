@@ -16,13 +16,15 @@ function render(tpl, vars) {
   return String(tpl || '').replace(/\\n/g, '\n').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (vars[k] ?? '')).trim();
 }
 
+const ipaddr = require('ipaddr.js');
+/** Anything that is not a plain public unicast address (also IPv4-mapped / NAT64 forms) counts as private. */
 const isPrivateIp = ip => {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
-  }
-  const v = ip.toLowerCase();
-  return v === '::1' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe80') || v.startsWith('::ffff:127.') || v === '::';
+  try {
+    let a = ipaddr.parse(ip);
+    if (a.kind() === 'ipv6' && a.isIPv4MappedAddress()) a = a.toIPv4Address();
+    if (a.kind() === 'ipv6' && a.range() === 'rfc6052') return true; // 64:ff9b::/96 NAT64 can reach IPv4 internals
+    return a.range() !== 'unicast';
+  } catch { return true; }
 };
 
 /** Only https URLs that resolve to public addresses (admin-configured webhooks must not reach internal services). */
@@ -33,15 +35,43 @@ async function safeHttpsUrl(raw) {
   try {
     const addrs = await dns.lookup(u.hostname, { all: true });
     if (!addrs.length || addrs.some(a => isPrivateIp(a.address))) return null;
+    u.pinnedAddress = addrs[0];
   } catch { return null; }
   return u;
 }
 
+/**
+ * fetch with timeout and no redirects. For admin-configured URLs the connection is pinned to the
+ * address that passed safeHttpsUrl (no DNS-rebinding between check and use).
+ */
 async function fetchWithTimeout(url, opts = {}, ms = 10_000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
-  try { return await fetch(url, { ...opts, redirect: 'error', signal: ctrl.signal }); } finally { clearTimeout(t); }
+  try {
+    if (url && url.pinnedAddress) {
+      const { fetch: ufetch, Agent } = require('undici');
+      const pin = url.pinnedAddress;
+      const dispatcher = new Agent({ connect: { lookup: (host, o, cb) => (o && o.all ? cb(null, [pin]) : cb(null, pin.address, pin.family)) } });
+      return await ufetch(url.toString(), { ...opts, dispatcher, redirect: 'error', signal: ctrl.signal });
+    }
+    return await fetch(url, { ...opts, redirect: 'error', signal: ctrl.signal });
+  } finally { clearTimeout(t); }
 }
+
+/** Daily caps: per tenant (settings) and per recipient (3/day per event) — stops SMS/email bombing via public forms. */
+async function overLimit(channel, event, recipient) {
+  const s = await settings.all();
+  const daily = Number(s[channel === 'sms' ? 'notify_sms_daily_limit' : 'notify_email_daily_limit']) || (channel === 'sms' ? 300 : 1000);
+  const r = await db.one(`SELECT count(*) FILTER (WHERE channel = $1) AS all_today,
+                                 count(*) FILTER (WHERE channel = $1 AND recipient = $2 AND event_type = $3) AS this_one
+                          FROM notification_log WHERE created_at >= CURRENT_DATE AND status = 'sent'`, [channel, recipient, event]);
+  if (r.all_today >= daily) return 'daily limit reached';
+  if (event !== 'test' && r.this_one >= 3) return 'recipient limit reached';
+  return null;
+}
+
+/** Text from the public goes into messages only in a short, link-free form. */
+const safeText = (v, n = 60) => String(v ?? '').replace(/https?:\/\/\S+|www\.\S+|[<>]/gi, '').replace(/\s+/g, ' ').trim().slice(0, n);
 
 async function log(event, channel, recipient, subject, message, ok, error = '') {
   try {
@@ -62,6 +92,8 @@ async function sendSms(event, phone, text) {
   const to = normalizePhone(phone);
   if (s.notify_sms_enabled !== '1') return { ok: false, skipped: 'sms disabled' };
   if (!to) return { ok: false, skipped: 'no phone' };
+  const limited = await overLimit('sms', event, to);
+  if (limited) { await log(event, 'sms', to, '', text, false, limited); return { ok: false, skipped: limited }; }
   const gateway = s.notify_sms_gateway || 'sparrow';
   let ok = false, error = '';
   try {
@@ -112,6 +144,8 @@ async function sendEmail(event, to, subject, text) {
   if (s.notify_email_enabled !== '1') return { ok: false, skipped: 'email disabled' };
   const list = String(to || '').split(/[,;\s]+/).filter(x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
   if (!list.length) return { ok: false, skipped: 'no email' };
+  const limited = await overLimit('email', event, list.join(','));
+  if (limited) { await log(event, 'email', list.join(','), subject, text, false, limited); return { ok: false, skipped: limited }; }
   let ok = false, error = '';
   try {
     const t = await transport();
@@ -151,7 +185,7 @@ async function template(event, audience, channel) {
 async function applicationEvent(event, vars, contact = {}) {
   try {
     const s = await settings.all();
-    const v = { site: s.site_name || '', ...vars };
+    const v = { site: s.site_name || '', ...vars, name: safeText(vars.name, 40), remarks: safeText(vars.remarks, 160), status: safeText(vars.status, 40) };
     const memberAllowed = ch => event !== 'status_changed' || s['notify_member_' + ch] !== '0';
     const sms = memberAllowed('sms') && contact.phone ? await template(event, 'member', 'sms') : null;
     if (sms) await sendSms(event, contact.phone, render(sms.body, v));
@@ -171,4 +205,4 @@ function later(fn) {
   setImmediate(() => db.withSchema(schema, () => Promise.resolve().then(fn).catch(e => console.error('later:', e.message))));
 }
 
-module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, render, later, safeHttpsUrl, normalizePhone };
+module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };

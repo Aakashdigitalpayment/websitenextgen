@@ -13,6 +13,8 @@ https:// {
 	tls {
 		on_demand
 	}
+	@ask path /__tls/allowed /__tls/allowed/*
+	respond @ask 404
 	encode zstd gzip
 	request_body {
 		max_size 25MB

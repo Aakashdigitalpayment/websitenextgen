@@ -5,7 +5,8 @@
   <div class="kpi"><div class="l"><%= t('मतदान प्रतिशत', 'Turnout') %></div><div class="v"><%= num(eligible ? (ballots / eligible * 100).toFixed(1) : 0) %>%</div></div>
   <div class="kpi"><div class="l"><%= t('पद', 'Positions') %></div><div class="v"><%= num(positions.length) %></div></div>
 </div>
-<% positions.forEach(p => { const list = tallies.filter(x => x.position_id === p.id); const top = Math.max(1, ...list.map(x => x.votes)); const seats = p.seats || 1; %>
+<% if (!closed) { %><div class="alert alert-info"><%- icon('shield') %><span><%= t('मतदान जारी छ। गोपनीयताका लागि नतिजा मतदान सकिएपछि (अन्तिम मितिपछि) मात्र देखिन्छ।', 'Voting is open. For secrecy, results are shown only after the closing date.') %></span></div><% } %>
+<% if (closed) positions.forEach(p => { const list = tallies.filter(x => x.position_id === p.id); const top = Math.max(1, ...list.map(x => x.votes)); const seats = p.seats || 1; %>
   <div class="card mb-2"><h3><%= f(p, 'title') %> <span class="badge"><%= num(seats) %> <%= t('पद', 'seats') %></span></h3>
     <% if (!list.length) { %><p class="muted small"><%= t('उम्मेदवार छैन।', 'No candidates.') %></p><% } %>
     <% list.forEach((c, i) => { const lead = i < seats && c.votes > 0; %>

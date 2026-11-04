@@ -27,6 +27,12 @@ function closedReason(program, qr, now = new Date()) {
   const close = qr.attendance_close_at || qr.qr_expires_at || program.attendance_close_at || program.qr_expires_at;
   if (open && now < new Date(open)) return ['उपस्थिति अझै खुलेको छैन।', 'Check-in has not opened yet.'];
   if (close && now > new Date(close)) return ['उपस्थितिको समय सकियो।', 'Check-in has closed.'];
+  if (!open && !close) {
+    // no window configured: only on the event day (Nepal time)
+    const day = (qr.event_date || program.event_date) ? String(qr.event_date || program.event_date).slice(0, 10) : null;
+    const today = new Date(now.getTime() + 345 * 60_000).toISOString().slice(0, 10);
+    if (!day || day !== today) return ['उपस्थिति कार्यक्रमको दिन मात्र खुल्छ।', 'Check-in is only open on the event day.'];
+  }
   return null;
 }
 

@@ -89,13 +89,23 @@ async function askProvider(provider, apiKey, model, system, history, message) {
   return (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
 }
 
-/** @returns {Promise<{answer:string, source:'faq'|'ai'|'fallback'}>} */
+const usage = new Map(); // "<schema>:<YYYY-MM-DD>" -> AI calls today (per process)
+function underBudget(limit) {
+  const key = db.currentSchema() + ':' + new Date().toISOString().slice(0, 10);
+  const n = usage.get(key) || 0;
+  if (n >= limit) return false;
+  if (usage.size > 500) usage.clear();
+  usage.set(key, n + 1);
+  return true;
+}
+
+/** @returns {Promise<{answer:string, source:'faq'|'ai'|'fallback'}>} history comes from the server-side session only */
 async function reply(message, history = [], lang = 'np') {
   const s = await settings.all();
   const instant = await instantAnswer(message, lang);
   if (instant && instant.score >= 3) return { answer: instant.answer, source: 'faq' };
   const provider = ['gemini', 'openai', 'deepseek'].includes(s.ai_provider) ? s.ai_provider : 'gemini';
-  if (s.ai_enabled === '1' && s.ai_api_key) {
+  if (s.ai_enabled === '1' && s.ai_api_key && underBudget(Number(s.ai_daily_limit) || 300)) {
     try {
       const clean = history.filter(h => h && ['user', 'assistant'].includes(h.role) && typeof h.content === 'string').map(h => ({ role: h.role, content: h.content.slice(0, 1000) }));
       const text = await askProvider(provider, s.ai_api_key, s.ai_model || DEFAULT_MODEL[provider], await context(lang), clean, message);

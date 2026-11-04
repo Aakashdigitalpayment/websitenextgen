@@ -46,3 +46,20 @@ CREATE INDEX IF NOT EXISTS user_sessions_expire_idx ON platform.user_sessions (e
 -- Site licence (per tenant). NULL = no expiry.
 ALTER TABLE platform.tenants ADD COLUMN IF NOT EXISTS license_valid_until DATE;
 ALTER TABLE platform.tenants ADD COLUMN IF NOT EXISTS license_note TEXT;
+
+-- Operator 2FA + throttling; operator sessions kept apart from tenant sessions
+ALTER TABLE platform.operators ADD COLUMN IF NOT EXISTS twofa_secret VARCHAR(64);
+ALTER TABLE platform.operators ADD COLUMN IF NOT EXISTS twofa_enabled BOOLEAN NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS platform.login_attempts (
+  id BIGSERIAL PRIMARY KEY,
+  username VARCHAR(100) NOT NULL,
+  ip_address VARCHAR(45),
+  attempted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS platform_login_attempts_idx ON platform.login_attempts (username, attempted_at);
+CREATE TABLE IF NOT EXISTS platform.operator_sessions (
+  sid    VARCHAR NOT NULL PRIMARY KEY,
+  sess   JSON NOT NULL,
+  expire TIMESTAMP(6) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS operator_sessions_expire_idx ON platform.operator_sessions (expire);

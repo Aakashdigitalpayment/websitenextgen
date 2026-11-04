@@ -34,7 +34,10 @@ router.get('/elections/:id', auth.requireAdmin('staff'), ah(async (req, res, nex
     db.many(`SELECT s.submitted_at, s.source, m.name, m.sadasyata_number FROM election_vote_submissions s LEFT JOIN members m ON m.id = s.member_id
              WHERE s.cycle_id = $1 ORDER BY s.submitted_at DESC LIMIT 20`, [cycle.id]),
   ]);
-  res.render('admin/election-results', { title: res.locals.f(cycle, 'title'), cycle, positions, tallies, ballots, eligible, recent });
+  // tallies stay hidden while voting is open (date_to not yet passed in Nepal time)
+  const today = new Date(Date.now() + 345 * 60_000).toISOString().slice(0, 10);
+  const closed = !!cycle.date_to && String(cycle.date_to).slice(0, 10) < today;
+  res.render('admin/election-results', { title: res.locals.f(cycle, 'title'), cycle, positions, tallies: closed ? tallies : [], closed, ballots, eligible, recent });
 }));
 
 // ---------------------------------------------------------------- system health

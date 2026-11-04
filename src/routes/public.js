@@ -370,15 +370,15 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {
-  const mod = modules[req.params.key];
+  const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   if (!mod || mod.key === 'contact') return next();
   await renderForm(req, res, mod);
 }));
 
 router.post('/apply/:key', submitLimiter, (req, res, next) => {
-  const mod = modules[req.params.key];
+  const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   if (!mod || mod.key === 'contact') return next();
-  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind }))) : [];
+  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind })), { private: true }) : [];
   let i = 0;
   const step = err => (err ? next(err) : i < chain.length ? chain[i++](req, res, step) : handle());
   const handle = () => (async () => {
@@ -405,14 +405,15 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
 });
 
 router.get('/apply/:key/done', (req, res, next) => {
-  const mod = modules[req.params.key];
+  const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   const last = req.session.lastSubmission;
   if (!mod || !last || last.module !== mod.key) return res.redirect('/apply/' + req.params.key);
   res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking });
 });
 
 // ---------------------------------------------------------------- tracker
-router.get('/track', ah(async (req, res) => {
+const trackLimiter = rateLimit({ windowMs: 10 * 60_000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip) });
+router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, next) : next()), ah(async (req, res) => {
   const id = String(req.query.id || '').trim().toUpperCase();
   const phone = nd.toLatinDigits(String(req.query.phone || '').trim());
   let result = null, history = [], searched = false;
@@ -422,9 +423,10 @@ router.get('/track', ah(async (req, res) => {
       if (mod.noTracking) continue;
       const row = await db.one(`SELECT * FROM ${mod.table} WHERE upper(tracking_id) = $1 LIMIT 1`, [id]);
       if (!row) continue;
-      // require the phone used on the application so tracking ids alone do not leak details
+      // the phone used on the application is always required; rows without one are never shown
       const rowPhone = String(row[mod.phoneCol] || '').replace(/\D/g, '').slice(-8);
-      if (rowPhone && rowPhone !== phone.replace(/\D/g, '').slice(-8)) break;
+      const given = phone.replace(/\D/g, '').slice(-8);
+      if (rowPhone.length < 6 || rowPhone !== given) break;
       result = { mod, row };
       history = await db.many('SELECT * FROM request_status_history WHERE module = $1 AND request_id = $2 ORDER BY created_at', [mod.key, row.id]);
       break;
@@ -439,12 +441,17 @@ router.get('/verify', (req, res) => res.render('public/verify', { title: res.loc
 router.post('/verify', verifyLimiter, ah(async (req, res) => {
   const code = String(req.body.code || '').trim().toUpperCase().slice(0, 20);
   const cvv = nd.toLatinDigits(String(req.body.cvv || '').trim()).slice(0, 4);
-  const card = await db.one('SELECT * FROM member_id_cards WHERE upper(verification_code) = $1 AND cvv = $2', [code, cvv]);
+  const card = await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
+                             FROM member_id_cards WHERE upper(verification_code) = $1 AND cvv = $2`, [code, cvv]);
+  if (card && card.is_expired && card.status === 'active') card.status = 'expired';
   await db.query('INSERT INTO card_verify_attempts (ip, code_tried, success, created_at) VALUES ($1, $2, $3, now())', [req.ip, code, card ? 1 : 0]);
   let member = null;
   if (card) {
     await db.query('UPDATE member_id_cards SET verify_count = COALESCE(verify_count, 0) + 1, last_verified_at = now() WHERE id = $1', [card.id]);
-    member = await db.one('SELECT name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members WHERE (sadasyata_number = $1 OR member_card_no = $1 OR id::text = $1) AND deleted_at IS NULL LIMIT 1', [card.member_id]);
+    // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
+    member = await db.one(`SELECT name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members
+                           WHERE (id::text = $1 OR sadasyata_number = $1 OR member_card_no = $1) AND deleted_at IS NULL
+                           ORDER BY (id::text = $1) DESC, id LIMIT 1`, [card.member_id]);
   }
   res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: card ? { card, member } : false, code });
 }));
@@ -460,8 +467,11 @@ const chatLimiter = rateLimit({
 router.post('/api/chat', chatLimiter, ah(async (req, res) => {
   const message = String(req.body?.message || '').trim().slice(0, 500);
   if (!message) return res.status(400).json({ answer: '', source: 'empty' });
-  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [];
-  res.json(await aiChat.reply(message, history, req.lang));
+  // conversation history lives in the session — clients cannot inject fake "assistant" turns
+  const history = Array.isArray(req.session.chat) ? req.session.chat : [];
+  const answer = await aiChat.reply(message, history, req.lang);
+  req.session.chat = [...history, { role: 'user', content: message }, { role: 'assistant', content: String(answer.answer || '').slice(0, 1000) }].slice(-6);
+  res.json(answer);
 }));
 
 router.get('/programs', ah(async (req, res) => {

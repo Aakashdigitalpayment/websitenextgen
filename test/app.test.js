@@ -99,7 +99,7 @@ test('application submit → tracking id → tracker needs matching phone', asyn
   assert.equal(r.status, 302, r.text.slice(0, 300));
   const done = await c.get('/apply/grievance/done');
   const id = done.text.match(/tracking-id">([^<]+)/)[1];
-  assert.match(id, /^GR-\d{6}-[A-Z0-9]{5}$/);
+  assert.match(id, /^GR-\d{6}-[A-Z0-9]{8}$/);
   const ok = await request(app).get(`/track?id=${id}&phone=9841000001`).set('Host', HOST_A);
   assert.match(ok.text, /badge-warn/);
   const wrong = await request(app).get(`/track?id=${id}&phone=9800000000`).set('Host', HOST_A);

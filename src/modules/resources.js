@@ -52,7 +52,7 @@ const resources = {
     T('report_type', 'प्रकार', 'Type', { list: true }), T('report_year', 'वर्ष', 'Year', { list: true }), T('report_quarter', 'त्रैमास', 'Quarter'), T('report_month', 'महिना', 'Month'),
     FILE('file_path', 'फाइल', 'File'), SEL('access_level', 'पहुँच', 'Access', [['none', 'सबै', 'Public'], ['member', 'सदस्य मात्र', 'Members only']], { default: 'none', list: true }), ORDER, ACTIVE] },
 
-  information_room_items: { group: 'media', icon: 'shield', title: ['सूचना कक्ष (सदस्य)', 'Information room'], order: 'display_order, meeting_date DESC NULLS LAST, id DESC', fields: [
+  information_room_items: { minRole: 'admin', privateFiles: true, group: 'media', icon: 'shield', title: ['सूचना कक्ष (सदस्य)', 'Information room'], order: 'display_order, meeting_date DESC NULLS LAST, id DESC', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     T('category', 'समूह', 'Category', { list: true }), D('meeting_date', 'बैठक मिति', 'Meeting date', { list: true }), T('reference_no', 'च.नं./सन्दर्भ', 'Reference no.'),
     FILE('file_path', 'फाइल (PDF)', 'File (PDF)', { required: true }), TA('description_np', 'विवरण', 'Description'),
@@ -154,17 +154,17 @@ const resources = {
   welfare_claim_types: { group: 'engage', icon: 'heart', title: ['कल्याण दाबी प्रकार', 'Welfare claim types'], order: 'display_order, id', fields: [
     T('slug', 'कोड', 'Code', { required: true, list: true }), T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
     B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE] },
-  election_cycles: { group: 'engage', icon: 'vote', title: ['निर्वाचन', 'Elections'], order: 'sort_order, date_from DESC NULLS LAST', fields: [
+  election_cycles: { minRole: 'admin', group: 'engage', icon: 'vote', title: ['निर्वाचन', 'Elections'], order: 'sort_order, date_from DESC NULLS LAST', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('period_label', 'अवधि', 'Period'),
     D('date_from', 'देखि', 'From'), D('date_to', 'सम्म', 'To'), TA('intro_np', 'परिचय', 'Introduction'), B('is_published', 'प्रकाशित', 'Published', { list: true }), N('sort_order', 'क्रम', 'Order', { default: 0 })] },
-  election_positions: { group: 'engage', icon: 'vote', title: ['निर्वाचन पद', 'Election positions'], order: 'cycle_id DESC, display_order', fields: [
+  election_positions: { minRole: 'admin', group: 'engage', icon: 'vote', title: ['निर्वाचन पद', 'Election positions'], order: 'cycle_id DESC, display_order', fields: [
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true, list: true }), T('title_np', 'पद (नेपाली)', 'Position (Nepali)', { required: true, list: true }), T('title_en', 'पद (English)', 'Position (English)'),
     N('seats', 'पद संख्या', 'Seats', { default: 1, list: true }), N('max_votes_per_voter', 'अधिकतम मत', 'Max votes', { default: 1 }), ORDER, ACTIVE] },
-  election_candidates: { group: 'engage', icon: 'user', title: ['उम्मेदवार', 'Candidates'], order: 'cycle_id DESC, position_id, display_order', fields: [
+  election_candidates: { minRole: 'admin', group: 'engage', icon: 'user', title: ['उम्मेदवार', 'Candidates'], order: 'cycle_id DESC, position_id, display_order', fields: [
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true }), REF('position_id', 'पद', 'Position', 'election_positions', 'title_np', { required: true, list: true }),
     IMG('photo', 'फोटो', 'Photo', { list: true }), T('name', 'नाम', 'Name', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'), T('symbol_no', 'चिन्ह नं.', 'Symbol no.'),
     T('phone', 'फोन', 'Phone'), TA('bio_np', 'परिचय', 'Bio'), ORDER, ACTIVE] },
-  election_milestones: { group: 'engage', icon: 'calendar', title: ['निर्वाचन कार्यतालिका', 'Election schedule'], order: 'cycle_id DESC, event_date', fields: [
+  election_milestones: { minRole: 'admin', group: 'engage', icon: 'calendar', title: ['निर्वाचन कार्यतालिका', 'Election schedule'], order: 'cycle_id DESC, event_date', fields: [
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true, list: true }), D('event_date', 'मिति', 'Date', { required: true, list: true }),
     T('title_np', 'कार्य (नेपाली)', 'Item (Nepali)', { required: true, list: true }), T('title_en', 'कार्य (English)', 'Item (English)'), FILE('attachment', 'सूचना', 'Notice'), ORDER, ACTIVE] },
 
@@ -175,7 +175,7 @@ const resources = {
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)', { required: true }), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }), ORDER, ACTIVE] },
   satisfaction_links: { group: 'links', icon: 'star', title: ['सन्तुष्टि लिङ्क', 'Satisfaction links'], order: 'display_order, id', fields: [
     T('title', 'शीर्षक', 'Title', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }), ORDER, ACTIVE] },
-  notification_templates: { group: 'links', icon: 'mail', title: ['SMS/इमेल ढाँचा', 'Message templates'], order: 'event_type, audience, channel', fields: [
+  notification_templates: { minRole: 'admin', group: 'links', icon: 'mail', title: ['SMS/इमेल ढाँचा', 'Message templates'], order: 'event_type, audience, channel', fields: [
     SEL('event_type', 'घटना', 'Event', [['submitted', 'आवेदन प्राप्त', 'Application received'], ['status_changed', 'स्थिति परिवर्तन', 'Status changed']], { required: true, list: true }),
     SEL('audience', 'प्राप्तकर्ता', 'Audience', [['member', 'आवेदक', 'Applicant'], ['admin', 'प्रशासक', 'Admin']], { required: true, list: true }),
     SEL('channel', 'माध्यम', 'Channel', [['sms', 'SMS', 'SMS'], ['email', 'इमेल', 'Email']], { required: true, list: true }),

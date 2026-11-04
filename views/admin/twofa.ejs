@@ -19,7 +19,7 @@
     <div class="flex gap-2 wrap items-center">
       <img src="<%= qr %>" alt="QR code" width="220" height="220" style="border-radius:12px;border:1px solid var(--line);background:#fff">
       <div class="grow"><div class="small muted"><%= t('QR स्क्यान नभए यो key हाल्नुहोस्:', "Can't scan? Enter this key:") %></div><code style="word-break:break-all;font-size:1rem"><%= secret.replace(/(.{4})/g, '$1 ').trim() %></code>
-        <form method="post" action="/admin/2fa/enable" class="mt-2 flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="code" inputmode="numeric" placeholder="123456" required style="max-width:160px"><button class="btn btn-primary"><%= t('सक्रिय गर्नुहोस्', 'Turn on') %></button></form></div>
+        <form method="post" action="/admin/2fa/enable" class="mt-2 flex gap-1 wrap"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="code" inputmode="numeric" placeholder="123456" required style="max-width:140px"><input class="input" type="password" name="password" placeholder="<%= t('तपाईंको पासवर्ड', 'Your password') %>" autocomplete="current-password" required style="max-width:200px"><button class="btn btn-primary"><%= t('सक्रिय गर्नुहोस्', 'Turn on') %></button></form></div>
     </div>
   </div>
 <% } %>

@@ -125,7 +125,7 @@ document.querySelectorAll('[data-print]').forEach(b => b.addEventListener('click
     form.m.value = ''; add(msg, 'me');
     const wait = add('…', 'bot typing');
     try {
-      const r = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-csrf-token': root.dataset.csrf }, body: JSON.stringify({ message: msg, history }) });
+      const r = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-csrf-token': root.dataset.csrf }, body: JSON.stringify({ message: msg }) });
       const j = await r.json();
       wait.remove(); add(j.answer || '—', 'bot');
       history.push({ role: 'user', content: msg }, { role: 'assistant', content: j.answer || '' });

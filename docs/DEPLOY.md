@@ -137,3 +137,6 @@ Migrations in `db/migrations/` are applied to every tenant, and each one runs on
 - [ ] SMTP and SMS tested from **Admin → SMS / email / push → Send a test**.
 - [ ] A backup has run and a restore has been tested.
 - [ ] Port 3000 is not reachable from the internet (only 80/443).
+- [ ] `TRUST_PROXY` matches your setup (`loopback` for systemd + Caddy/Nginx, `1` for Docker). With more proxies in front (e.g. Cloudflare → Caddy), set the number of hops or the proxy IP ranges.
+- [ ] `DEFAULT_TENANT` is empty.
+- [ ] Every platform operator has turned on 2FA (`/platform/2fa`).

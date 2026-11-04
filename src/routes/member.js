@@ -29,10 +29,10 @@ router.post('/login', ah(async (req, res) => {
   res.redirect(auth.safeNext(req.query.next, '/member'));
 }));
 
-router.post('/logout', (req, res) => {
-  delete req.session.memberId;
-  req.session.save(() => res.redirect('/'));
-});
+router.post('/logout', ah(async (req, res) => {
+  await auth.logout(req);
+  res.redirect('/');
+}));
 
 router.get('/forgot', (req, res) => res.render('member/forgot', { layout: 'auth', title: res.locals.t('पासवर्ड बिर्सनुभयो?', 'Forgot password?'), done: false }));
 router.post('/forgot', ah(async (req, res) => {
@@ -92,6 +92,12 @@ router.use(ah(async (req, res, next) => {
   res.locals.applyModules = Object.values(modules).filter(m => !m.hidden && m.key !== 'vendor');
   next();
 }));
+// temporary password from the office → must set a new one first
+router.use((req, res, next) => {
+  if (!Number(req.member.must_change_password) || req.path === '/profile' || req.path === '/logout') return next();
+  if (req.method === 'GET') { flash(req, 'info', res.locals.t('सुरक्षाका लागि नयाँ पासवर्ड राख्नुहोस्।', 'Please choose a new password.')); return res.redirect('/member/profile'); }
+  return res.status(403).render('public/error', { title: 'Change password', code: 403, message: res.locals.t('पहिले पासवर्ड परिवर्तन गर्नुहोस्।', 'Change your password first.') });
+});
 router.use('/marketplace', require('./marketplace').member);
 
 /** All submissions that belong to this member (matched by member number or phone). */
@@ -103,7 +109,11 @@ async function myRequests(member) {
     const cols = await db.columns(m.table);
     const conds = [], params = [];
     if (member.phone && cols.has(m.phoneCol)) { params.push(member.phone); conds.push(`${m.phoneCol} = $${params.length}`); }
-    if (m.memberCol && cols.has(m.memberCol) && keys.length) { params.push(keys); conds.push(`${m.memberCol} = ANY($${params.length})`); }
+    // member numbers typed into public forms are not verified — only match them together with the member's phone
+    if (m.memberCol && cols.has(m.memberCol) && keys.length && member.phone && cols.has(m.phoneCol)) {
+      params.push(keys); params.push(member.phone);
+      conds.push(`(${m.memberCol} = ANY($${params.length - 1}) AND ${m.phoneCol} = $${params.length})`);
+    }
     if (m.key === 'honor') { params.push(member.id); conds.push(`member_portal_id = $${params.length}`); }
     if (!conds.length) continue;
     const rows = await db.many(`SELECT * FROM ${m.table} WHERE (${conds.join(' OR ')}) ${cols.has('deleted_at') ? 'AND deleted_at IS NULL' : ''} ORDER BY created_at DESC LIMIT 20`, params);
@@ -154,10 +164,13 @@ router.post('/profile', ah(async (req, res) => {
     if (!(await auth.checkPassword(req.body.current, req.member.password_hash))) errors.current = res.locals.t('हालको पासवर्ड मिलेन', 'Current password is wrong');
     else if (pw.length < 8) errors.password = res.locals.t('कम्तीमा ८ अक्षर', 'At least 8 characters');
     else if (pw !== req.body.confirm) errors.confirm = res.locals.t('पासवर्ड मिलेन', 'Passwords do not match');
-    else data.password_hash = await auth.hashPassword(pw);
+    else { data.password_hash = await auth.hashPassword(pw); data.must_change_password = 0; }
   }
   if (Object.keys(errors).length) return res.status(422).render('member/profile', { title: res.locals.t('मेरो विवरण', 'My profile'), errors, values: { ...req.member, ...req.body } });
-  try { await db.update('members', req.member.id, data); } catch (e) {
+  try {
+    await db.update('members', req.member.id, data);
+    if (data.password_hash) await auth.bumpSessionVersion('members', req.member.id, req); // sign out other devices
+  } catch (e) {
     if (e.code === '23505') return res.status(422).render('member/profile', { title: res.locals.t('मेरो विवरण', 'My profile'), errors: { email: res.locals.t('यो इमेल पहिले नै प्रयोगमा छ', 'Email already in use') }, values: { ...req.member, ...req.body } });
     throw e;
   }
@@ -188,10 +201,22 @@ router.get('/certificate', ah(async (req, res) => {
   res.render('member/certificate', { layout: false, qr: await QRCode.toDataURL(target, { margin: 1, width: 200 }), verifyCode: verifyCode || '—', since: sinceAd ? nd.adToBs(sinceAd) : null });
 }));
 
+async function ownKyc(m) {
+  const keys = [m.sadasyata_number, m.member_card_no].filter(Boolean);
+  return db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3) AND mobile = $4))
+                 ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
+}
+router.get('/kyc-print/file/:field', ah(async (req, res, next) => {
+  const field = modules.kyc.fileFields.find(f => f.name === req.params.field);
+  const k = field ? await ownKyc(req.member) : null;
+  if (!k || !k[field.name]) return next();
+  require('../lib/uploads').sendStored(req, res, next, k[field.name]);
+}));
+
 router.get('/kyc-print', ah(async (req, res) => {
   const m = req.member;
   const keys = [m.sadasyata_number, m.member_card_no].filter(Boolean);
-  const k = await db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3)) OR mobile = $4)
+  const k = await db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3) AND mobile = $4))
                           ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
   if (!k) { flash(req, 'info', res.locals.t('तपाईंको KYC फारम भेटिएन। पहिले KYC भर्नुहोस्।', 'No KYC form found. Please fill in the KYC form first.')); return res.redirect('/apply/kyc'); }
   const mod = modules.kyc;
@@ -217,8 +242,9 @@ router.get('/information-room/:id', ah(async (req, res, next) => {
   await db.query(`INSERT INTO information_room_access_log (item_id, viewer_type, viewer_id, viewer_name, action, ip_address, created_at) VALUES ($1, 'member', $2, $3, $4, $5, now())`,
     [item.id, req.member.id, req.member.name, item.allow_download ? 'download' : 'view', req.ip]);
   const path = require('path');
-  const file = path.join(require('../lib/uploads').tenantDir(req), String(item.file_path).replace(/^\/+/, '').replace(/^assets\/uploads\//, ''));
-  if (file.includes('..')) return next();
+  const base = path.resolve(require('../lib/uploads').tenantDir(req));
+  const file = path.resolve(base, String(item.file_path).replace(/^\/+/, '').replace(/^assets\/uploads\//, ''));
+  if (!file.startsWith(base + path.sep)) return next(); // never outside this tenant's folder
   res.set('Cache-Control', 'private, no-store');
   if (item.allow_download) return res.download(file, path.basename(file), err => err && next());
   res.set('Content-Disposition', 'inline');
@@ -239,7 +265,9 @@ router.post('/attend', ah(async (req, res) => {
   const found = await att.byToken(req.body.t);
   if (!found) return res.redirect('/member/programs');
   const back = '/member/attend?t=' + encodeURIComponent(req.body.t);
-  const reason = att.closedReason(found.program, found.qr);
+  // multi-location programmes are checked in per location, never on the parent QR as well
+  const hasLocations = !found.occurrence && await db.value('SELECT 1 FROM program_occurrences WHERE parent_program_id = $1 AND is_active = 1 LIMIT 1', [found.program.id]);
+  const reason = hasLocations ? ['यो कार्यक्रममा स्थान अनुसारको QR प्रयोग गर्नुहोस्।', 'Please use the QR code of your location.'] : att.closedReason(found.program, found.qr);
   if (reason) {
     await att.logAttempt(req.member.id, found.program, found.occurrence, 'QR_SCAN', 'WINDOW_CLOSED', reason[1], null, req.ip, null);
     flash(req, 'error', res.locals.t(...reason)); return res.redirect(back);
@@ -322,7 +350,8 @@ router.post('/elections/:id', ah(async (req, res, next) => {
       if (await db.value('SELECT 1 FROM election_vote_submissions WHERE cycle_id = $1 AND member_id = $2', [cycle.id, req.member.id])) throw Object.assign(new Error('dup'), { dup: true });
       await db.query(`INSERT INTO election_vote_submissions (cycle_id, member_id, submitted_at, source, is_ballot, ip, user_agent) VALUES ($1, $2, now(), 'online', 1, $3, $4)`,
         [cycle.id, req.member.id, req.ip, String(req.get('user-agent') || '').slice(0, 255)]);
-      for (const [pos, cand] of picks) await db.query('INSERT INTO election_votes (cycle_id, position_id, candidate_id, member_id, created_at) VALUES ($1, $2, $3, $4, now())', [cycle.id, pos, cand, req.member.id]);
+      // secret ballot: the vote rows do not record who voted (the submission row above does) nor the exact time
+      for (const [pos, cand] of picks.sort(() => Math.random() - 0.5)) await db.query('INSERT INTO election_votes (cycle_id, position_id, candidate_id, member_id, created_at) VALUES ($1, $2, $3, NULL, CURRENT_DATE)', [cycle.id, pos, cand]);
     });
   } catch (e) {
     if (!e.dup) throw e;

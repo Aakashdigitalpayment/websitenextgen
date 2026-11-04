@@ -5,7 +5,7 @@ const tenants = require('./lib/tenants');
 
 (async () => {
   await tenants.applyPlatformSchema();
-  const server = createApp().listen(config.port, process.env.HOST || '0.0.0.0', () => console.log(`Cooperative platform listening on http://localhost:${config.port}`));
+  const server = createApp().listen(config.port, process.env.HOST || (config.isProd ? '127.0.0.1' : '0.0.0.0'), () => console.log(`Cooperative platform listening on http://localhost:${config.port}`));
   const shutdown = sig => {
     console.log(`${sig} received — closing`);
     server.close(() => require('./db').pool.end().then(() => process.exit(0)));

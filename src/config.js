@@ -2,6 +2,9 @@
 require('dotenv').config({ quiet: true });
 const path = require('path');
 
+// All wall-clock times (forms, DB timestamps, CURRENT_DATE) are Nepal time.
+process.env.TZ = process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Kathmandu';
+
 const env = process.env.NODE_ENV || 'development';
 const config = {
   env,
@@ -23,6 +26,9 @@ const config = {
   platformPassword: process.env.PLATFORM_ADMIN_PASSWORD || '',
 };
 
+if (config.isProd && config.defaultTenant) {
+  console.warn('WARNING: DEFAULT_TENANT is set in production — any Host header will be served as that tenant. Leave it empty.');
+}
 if (config.isProd && config.sessionSecret === 'dev-only-secret-change-me') {
   throw new Error('SESSION_SECRET must be set in production');
 }

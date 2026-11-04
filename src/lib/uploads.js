@@ -43,12 +43,14 @@ function contentLooksRight(file, ext) {
  *   upload('news', [{ name: 'image', kind: 'image' }])
  * After it runs, req.uploaded[field] = "news/<file>" for each accepted file.
  */
-function upload(folder, fields, { maxMb = config.maxUploadMb } = {}) {
+function upload(folder, fields, { maxMb = config.maxUploadMb, private: isPrivate = false } = {}) {
+  // private files live under uploads/<tenant>/_private/ and are never served by the public /uploads route
+  const base = isPrivate ? '_private/' + folder : folder;
   if (!FOLDER_RE.test(folder)) throw new Error('bad upload folder');
   const kinds = Object.fromEntries(fields.map(f => [f.name, f.kind || 'any']));
   const storage = multer.diskStorage({
     destination(req, file, cb) {
-      const dir = path.join(tenantDir(req), folder);
+      const dir = path.join(tenantDir(req), base);
       fs.mkdirSync(dir, { recursive: true });
       cb(null, dir);
     },
@@ -80,7 +82,7 @@ function upload(folder, fields, { maxMb = config.maxUploadMb } = {}) {
         for (const f of files) {
           const ext = path.extname(f.filename);
           if (!contentLooksRight(f.path, ext)) { fs.rmSync(f.path, { force: true }); req.uploadError = 'फाइलको सामग्री मिलेन'; continue; }
-          ok.push(`${folder}/${f.filename}`);
+          ok.push(`${base}/${f.filename}`);
         }
         req.uploaded[field] = (fields.find(x => x.name === field)?.maxCount || 1) > 1 ? ok : ok[0];
       }
@@ -97,6 +99,7 @@ function mediaUrl(stored) {
   if (/^https?:\/\//i.test(s)) return s;
   const rel = s.replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
   if (rel.includes('..')) return '';
+  if (rel.startsWith('_private/')) return '/admin/files/' + rel.split('/').map(encodeURIComponent).join('/'); // staff-only route
   return '/uploads/' + rel.split('/').map(encodeURIComponent).join('/');
 }
 
@@ -108,4 +111,22 @@ function remove(req, stored) {
   fs.rm(path.join(tenantDir(req), rel), { force: true }, () => {});
 }
 
-module.exports = { upload, mediaUrl, remove, tenantDir };
+/** Resolve a stored path to an absolute file inside this tenant's folder (null if it escapes). */
+function resolveStored(req, stored) {
+  const base = path.resolve(tenantDir(req));
+  const rel = String(stored || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+  const file = path.resolve(base, rel);
+  return file.startsWith(base + path.sep) ? file : null;
+}
+
+/** Send a stored file with safe headers (images inline, everything else as a download). */
+function sendStored(req, res, next, stored) {
+  const file = resolveStored(req, stored);
+  if (!file || !fs.existsSync(file)) return next();
+  const inline = /\.(jpe?g|png|webp|gif|pdf)$/i.test(file);
+  res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; plugin-types application/pdf" });
+  if (!inline) return res.download(file, path.basename(file));
+  res.sendFile(file);
+}
+
+module.exports = { upload, mediaUrl, remove, tenantDir, resolveStored, sendStored };

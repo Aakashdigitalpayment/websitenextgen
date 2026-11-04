@@ -92,7 +92,7 @@ function validate(mod, body, uploaded, options, lang = 'np') {
         break;
       case 'number': case 'rating': {
         const n = Number(v.replace(/,/g, ''));
-        if (!Number.isFinite(n)) { errors[f.name] = msg('अंकमा लेख्नुहोस्', 'Must be a number'); break; }
+        if (!Number.isFinite(n) || Math.abs(n) > 1e12) { errors[f.name] = msg('अंकमा लेख्नुहोस्', 'Must be a number'); break; }
         if (f.type === 'rating' && (n < 1 || n > 5)) { errors[f.name] = msg('१ देखि ५ छान्नुहोस्', 'Pick 1–5'); break; }
         if (f.min !== undefined && n < f.min) { errors[f.name] = msg(`कम्तीमा ${f.min}`, `At least ${f.min}`); break; }
         if (f.max !== undefined && n > f.max) { errors[f.name] = msg(`बढीमा ${f.max}`, `At most ${f.max}`); break; }

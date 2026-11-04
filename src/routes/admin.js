@@ -48,7 +48,7 @@ router.post('/login', ah(async (req, res) => {
 const usedSteps = new Map(); // "<schema>:<adminId>" -> last accepted TOTP step (replay protection)
 function pending2fa(req) {
   const p = req.session.pending2fa;
-  return p && Date.now() - p.at < 5 * 60_000 ? p : null;
+  return p && p.tenantId === req.tenant.id && Date.now() - p.at < 5 * 60_000 ? p : null;
 }
 router.get('/login/2fa', (req, res) => {
   if (!pending2fa(req)) return res.redirect('/admin/login');
@@ -57,8 +57,8 @@ router.get('/login/2fa', (req, res) => {
 router.post('/login/2fa', ah(async (req, res) => {
   const p = pending2fa(req);
   if (!p) return res.redirect('/admin/login');
-  const user = await db.one('SELECT * FROM admin_users WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL', [p.id]);
-  if (!user) return res.redirect('/admin/login');
+  const user = await db.one("SELECT * FROM admin_users WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(status, 'active') = 'active'", [p.id]);
+  if (!user || !user.twofa_enabled || require('../lib/license').loginBlocked(req.tenant, user)) { delete req.session.pending2fa; return res.redirect('/admin/login'); }
   const key = db.currentSchema() + ':' + user.id;
   if (await auth.tooManyAttempts('2fa:' + user.username, req.ip)) return res.status(429).render('admin/login-2fa', { layout: 'auth', title: '2FA', error: res.locals.t('धेरै गलत प्रयास। १५ मिनेटपछि प्रयास गर्नुहोस्।', 'Too many attempts. Try again in 15 minutes.') });
   const code = String(req.body.code || '').trim();
@@ -77,12 +77,19 @@ router.post('/login/2fa', ah(async (req, res) => {
   res.redirect(user.must_change_password ? '/admin/password' : auth.safeNext(req.query.next, '/admin'));
 }));
 
-router.post('/logout', (req, res) => {
-  delete req.session.adminId;
-  req.session.save(() => res.redirect('/admin/login'));
-});
+router.post('/logout', ah(async (req, res) => {
+  await auth.logout(req);
+  res.redirect('/admin/login');
+}));
 
 router.use(requireAdmin('editor'));
+
+// a temporary / reset password must be replaced before anything else
+router.use((req, res, next) => {
+  if (!req.admin.must_change_password || req.path === '/password' || req.path === '/logout') return next();
+  if (req.method === 'GET') return res.redirect('/admin/password');
+  return res.status(403).render('admin/denied', { title: 'Change password first' });
+});
 
 // sidebar badge counts (pending items per inbox)
 router.use(ah(async (req, res, next) => {
@@ -139,7 +146,7 @@ async function refOptions(fields) {
 }
 
 function getResource(req, res, next) {
-  const r = resources[req.params.resource];
+  const r = Object.hasOwn(resources, req.params.resource) ? resources[req.params.resource] : null;
   if (!r) return next('route');
   if (r.minRole && auth.roleLevel(req.admin.role) < auth.roleLevel(r.minRole)) return res.status(403).render('admin/denied', { title: 'Access denied' });
   req.resource = r;
@@ -217,7 +224,7 @@ function readResourceForm(fields, body, uploaded, existing) {
 function resourceUpload(req, res, next) {
   const fileFields = req.resource.fileFields;
   if (!fileFields.length || !req.is('multipart/form-data')) return next();
-  const [mw, csrf] = upload(req.resource.key.replace(/_/g, '-'), fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : 'any' })), { maxMb: 20 });
+  const [mw, csrf] = upload(req.resource.key.replace(/_/g, '-'), fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : 'any' })), { maxMb: 20, private: !!req.resource.privateFiles });
   mw(req, res, err => (err ? next(err) : csrf(req, res, next)));
 }
 
@@ -285,7 +292,7 @@ router.post('/r/:resource/:id/delete', getResource, ah(async (req, res) => {
 
 // ---------------------------------------------------------------- application inboxes
 function getModule(req, res, next) {
-  const m = modules[req.params.module];
+  const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
   if (!m) return next('route');
   if (auth.roleLevel(req.admin.role) < auth.roleLevel('staff')) return res.status(403).render('admin/denied', { title: 'Access denied' });
   req.mod = m;
@@ -304,8 +311,9 @@ async function inboxQuery(req, m) {
     const search = [m.nameCol, m.phoneCol, 'email', 'tracking_id', m.memberCol].filter(c => c && cols.has(c));
     where.push('(' + search.map(c => `${c}::text ILIKE $${params.length}`).join(' OR ') + ')');
   }
-  if (req.query.from) { params.push(req.query.from); where.push(`created_at >= $${params.length}::date`); }
-  if (req.query.to) { params.push(req.query.to); where.push(`created_at < $${params.length}::date + 1`); }
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) && !Number.isNaN(Date.parse(v));
+  if (isDate(req.query.from)) { params.push(req.query.from); where.push(`created_at >= $${params.length}::date`); }
+  if (isDate(req.query.to)) { params.push(req.query.to); where.push(`created_at < $${params.length}::date + 1`); }
   return { w: where.length ? 'WHERE ' + where.join(' AND ') : '', params, cols, status, q };
 }
 
@@ -325,10 +333,9 @@ router.get('/inbox/:module/export.csv', getModule, ah(async (req, res) => {
   const { w, params } = await inboxQuery(req, m);
   const rows = await db.many(`SELECT * FROM ${m.table} ${w} ORDER BY created_at DESC NULLS LAST LIMIT 10000`, params);
   const cols = ['tracking_id', ...m.fields.filter(f => f.type !== 'file' && f.type !== 'image').map(f => f.name), 'status', 'created_at'].filter((c, i, a) => a.indexOf(c) === i && (!rows[0] || c in rows[0]));
-  const esc = v => { const s = v == null ? '' : v instanceof Date ? v.toISOString() : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : /^[=+\-@]/.test(s) ? "'" + s : s; };
   await auth.audit(req, 'export', m.table, null, `CSV export (${rows.length} rows)`);
   res.type('text/csv; charset=utf-8').attachment(`${m.key}-${new Date().toISOString().slice(0, 10)}.csv`)
-    .send('﻿' + [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n'));
+    .send(util.toCsv(cols, rows));
 }));
 
 router.get('/inbox/:module/:id', getModule, ah(async (req, res, next) => {
@@ -390,6 +397,14 @@ router.post('/inbox/:module/:id/delete', getModule, ah(async (req, res) => {
   flash(req, 'success', res.locals.t('हटाइयो।', 'Deleted.'));
   res.redirect(`/admin/inbox/${m.key}`);
 }));
+
+// confidential uploads (application documents, information room) — signed-in staff only
+router.get('/files/*rest', requireAdmin('staff'), (req, res, next) => {
+  const rest = [].concat(req.params.rest || []).join('/');
+  if (!rest.startsWith('_private/')) return next();
+  if (rest.startsWith('_private/information-room-items/') && auth.roleLevel(req.admin.role) < auth.roleLevel('admin')) return res.status(403).end();
+  require('../lib/uploads').sendStored(req, res, next, rest);
+});
 
 router.use('/programs', require('./admin-programs'));
 router.use('/marketplace', require('./marketplace').admin);
@@ -474,10 +489,11 @@ async function saveMember(req, res, item) {
   const pw = String(b.password || '');
   if (pw && pw.length < 8) errors.password = 'कम्तीमा ८ अक्षर / min 8 characters';
   if (Object.keys(errors).length) return res.status(422).render('admin/member-form', { title: 'Member', item, values: { ...item, ...b }, errors, cards: [] });
-  if (pw) data.password_hash = await auth.hashPassword(pw);
+  if (pw) { data.password_hash = await auth.hashPassword(pw); data.must_change_password = 1; }
   if (data.approval_status === 'approved' && (!item || item.approval_status !== 'approved')) { data.approved_at = new Date(); data.approved_by = req.admin.id; }
   try {
     const row = item ? await db.update('members', item.id, data) : await db.insert('members', { ...data, created_by: req.admin.id, is_verified: 1 });
+    if (item && (pw || !data.is_active)) await auth.bumpSessionVersion('members', item.id);
     await auth.audit(req, item ? 'update' : 'create', 'members', row.id, `Member ${row.name}`);
     flash(req, 'success', res.locals.t('सदस्य विवरण सुरक्षित भयो।', 'Member saved.'));
     res.redirect('/admin/members/' + row.id);
@@ -531,7 +547,8 @@ router.post('/password-requests/:id/resolve', requireAdmin('staff'), ah(async (r
   const r = await db.one("SELECT * FROM member_password_reset_requests WHERE id = $1 AND status = 'pending'", [util.int(req.params.id)]);
   if (r) {
     const temp = crypto.randomBytes(5).toString('base64url');
-    await db.query('UPDATE members SET password_hash = $1 WHERE id = $2', [await auth.hashPassword(temp), r.member_id]);
+    await db.query('UPDATE members SET password_hash = $1, must_change_password = 1 WHERE id = $2', [await auth.hashPassword(temp), r.member_id]);
+    await auth.bumpSessionVersion('members', r.member_id);
     await db.query("UPDATE member_password_reset_requests SET status = 'resolved', admin_id = $1, resolved_at = now() WHERE id = $2", [req.admin.id, r.id]);
     await auth.audit(req, 'password_reset', 'members', r.member_id, 'Temporary password issued');
     req.session.tempPassword = { id: r.id, temp };
@@ -610,6 +627,7 @@ router.post('/users/:id', requireAdmin('superadmin'), ah(async (req, res) => {
   if (action === 'enable') await db.query("UPDATE admin_users SET is_active = 1, status = 'active' WHERE id = $1", [id]);
   if (action === 'delete') await db.query('UPDATE admin_users SET deleted_at = now(), is_active = 0 WHERE id = $1', [id]);
   if (action === 'reset2fa') await db.query('UPDATE admin_users SET twofa_enabled = 0, twofa_secret = NULL, twofa_backup_codes = NULL WHERE id = $1', [id]);
+  if (['role', 'disable', 'delete', 'reset2fa', 'reset'].includes(action)) await auth.bumpSessionVersion('admin_users', id);
   if (action === 'reset') {
     const temp = crypto.randomBytes(8).toString('base64url');
     await db.query('UPDATE admin_users SET password = $1, must_change_password = 1 WHERE id = $2', [await auth.hashPassword(temp), id]);
@@ -629,7 +647,9 @@ router.post('/password', ah(async (req, res) => {
   if (pw.length < 10) errors.password = res.locals.t('कम्तीमा १० अक्षर', 'At least 10 characters');
   else if (pw !== req.body.confirm) errors.confirm = res.locals.t('पासवर्ड मिलेन', 'Passwords do not match');
   if (Object.keys(errors).length) return res.status(422).render('admin/password', { title: res.locals.t('पासवर्ड परिवर्तन', 'Change password'), errors });
+  if (await auth.checkPassword(pw, user.password)) return res.status(422).render('admin/password', { title: res.locals.t('पासवर्ड परिवर्तन', 'Change password'), errors: { password: res.locals.t('नयाँ पासवर्ड पुरानो जस्तै हुन मिल्दैन', 'Choose a different password') } });
   await db.query('UPDATE admin_users SET password = $1, must_change_password = 0, last_password_change = now() WHERE id = $2', [await auth.hashPassword(pw), user.id]);
+  await auth.bumpSessionVersion('admin_users', user.id, req); // other sessions are signed out
   await auth.audit(req, 'password', 'admin_users', user.id, 'Password changed');
   flash(req, 'success', res.locals.t('पासवर्ड परिवर्तन भयो।', 'Password changed.'));
   res.redirect('/admin');
@@ -683,6 +703,11 @@ router.get('/2fa', ah(async (req, res) => {
 
 router.post('/2fa/enable', ah(async (req, res) => {
   const secret = req.session.twofaSetup;
+  const me = await db.one('SELECT password FROM admin_users WHERE id = $1', [req.admin.id]);
+  if (!(await auth.checkPassword(req.body.password, me.password))) {
+    flash(req, 'error', res.locals.t('पासवर्ड मिलेन।', 'Password is wrong.'));
+    return res.redirect('/admin/2fa');
+  }
   if (!secret || totp.verify(secret, req.body.code) === null) {
     flash(req, 'error', res.locals.t('कोड मिलेन। एपमा देखिएको ६ अंकको कोड राख्नुहोस्।', 'Code did not match. Enter the 6-digit code from the app.'));
     return res.redirect('/admin/2fa');
@@ -690,6 +715,7 @@ router.post('/2fa/enable', ah(async (req, res) => {
   const { codes, hashes } = await totp.backupCodes();
   await db.query('UPDATE admin_users SET twofa_enabled = 1, twofa_secret = $1, twofa_backup_codes = $2, twofa_enabled_at = now() WHERE id = $3', [secret, JSON.stringify(hashes), req.admin.id]);
   delete req.session.twofaSetup;
+  await auth.bumpSessionVersion('admin_users', req.admin.id, req);
   await auth.audit(req, '2fa_enable', 'admin_users', req.admin.id, '2FA enabled');
   const user = await db.one('SELECT twofa_enabled, twofa_enabled_at FROM admin_users WHERE id = $1', [req.admin.id]);
   res.render('admin/twofa', { title: res.locals.t('दुई-चरण प्रमाणीकरण', 'Two-factor authentication'), user, qr: null, secret: null, remaining: codes.length, codes, error: null });

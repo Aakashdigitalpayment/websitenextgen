@@ -32,7 +32,7 @@ const modules = {
       ] },
       { title: ['ऋणको विवरण', 'Loan'], fields: [
         { name: 'loan_type', label: ['ऋणको प्रकार', 'Loan type'], type: 'select', required: true, show: true, optionsFrom: 'loanTypes' },
-        { name: 'loan_amount', label: ['माग रकम (रु.)', 'Amount (Rs.)'], type: 'number', required: true, min: 1000, show: true, format: 'money' },
+        { name: 'loan_amount', label: ['माग रकम (रु.)', 'Amount (Rs.)'], type: 'number', required: true, min: 1000, max: 1e10, show: true, format: 'money' },
         { name: 'loan_tenure', label: ['अवधि (महिना)', 'Tenure (months)'], type: 'number', min: 1, max: 360 },
         { name: 'repayment_method', label: ['भुक्तानी तरिका', 'Repayment'], type: 'select', options: [['monthly', 'मासिक किस्ता', 'Monthly EMI'], ['quarterly', 'त्रैमासिक', 'Quarterly'], ['onetime', 'एकमुष्ट', 'Lump sum']] },
         { name: 'loan_purpose', label: ['ऋणको उद्देश्य', 'Purpose'], type: 'textarea', rows: 3, required: true },
@@ -312,7 +312,7 @@ const modules = {
       { name: 'bidder_phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
       { name: 'bidder_email', label: ['इमेल', 'Email'], type: 'email' },
       { name: 'bidder_address', label: ['ठेगाना', 'Address'] },
-      { name: 'bid_amount', label: ['कबोल रकम (रु.)', 'Bid amount (Rs.)'], type: 'number', required: true, format: 'money', show: true },
+      { name: 'bid_amount', label: ['कबोल रकम (रु.)', 'Bid amount (Rs.)'], type: 'number', required: true, min: 1, format: 'money', show: true },
       { name: 'message', label: ['सन्देश', 'Message'], type: 'textarea', rows: 3 },
     ] }],
   },

@@ -5,7 +5,7 @@ const nd = require('./nepali-date');
 /** Short, unambiguous tracking id: LN-830718-7KQ2M (prefix-BSyymmdd-random) */
 function trackingId(prefix) {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const rnd = Array.from(crypto.randomBytes(5), b => alphabet[b % alphabet.length]).join('');
+  const rnd = Array.from(crypto.randomBytes(8), b => alphabet[b % alphabet.length]).join(''); // 32^8 ≈ 1.1e12 per day
   const bs = (nd.todayBs() || '').replace(/-/g, '').slice(2);
   return `${prefix}-${bs}-${rnd}`;
 }
@@ -15,7 +15,10 @@ function escapeHtml(s) {
 }
 
 /** Strip tags for excerpts. */
-function stripTags(s) { return String(s ?? '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim(); }
+function stripTags(s) {
+  // linear-time: let the sanitizer drop every tag instead of a backtracking regex
+  return sanitizeLib(String(s ?? '').slice(0, 200_000), { allowedTags: [], allowedAttributes: {} }).replace(/&nbsp;|&amp;nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 function excerpt(s, n = 160) {
   const t = stripTags(s);
@@ -23,29 +26,22 @@ function excerpt(s, n = 160) {
 }
 
 /**
- * Very small HTML sanitizer for admin-authored rich text: keeps common
- * formatting tags, drops scripts/handlers/javascript: URLs.
+ * HTML sanitizer for admin-authored rich text — parser based (sanitize-html), allow-list only.
+ * No scripts, event handlers, styles, iframes or non-http(s) URLs survive.
  */
-const ALLOWED = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'h2', 'h3', 'h4', 'blockquote', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'div', 'hr']);
+const sanitizeLib = require('sanitize-html');
+const SANITIZE_OPTS = {
+  allowedTags: ['p', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'h2', 'h3', 'h4', 'blockquote', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'div', 'hr'],
+  allowedAttributes: { a: ['href', 'title'], img: ['src', 'alt', 'title'], td: ['colspan', 'rowspan'], th: ['colspan', 'rowspan'] },
+  allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+  allowedSchemesAppliedToAttributes: ['href', 'src'],
+  allowProtocolRelative: false,
+  disallowedTagsMode: 'discard',
+  transformTags: { a: sanitizeLib.simpleTransform('a', { rel: 'noopener noreferrer' }) },
+};
+SANITIZE_OPTS.allowedAttributes.a.push('rel');
 function sanitizeHtml(html) {
-  let s = String(html ?? '');
-  s = s.replace(/<(script|style|iframe|object|embed|form|input|button|textarea|select)[\s\S]*?(<\/\1>|$)/gi, '');
-  s = s.replace(/<\/?([a-z0-9]+)([^>]*)>/gi, (m, tag, attrs) => {
-    tag = tag.toLowerCase();
-    if (!ALLOWED.has(tag)) return '';
-    if (m.startsWith('</')) return `</${tag}>`;
-    const keep = [];
-    for (const a of attrs.matchAll(/([a-z-]+)\s*=\s*("([^"]*)"|'([^']*)')/gi)) {
-      const name = a[1].toLowerCase();
-      const val = a[3] ?? a[4] ?? '';
-      if (!['href', 'src', 'alt', 'title', 'colspan', 'rowspan'].includes(name)) continue;
-      if ((name === 'href' || name === 'src') && !/^(https?:|\/|#|mailto:|tel:)/i.test(val.trim())) continue;
-      keep.push(`${name}="${escapeHtml(val)}"`);
-    }
-    if (tag === 'a') keep.push('rel="noopener"');
-    return `<${tag}${keep.length ? ' ' + keep.join(' ') : ''}>`;
-  });
-  return s;
+  return sanitizeLib(String(html ?? '').slice(0, 200_000), SANITIZE_OPTS);
 }
 
 /** Plain text with line breaks → safe HTML paragraphs. If it already looks like HTML, sanitize it. */
@@ -74,8 +70,20 @@ function slugify(s) {
 }
 
 /** Basic validators */
-const isEmail = s => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || ''));
-const isPhone = s => /^(\+?977[-\s]?)?(9[678]\d{8}|0?\d{1,2}[-\s]?\d{6,7})$/.test(nd.toLatinDigits(String(s || '')).replace(/\s+/g, ''));
+// length-capped and without overlapping quantifiers (no ReDoS)
+const isEmail = s => { const v = String(s || ''); return v.length <= 254 && /^[^\s@]{1,64}@[^\s@.]{1,63}(\.[^\s@.]{1,63})+$/.test(v); };
+/**
+ * CSV cell: neutralise spreadsheet formulas FIRST (=, +, -, @, tab, CR, |, also after leading spaces),
+ * then quote. Used by every CSV export.
+ */
+function csvCell(v) {
+  let s = v == null ? '' : v instanceof Date ? v.toISOString() : String(v);
+  if (/^[\s]*[=+\-@\t\r|]/.test(s)) s = "'" + s;
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+const toCsv = (cols, rows) => '\ufeff' + [cols.map(csvCell).join(','), ...rows.map(r => cols.map(c => csvCell(r[c])).join(','))].join('\r\n');
+
+const isPhone = s => String(s || '').length <= 30 && /^(\+?977[-\s]?)?(9[678]\d{8}|0?\d{1,2}[-\s]?\d{6,7})$/.test(nd.toLatinDigits(String(s || '')).replace(/\s+/g, ''));
 
 function paginate(total, page, perPage = 20) {
   const pages = Math.max(1, Math.ceil(total / perPage));
@@ -83,4 +91,4 @@ function paginate(total, page, perPage = 20) {
   return { total, page: p, pages, perPage, offset: (p - 1) * perPage };
 }
 
-module.exports = { trackingId, escapeHtml, stripTags, excerpt, sanitizeHtml, richText, money, int, slugify, isEmail, isPhone, paginate };
+module.exports = { csvCell, toCsv, trackingId, escapeHtml, stripTags, excerpt, sanitizeHtml, richText, money, int, slugify, isEmail, isPhone, paginate };

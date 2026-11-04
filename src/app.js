@@ -24,7 +24,10 @@ function createApp() {
   const app = express();
   app.set('views', path.join(config.rootDir, 'views'));
   app.set('view engine', 'ejs');
-  app.set('trust proxy', process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY : 1);
+  // Only trust X-Forwarded-* when a proxy is configured (TRUST_PROXY=1 / loopback / CIDR list); otherwise
+  // a client could spoof its IP and bypass every rate limit.
+  const tp = process.env.TRUST_PROXY;
+  app.set('trust proxy', !tp || tp === 'false' || tp === '0' ? false : /^\d+$/.test(tp) ? Number(tp) : tp);
   app.disable('x-powered-by');
 
   app.use(helmet({
@@ -62,9 +65,6 @@ function createApp() {
     res.status(ok ? 200 : 404).end();
   });
   app.get('/sw.js', (req, res) => res.set('Service-Worker-Allowed', '/').set('Cache-Control', 'no-cache').sendFile(path.join(config.rootDir, 'public', 'sw.js')));
-  app.use(express.urlencoded({ extended: false, limit: '1mb' }));
-  app.use(express.json({ limit: '256kb' }));
-
   // ---------- layouts: res.render(view, { layout }) wraps the view in views/layouts/<layout>.ejs ----------
   app.use((req, res, next) => {
     const render = res.render.bind(res);
@@ -102,10 +102,15 @@ function createApp() {
     next();
   });
 
+  app.use(express.urlencoded({ extended: false, limit: '256kb', parameterLimit: 500 }));
+  app.use(express.json({ limit: '64kb' }));
+
   // ---------- platform console (operators manage tenants) ----------
+  // separate cookie, store table and signing secret from tenant sessions
   const platformSession = session({
-    name: 'platform.sid', secret: config.sessionSecret, resave: false, saveUninitialized: false,
-    store: new PgStore({ pool: db.pool, schemaName: 'platform', tableName: 'user_sessions' }),
+    name: 'platform.sid', secret: require('crypto').createHmac('sha256', config.sessionSecret).update('platform-operator-sessions').digest('hex'),
+    resave: false, saveUninitialized: false,
+    store: new PgStore({ pool: db.pool, schemaName: 'platform', tableName: 'operator_sessions' }),
     cookie: { httpOnly: true, sameSite: 'lax', secure: config.isProd, maxAge: 8 * 3600_000 },
   });
   app.use('/platform', (req, res, next) => {
@@ -130,6 +135,7 @@ function createApp() {
 
   // tenant-isolated uploaded files
   app.use('/uploads', (req, res, next) => {
+    if (/^\/_private(\/|$)/i.test(decodeURIComponent(req.path))) return res.status(404).end();
     express.static(tenantDir(req), { maxAge: config.isProd ? '30d' : 0, dotfiles: 'deny', index: false,
       setHeaders: r => r.set('X-Content-Type-Options', 'nosniff').set('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'") })(req, res, next);
   });

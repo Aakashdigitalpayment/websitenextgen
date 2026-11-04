@@ -17,7 +17,10 @@ pg.types.setTypeParser(1082, v => v);                                  // DATE -
 pg.types.setTypeParser(1700, v => (v === null ? null : Number(v)));    // NUMERIC -> number
 pg.types.setTypeParser(20, v => (v === null ? null : Number(v)));      // BIGINT -> number
 
-const pool = new pg.Pool({ connectionString: config.databaseUrl, max: Number(process.env.PG_POOL_MAX || 10) });
+const pool = new pg.Pool({
+  connectionString: config.databaseUrl, max: Number(process.env.PG_POOL_MAX || 10),
+  options: `-c TimeZone=${process.env.TZ || 'Asia/Kathmandu'} -c statement_timeout=30000`,
+});
 const als = new AsyncLocalStorage();
 const clientSchema = new WeakMap(); // pg client -> schema its search_path currently points at
 
