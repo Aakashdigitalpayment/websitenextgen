@@ -1,0 +1,56 @@
+<%
+  const opt = (list, v) => { const o = list.find(x => x[0] === v); return o ? t(o[1], o[2]) : v; };
+  const statusCls = { active: 'badge-ok', on_leave: 'badge-info', resigned: '', retired: '', terminated: 'badge-bad' };
+%>
+<div class="content-head">
+  <div class="flex gap-2 items-center">
+    <div class="person-photo" style="width:72px;height:72px;margin:0"><% if (e.photo) { %><img src="<%= mediaUrl(e.photo) %>" alt=""><% } else { %><%= (e.full_name || '?').charAt(0) %><% } %></div>
+    <div><div class="crumbs"><a href="/admin/r/hrm_employees"><%= t('कर्मचारी', 'Employees') %></a></div><h1><%= e.full_name %></h1><div class="small muted"><%= e.employee_code %> · <%= e.designation || '' %> · <%= f(e, 'department') || '' %> <span class="badge <%= statusCls[e.status] %>"><%= e.status %></span></div></div>
+  </div>
+  <div class="flex gap-1"><a class="btn btn-outline btn-sm" href="/admin/hrm/employees/<%= e.id %>/id-card" target="_blank" rel="noopener"><%- icon('id') %><%= t('परिचयपत्र', 'ID card') %></a><a class="btn btn-primary btn-sm" href="/admin/r/hrm_employees/<%= e.id %>/edit"><%- icon('edit') %><%= t('सम्पादन', 'Edit') %></a></div>
+</div>
+<div class="grid" style="grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px">
+  <div class="card"><h3><%= t('विवरण', 'Details') %></h3><div class="kv" style="grid-template-columns:140px 1fr">
+    <% [[t('फोन','Phone'), e.phone], [t('इमेल','Email'), e.email], [t('ठेगाना','Address'), e.address], [t('शाखा','Branch'), e.branch], [t('लिङ्ग','Gender'), e.gender], [t('जन्म मिति','Born'), e.dob && bsDate(e.dob)], [t('नागरिकता','Citizenship'), e.citizenship_no], ['PAN', e.pan_no], [t('नियुक्ति','Joined'), e.join_date && bsDate(e.join_date)], [t('प्रकार','Type'), e.employment_type], [t('आधारभूत तलब','Basic salary'), e.basic_salary && 'रु. ' + money(e.basic_salary)], [t('बैंक खाता','Bank'), e.bank_account], [t('आपतकालीन','Emergency'), e.emergency_contact], [t('सेवा अन्त्य','Exit'), e.exit_date && bsDate(e.exit_date)], [t('टिप्पणी','Notes'), e.notes]].filter(x => x[1]).forEach(x => { %><div><%= x[0] %></div><div style="white-space:pre-wrap"><%= x[1] %></div><% }) %>
+  </div></div>
+  <div class="stack">
+    <div class="card" id="leaves"><h3><%= t('बिदा', 'Leave') %> <span class="small muted" style="font-weight:400">— <%= t('आ.व.', 'FY') %> <%= num(fy) %>/<%= num(String(fy + 1).slice(2)) %></span></h3>
+      <div class="flex gap-1 wrap mb-2"><% LEAVE_TYPES.filter(l => leaveTotals[l[0]]).forEach(l => { %><span class="badge badge-brand"><%= t(l[1], l[2]) %>: <%= num(leaveTotals[l[0]]) %> <%= t('दिन', 'days') %></span><% }) %><% if (!Object.keys(leaveTotals).length) { %><span class="small faint"><%= t('यो आ.व. मा बिदा छैन।', 'No leave this fiscal year.') %></span><% } %></div>
+      <form method="post" action="/admin/hrm/employees/<%= e.id %>/leaves" class="flex gap-1 wrap items-end">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="field"><label class="small"><%= t('प्रकार', 'Type') %></label><select class="select" name="leave_type"><% LEAVE_TYPES.forEach(l => { %><option value="<%= l[0] %>"><%= t(l[1], l[2]) %></option><% }) %></select></div>
+        <div class="field"><label class="small"><%= t('देखि', 'From') %></label><input class="input" type="date" name="from_date" required></div>
+        <div class="field"><label class="small"><%= t('सम्म', 'To') %></label><input class="input" type="date" name="to_date" required></div>
+        <div class="field"><label class="small"><%= t('दिन', 'Days') %></label><input class="input" name="days" inputmode="decimal" style="width:80px" placeholder="auto"></div>
+        <input class="input" name="reason" placeholder="<%= t('कारण', 'Reason') %>" style="max-width:200px"><button class="btn btn-outline"><%- icon('plus') %></button>
+      </form>
+      <% if (leaves.length) { %><div class="table-wrap mt-2"><table class="table"><tbody><% leaves.forEach(l => { %><tr><td><span class="badge"><%= opt(LEAVE_TYPES, l.leave_type) %></span></td><td class="small"><%= bsDate(l.from_date) %> → <%= bsDate(l.to_date) %></td><td class="num"><%= num(Number(l.days)) %></td><td class="small muted"><%= l.reason || '' %></td><td class="text-right"><form method="post" action="/admin/hrm/employees/<%= e.id %>/leaves/<%= l.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm btn-icon" data-confirm="<%= t('हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form></td></tr><% }) %></tbody></table></div><% } %>
+    </div>
+    <div class="card" id="contracts"><h3><%= t('करार / नियुक्ति', 'Contracts') %></h3>
+      <% contracts.forEach(c => { const ended = c.end_date && c.end_date < new Date().toISOString().slice(0,10); %><div class="list-item"><div class="grow"><div style="font-weight:500"><%= c.contract_type %> <% if (ended) { %><span class="badge"><%= t('सकियो', 'ended') %></span><% } %></div><div class="small muted"><%= bsDate(c.start_date) %> → <%= c.end_date ? bsDate(c.end_date) : t('अनिश्चित', 'open-ended') %><%= c.salary ? ' · रु. ' + money(c.salary) : '' %></div><% if (c.notes) { %><div class="small faint"><%= c.notes %></div><% } %></div>
+        <% if (c.document) { %><a class="btn btn-ghost btn-sm btn-icon" href="<%= mediaUrl(c.document) %>" target="_blank" rel="noopener"><%- icon('file') %></a><% } %>
+        <form method="post" action="/admin/hrm/employees/<%= e.id %>/contracts/<%= c.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm btn-icon" data-confirm="<%= t('हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form></div><% }) %>
+      <form method="post" action="/admin/hrm/employees/<%= e.id %>/contracts?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data" class="form-grid mt-2">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="field"><label class="small"><%= t('प्रकार', 'Type') %></label><select class="select" name="contract_type"><option value="employment"><%= t('नियुक्ति', 'Employment') %></option><option value="contract"><%= t('करार', 'Contract') %></option><option value="renewal"><%= t('नवीकरण', 'Renewal') %></option><option value="promotion"><%= t('बढुवा', 'Promotion') %></option></select></div>
+        <div class="field"><label class="small"><%= t('तलब', 'Salary') %></label><input class="input" name="salary" inputmode="decimal"></div>
+        <div class="field"><label class="small"><%= t('सुरु', 'Start') %></label><input class="input" type="date" name="start_date" required></div>
+        <div class="field"><label class="small"><%= t('अन्त्य', 'End') %></label><input class="input" type="date" name="end_date"></div>
+        <div class="field span-2"><input class="input" type="file" name="file"></div>
+        <div class="span-2"><button class="btn btn-outline btn-sm"><%- icon('plus') %><%= t('करार थप्नुहोस्', 'Add contract') %></button></div>
+      </form>
+    </div>
+    <div class="card" id="documents"><h3><%= t('कागजात', 'Documents') %></h3>
+      <% documents.forEach(d => { const exp = d.expires_on && d.expires_on < new Date().toISOString().slice(0,10); %><div class="list-item"><%- icon('file') %><div class="grow"><a href="<%= mediaUrl(d.file_path) %>" target="_blank" rel="noopener"><%= d.title %></a> <span class="badge"><%= opt(DOC_TYPES, d.doc_type) %></span><% if (d.expires_on) { %> <span class="badge <%= exp ? 'badge-bad' : '' %>"><%= t('म्याद ', 'exp. ') %><%= bsDate(d.expires_on) %></span><% } %></div>
+        <form method="post" action="/admin/hrm/employees/<%= e.id %>/documents/<%= d.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm btn-icon" data-confirm="<%= t('हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form></div><% }) %>
+      <form method="post" action="/admin/hrm/employees/<%= e.id %>/documents?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data" class="form-grid mt-2">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="field"><label class="small"><%= t('शीर्षक', 'Title') %></label><input class="input" name="title" required></div>
+        <div class="field"><label class="small"><%= t('प्रकार', 'Type') %></label><select class="select" name="doc_type"><% DOC_TYPES.forEach(d => { %><option value="<%= d[0] %>"><%= t(d[1], d[2]) %></option><% }) %></select></div>
+        <div class="field"><label class="small"><%= t('म्याद (ऐच्छिक)', 'Expires (optional)') %></label><input class="input" type="date" name="expires_on"></div>
+        <div class="field"><label class="small"><%= t('फाइल', 'File') %></label><input class="input" type="file" name="file" required></div>
+        <div class="span-2"><button class="btn btn-outline btn-sm"><%- icon('plus') %><%= t('कागजात थप्नुहोस्', 'Add document') %></button></div>
+      </form>
+    </div>
+  </div>
+</div>

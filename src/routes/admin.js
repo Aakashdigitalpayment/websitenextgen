@@ -141,6 +141,7 @@ async function refOptions(fields) {
 function getResource(req, res, next) {
   const r = resources[req.params.resource];
   if (!r) return next('route');
+  if (r.minRole && auth.roleLevel(req.admin.role) < auth.roleLevel(r.minRole)) return res.status(403).render('admin/denied', { title: 'Access denied' });
   req.resource = r;
   next();
 }
@@ -192,7 +193,7 @@ function readResourceForm(fields, body, uploaded, existing) {
     v = typeof v === 'string' ? v.trim() : '';
     if (v === '') {
       if (f.required) errors[f.name] = 'आवश्यक छ / required';
-      else data[f.name] = null;
+      else data[f.name] = f.default !== undefined ? f.default : null;
       continue;
     }
     if (f.type === 'number') {
@@ -393,6 +394,7 @@ router.post('/inbox/:module/:id/delete', getModule, ah(async (req, res) => {
 router.use('/programs', require('./admin-programs'));
 router.use('/marketplace', require('./marketplace').admin);
 router.use('/credentials', require('./admin-credentials'));
+router.use('/hrm', require('./admin-hrm'));
 
 // ---------------------------------------------------------------- members
 router.get('/members', requireAdmin('staff'), ah(async (req, res) => {

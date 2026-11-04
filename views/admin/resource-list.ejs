@@ -15,7 +15,7 @@
         <% } else { %><%= v ? '✓' : '' %><% } %>
       <% } else if (fl.type === 'select') { const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); %><%= o ? t(o[1], o[2]) : (v ?? '') %>
       <% } else if (fl.type === 'date') { %><span class="small"><%= v ? bsDate(v) : '' %></span>
-      <% } else { %><% if (i === 0) { %><a href="/admin/r/<%= r.key %>/<%= row.id %>/edit" style="font-weight:500;color:var(--text)"><%= util.excerpt(v, 80) || '#' + row.id %></a><% } else { %><%= util.excerpt(v, 60) %><% } %><% } %>
+      <% } else { %><% if (i === 0) { %><a href="<%= r.view ? r.view + row.id : '/admin/r/' + r.key + '/' + row.id + '/edit' %>" style="font-weight:500;color:var(--text)"><%= util.excerpt(v, 80) || '#' + row.id %></a><% } else { %><%= util.excerpt(v, 60) %><% } %><% } %>
     </td><% }) %>
     <td><div class="row-actions">
       <a class="btn btn-ghost btn-sm btn-icon" href="/admin/r/<%= r.key %>/<%= row.id %>/edit" title="Edit"><%- icon('edit') %></a>

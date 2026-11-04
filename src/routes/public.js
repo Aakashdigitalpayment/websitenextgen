@@ -451,6 +451,14 @@ router.post('/api/chat', chatLimiter, ah(async (req, res) => {
   res.json(await aiChat.reply(message, history, req.lang));
 }));
 
+// staff ID card verification (QR on the card) — public, minimal fields only
+router.get('/staff/:code', ah(async (req, res, next) => {
+  const e = await db.one(`SELECT e.full_name, e.full_name_en, e.designation, e.photo, e.status, e.employee_code, d.name_np AS department
+                          FROM hrm_employees e LEFT JOIN hrm_departments d ON d.id = e.department_id WHERE e.employee_code = $1`, [String(req.params.code).slice(0, 40)]);
+  if (!e) return next();
+  res.render('public/staff-verify', { title: res.locals.t('कर्मचारी प्रमाणीकरण', 'Staff verification'), e });
+}));
+
 // QR codes printed at programmes point here; members sign in and confirm
 router.get('/attend', (req, res) => res.redirect('/member/attend?t=' + encodeURIComponent(String(req.query.t || '').replace(/[^A-Za-z0-9_-]/g, ''))));
 

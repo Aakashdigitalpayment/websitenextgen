@@ -168,6 +168,22 @@ const resources = {
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true, list: true }), D('event_date', 'मिति', 'Date', { required: true, list: true }),
     T('title_np', 'कार्य (नेपाली)', 'Item (Nepali)', { required: true, list: true }), T('title_en', 'कार्य (English)', 'Item (English)'), FILE('attachment', 'सूचना', 'Notice'), ORDER, ACTIVE] },
 
+  // ---------------------------------------------------------------- HRM (admin level: salary & personal data)
+  hrm_departments: { group: 'hrm', minRole: 'admin', icon: 'building', title: ['विभाग', 'Departments'], order: 'display_order, id', fields: [
+    T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)', { list: true }),
+    TA('description', 'विवरण', 'Description'), ORDER, ACTIVE] },
+  hrm_employees: { group: 'hrm', minRole: 'admin', icon: 'users', title: ['कर्मचारी', 'Employees'], order: "CASE status WHEN 'active' THEN 0 WHEN 'on_leave' THEN 1 ELSE 2 END, employee_code", view: '/admin/hrm/employees/', fields: [
+    T('employee_code', 'कर्मचारी कोड', 'Employee code', { required: true, list: true }), IMG('photo', 'फोटो', 'Photo', { list: true }),
+    T('full_name', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('full_name_en', 'नाम (English)', 'Name (English)'),
+    T('designation', 'पद', 'Designation', { list: true }), REF('department_id', 'विभाग', 'Department', 'hrm_departments', 'name_np', { list: true }), T('branch', 'शाखा', 'Branch'),
+    T('phone', 'फोन', 'Phone', { list: true }), T('email', 'इमेल', 'Email'), TA('address', 'ठेगाना', 'Address'),
+    SEL('gender', 'लिङ्ग', 'Gender', [['male', 'पुरुष', 'Male'], ['female', 'महिला', 'Female'], ['other', 'अन्य', 'Other']]), D('dob', 'जन्म मिति (AD)', 'Date of birth'),
+    T('citizenship_no', 'नागरिकता नं.', 'Citizenship no.'), T('pan_no', 'PAN नं.', 'PAN no.'), D('join_date', 'नियुक्ति मिति', 'Join date'),
+    SEL('employment_type', 'सेवा प्रकार', 'Employment type', [['permanent', 'स्थायी', 'Permanent'], ['contract', 'करार', 'Contract'], ['temporary', 'अस्थायी', 'Temporary'], ['intern', 'इन्टर्न', 'Intern']], { default: 'permanent', required: true }),
+    SEL('status', 'स्थिति', 'Status', [['active', 'कार्यरत', 'Active'], ['on_leave', 'बिदामा', 'On leave'], ['resigned', 'राजीनामा', 'Resigned'], ['retired', 'अवकाश', 'Retired'], ['terminated', 'बर्खास्त', 'Terminated']], { default: 'active', required: true, list: true }),
+    D('exit_date', 'सेवा अन्त्य मिति', 'Exit date'), N('basic_salary', 'आधारभूत तलब', 'Basic salary'), T('bank_account', 'बैंक खाता', 'Bank account'),
+    T('emergency_contact', 'आपतकालीन सम्पर्क', 'Emergency contact'), TA('notes', 'टिप्पणी', 'Notes')] },
+
   // ---------------------------------------------------------------- links
   important_links: { group: 'links', icon: 'link', title: ['महत्त्वपूर्ण लिङ्क', 'Important links'], order: 'display_order, id', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)', { required: true }), T('url', 'URL', 'URL', { type: 'url', required: true, list: true }), ORDER, ACTIVE] },
@@ -192,7 +208,7 @@ const resources = {
 
 const GROUPS = {
   content: ['सामग्री', 'Content'], media: ['मिडिया/कागजात', 'Media & files'], services: ['सेवा', 'Services'],
-  org: ['संस्था', 'Organisation'], engage: ['कार्यक्रम', 'Programmes'], links: ['लिङ्क/अन्य', 'Links & more'],
+  org: ['संस्था', 'Organisation'], engage: ['कार्यक्रम', 'Programmes'], hrm: ['मानव संसाधन', 'HR'], links: ['लिङ्क/अन्य', 'Links & more'],
 };
 
 for (const [key, r] of Object.entries(resources)) {
