@@ -1,0 +1,15 @@
+<div class="content-head"><div><div class="crumbs"><a href="/admin/members"><%= t('सदस्यहरू', 'Members') %></a> / <a href="/admin/members/<%= item.id %>"><%= item.name_np || item.name %></a></div><h1><%= title %></h1></div>
+  <a class="btn btn-outline btn-sm" href="/admin/members/<%= item.id %>/activities.csv?from=<%= encodeURIComponent(from) %>&to=<%= encodeURIComponent(to) %>"><%- icon('download') %>CSV</a></div>
+<p class="small muted"><%= t('सदस्यता नं.', 'Membership no.') %> <%= item.sadasyata_number || '—' %> · <%= item.phone || '—' %> · <%= item.email || '—' %></p>
+<form class="toolbar" method="get">
+  <label class="small"><%= t('देखि', 'From') %> <input class="input" type="date" name="from" value="<%= from %>"></label>
+  <label class="small"><%= t('सम्म', 'To') %> <input class="input" type="date" name="to" value="<%= to %>"></label>
+  <button class="btn btn-outline"><%- icon('search') %><%= t('फिल्टर', 'Filter') %></button>
+  <% if (from || to) { %><a class="btn btn-ghost" href="/admin/members/<%= item.id %>/activities"><%= t('सबै', 'Clear') %></a><% } %>
+</form>
+<% const summary = {}; rows.forEach(r => { const k = t(...r.type); summary[k] = (summary[k] || 0) + 1; }); %>
+<% if (rows.length) { %><div class="flex gap-1 wrap mb-3"><% Object.entries(summary).forEach(([k, n]) => { %><span class="badge"><%= k %>: <%= num(n) %></span><% }) %></div><% } %>
+<% if (!rows.length) { %><div class="empty"><%= t('यो अवधिमा कुनै गतिविधि भेटिएन।', 'No activity found for this period.') %></div><% } else { %>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('मिति', 'Date') %></th><th><%= t('गतिविधि', 'Activity') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('विवरण', 'Detail') %></th></tr></thead><tbody>
+  <% rows.forEach(a => { %><tr><td class="small nowrap"><%= a.date ? bsDate(a.date) : '' %><div class="faint"><%= a.date ? new Date(a.date).toISOString().slice(11, 16) : '' %></div></td><td><%= t(...a.type) %></td><td><% if (a.status) { %><span class="badge"><%= statusLabel(a.status) %></span><% } %></td><td class="small"><% if (a.link) { %><a href="<%= a.link %>"><%= a.detail %></a><% } else { %><%= a.detail %><% } %></td></tr><% }) %>
+</tbody></table></div><% } %>

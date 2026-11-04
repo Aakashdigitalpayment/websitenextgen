@@ -1,16 +1,35 @@
-<div class="content-head"><h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1><div class="flex gap-1"><% if (roleLevel(admin.role) >= 3) { %><a class="btn btn-outline" href="/admin/members/import"><%- icon('download') %><%= t('CSV आयात', 'Import CSV') %></a><% } %><a class="btn btn-primary" href="/admin/members/new"><%- icon('plus') %><%= t('नयाँ सदस्य', 'New member') %></a></div></div>
+<div class="content-head"><h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
+  <div class="flex gap-1 wrap">
+    <a class="btn btn-outline" href="/admin/member-portal"><%- icon('inbox') %><%= t('पोर्टल अनुरोध', 'Portal queue') %></a>
+    <% if (roleLevel(admin.role) >= 3) { %>
+      <a class="btn btn-outline" href="/admin/members/export?<%= qs %>"><%- icon('download') %>CSV</a>
+      <a class="btn btn-outline" href="/admin/members/export?<%= qs ? qs + '&' : '' %>format=xls"><%- icon('download') %>Excel</a>
+      <a class="btn btn-outline" href="/admin/members/import"><%- icon('file') %><%= t('CSV आयात', 'Import CSV') %></a>
+      <a class="btn btn-ghost" href="/admin/members/duplicates"><%- icon('alert') %><%= t('दोहोरो ID', 'Duplicate IDs') %></a>
+    <% } %>
+    <a class="btn btn-primary" href="/admin/members/new"><%- icon('plus') %><%= t('नयाँ सदस्य', 'New member') %></a>
+  </div>
+</div>
+<div class="tabs">
+  <a class="tab <%= view === 'live' ? 'active' : '' %>" href="/admin/members"><%= t('सक्रिय सूची', 'Members') %> (<%= num(counts.live) %>)</a>
+  <a class="tab <%= view === 'arch' ? 'active' : '' %>" href="/admin/members?view=arch"><%= t('अभिलेख (हटाइएका)', 'Archive (removed)') %> (<%= num(counts.arch) %>)</a>
+</div>
 <form class="toolbar" method="get">
+  <% if (view === 'arch') { %><input type="hidden" name="view" value="arch"><% } %>
   <input class="input" name="q" value="<%= q %>" placeholder="<%= t('नाम, फोन, सदस्यता नं…', 'Name, phone, member no…') %>">
-  <select class="select" name="status" data-autosubmit><option value=""><%= t('सबै', 'All') %></option><% ['pending','approved','rejected'].forEach(s => { %><option value="<%= s %>" <%= st === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %></select>
+  <select class="select" name="status" data-autosubmit aria-label="<%= t('स्वीकृति', 'Approval') %>"><option value=""><%= t('सबै स्थिति', 'All statuses') %></option><% ['pending','approved','rejected'].forEach(s => { %><option value="<%= s %>" <%= st === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %></select>
+  <select class="select" name="ms" data-autosubmit aria-label="<%= t('मासिक बचत', 'Monthly saving') %>"><option value=""><%= t('मासिक बचत: सबै', 'Monthly saving: all') %></option><option value="1" <%= ms === '1' ? 'selected' : '' %>><%= t('नियमित', 'Regular') %></option><option value="0" <%= ms === '0' ? 'selected' : '' %>><%= t('नियमित नभएको', 'Not regular') %></option><option value="unset" <%= ms === 'unset' ? 'selected' : '' %>><%= t('नतोकिएको', 'Not set') %></option></select>
   <button class="btn btn-outline"><%- icon('search') %></button>
 </form>
 <% if (!rows.length) { %><div class="empty"><%= t('सदस्य भेटिएन।', 'No members found.') %></div><% } else { %>
-<div class="table-wrap"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('फोन', 'Phone') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('अन्तिम लगइन', 'Last login') %></th></tr></thead><tbody>
-  <% rows.forEach(m => { %><tr>
-    <td><a href="/admin/members/<%= m.id %>" style="font-weight:500;color:var(--text)"><%= m.name_np || m.name %></a><div class="small faint"><%= m.email || '' %></div></td>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('फोन', 'Phone') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('मासिक बचत', 'Monthly saving') %></th><th><%= view === 'arch' ? t('हटाइएको', 'Removed') : t('अन्तिम लगइन', 'Last login') %></th><% if (view === 'arch') { %><th></th><% } %></tr></thead><tbody>
+  <% rows.forEach(m => { const msv = m.monthly_saving_regular === null || m.monthly_saving_regular === undefined ? null : Number(m.monthly_saving_regular); %><tr>
+    <td><% if (view === 'arch') { %><span style="font-weight:500"><%= m.name_np || m.name %></span><% } else { %><a href="/admin/members/<%= m.id %>" style="font-weight:500;color:var(--text)"><%= m.name_np || m.name %></a><% } %><div class="small faint"><%= m.email || '' %></div></td>
     <td><%= m.sadasyata_number || m.member_card_no || '' %></td><td><%= m.phone || '' %></td>
     <td><span class="badge <%= m.approval_status === 'approved' ? 'badge-ok' : m.approval_status === 'rejected' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(m.approval_status || 'pending') %></span><% if (!m.is_active) { %> <span class="badge"><%= t('निष्क्रिय', 'Inactive') %></span><% } %></td>
-    <td class="small faint"><%= m.last_login ? bsDate(m.last_login) : '—' %></td>
+    <td><span class="badge <%= msv === 1 ? 'badge-ok' : msv === 0 ? 'badge-warn' : '' %>"><%= msv === 1 ? t('नियमित', 'Regular') : msv === 0 ? t('नियमित नभएको', 'Not regular') : t('नतोकिएको', 'Not set') %></span></td>
+    <td class="small faint"><%= view === 'arch' ? bsDate(m.deleted_at) : m.last_login ? bsDate(m.last_login) : '—' %></td>
+    <% if (view === 'arch') { %><td class="text-right"><% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= m.id %>/restore"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-soft btn-sm" data-confirm="<%= t('सदस्य पुनर्स्थापित गर्ने?', 'Restore this member?') %>"><%= t('पुनर्स्थापित', 'Restore') %></button></form><% } %></td><% } %>
   </tr><% }) %>
 </tbody></table></div>
 <%- include('../partials/pagination', { pg }) %><% } %>

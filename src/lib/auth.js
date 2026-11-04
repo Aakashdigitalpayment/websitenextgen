@@ -77,20 +77,43 @@ async function completeAdminLogin(req, user) {
   return { user };
 }
 
-async function memberLogin(req, identifier, password) {
+async function memberLogin(req, identifier, password, t = np => np) {
   const ip = req.ip;
   const m = await db.one(
-    `SELECT * FROM members WHERE deleted_at IS NULL AND (phone = $1 OR lower(email) = lower($1) OR sadasyata_number = $1 OR member_card_no = $1)
+    `SELECT * FROM members WHERE deleted_at IS NULL AND (phone = $1 OR lower(email) = lower($1) OR upper(trim(sadasyata_number)) = upper($1) OR member_card_no = $1)
      ORDER BY id LIMIT 1`, [identifier]);
   // throttle on the resolved account, so phone / email / member no. share one counter
   const key = m ? 'member:' + m.id : 'm:' + identifier;
-  if (await tooManyAttempts(key, ip)) return { error: `धेरै पटक गलत प्रयास भयो। ${WINDOW_MIN} मिनेटपछि फेरि प्रयास गर्नुहोस्।` };
+  if (await tooManyAttempts(key, ip)) return { error: t(`धेरै पटक गलत प्रयास भयो। ${WINDOW_MIN} मिनेटपछि फेरि प्रयास गर्नुहोस्।`, `Too many failed attempts. Try again in ${WINDOW_MIN} minutes.`) };
   const ok = m && (await checkPassword(password, m.password_hash));
-  if (!ok) { await recordFailure(key, ip); return { error: 'सदस्य विवरण वा पासवर्ड मिलेन।' }; }
-  if (!m.is_active) return { error: 'तपाईंको खाता निष्क्रिय छ। कार्यालयमा सम्पर्क गर्नुहोस्।' };
-  if (m.approval_status && m.approval_status !== 'approved') return { error: 'तपाईंको खाता स्वीकृत हुन बाँकी छ।' };
+  if (!ok) { await recordFailure(key, ip); return { error: t('सदस्य विवरण वा पासवर्ड मिलेन।', 'Member details or password did not match.') }; }
+  // credentials were right: approval / rejection (with the office's reason) is told to the member
+  const gate = require('./member-portal').eligibilityError(m, t);
+  if (gate) { await clearFailures(key, ip); return { error: gate }; }
   await clearFailures(key, ip);
+  return startMemberSession(req, m);
+}
+
+/** 'verify' when the member uses an authenticator, 'setup' when the cooperative requires one, else null. */
+async function member2faMode(m) {
+  if (Number(m.twofa_enabled) && m.twofa_secret) return 'verify';
+  return (await require('./settings').get('member_2fa_required', '0')) === '1' ? 'setup' : null;
+}
+
+/** Password / OAuth succeeded: either sign in, or park the member at the second factor (bound to this tenant). */
+async function startMemberSession(req, m) {
+  const mode = await member2faMode(m);
   await regenerate(req);
+  req.session.tenantId = req.tenant.id;
+  if (mode) {
+    req.session.memberPending2fa = { id: m.id, tenantId: req.tenant.id, at: Date.now(), mode, secret: mode === 'setup' ? require('./totp').generateSecret() : null };
+    return { member: m, needs2fa: mode };
+  }
+  return completeMemberLogin(req, m);
+}
+
+async function completeMemberLogin(req, m) {
+  delete req.session.memberPending2fa;
   req.session.tenantId = req.tenant.id;
   req.session.memberId = m.id;
   req.session.memberVer = m.session_version || 1;
@@ -170,5 +193,6 @@ function logout(req) {
 }
 
 module.exports = {
-  checkPassword, hashPassword, roleLevel, adminLogin, completeAdminLogin, recordFailure, tooManyAttempts, clearFailures, bumpSessionVersion, logout, memberLogin, loadUsers, requireAdmin, requireMember, audit, safeNext, regenerate,
+  checkPassword, hashPassword, roleLevel, adminLogin, completeAdminLogin, recordFailure, tooManyAttempts, clearFailures, bumpSessionVersion, logout, memberLogin, loadUsers,
+  member2faMode, startMemberSession, completeMemberLogin, requireAdmin, requireMember, audit, safeNext, regenerate,
 };

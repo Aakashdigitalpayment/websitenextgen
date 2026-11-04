@@ -14,6 +14,7 @@ const aiChat = require('../lib/ai-chat');
 const notifyLater = fn => require('../lib/notify').later(fn);
 
 const router = express.Router();
+router.use(require('../lib/legacy-urls').publicRedirects); // PHP-era URLs (printed QR codes, bookmarks) → new routes
 
 // daily visitor/page-view counter for the admin dashboard (no personal data stored)
 router.use((req, res, next) => {
@@ -413,50 +414,8 @@ router.get('/apply/:key/done', (req, res, next) => {
   res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking });
 });
 
-// ---------------------------------------------------------------- tracker
-const trackLimiter = rateLimit({ windowMs: 10 * 60_000, limit: 30, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip) });
-router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, next) : next()), ah(async (req, res) => {
-  const id = String(req.query.id || '').trim().toUpperCase();
-  const phone = nd.toLatinDigits(String(req.query.phone || '').trim());
-  let result = null, history = [], searched = false;
-  if (id) {
-    searched = true;
-    for (const mod of Object.values(modules)) {
-      if (mod.noTracking) continue;
-      const row = await db.one(`SELECT * FROM ${mod.table} WHERE upper(tracking_id) = $1 LIMIT 1`, [id]);
-      if (!row) continue;
-      // the phone used on the application is always required; rows without one are never shown
-      const rowPhone = String(row[mod.phoneCol] || '').replace(/\D/g, '').slice(-8);
-      const given = phone.replace(/\D/g, '').slice(-8);
-      if (rowPhone.length < 6 || rowPhone !== given) break;
-      result = { mod, row };
-      history = await db.many('SELECT * FROM request_status_history WHERE module = $1 AND request_id = $2 ORDER BY created_at', [mod.key, row.id]);
-      break;
-    }
-  }
-  res.render('public/track', { title: res.locals.t('आवेदनको स्थिति', 'Track your application'), id, phone, result, history, searched });
-}));
-
-// ---------------------------------------------------------------- ID card verification
-const verifyLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 15, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip), standardHeaders: 'draft-7', legacyHeaders: false });
-router.get('/verify', (req, res) => res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: null, code: String(req.query.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) }));
-router.post('/verify', verifyLimiter, ah(async (req, res) => {
-  const code = String(req.body.code || '').trim().toUpperCase().slice(0, 20);
-  const cvv = nd.toLatinDigits(String(req.body.cvv || '').trim()).slice(0, 4);
-  const card = await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
-                             FROM member_id_cards WHERE upper(verification_code) = $1 AND cvv = $2`, [code, cvv]);
-  if (card && card.is_expired && card.status === 'active') card.status = 'expired';
-  await db.query('INSERT INTO card_verify_attempts (ip, code_tried, success, created_at) VALUES ($1, $2, $3, now())', [req.ip, code, card ? 1 : 0]);
-  let member = null;
-  if (card) {
-    await db.query('UPDATE member_id_cards SET verify_count = COALESCE(verify_count, 0) + 1, last_verified_at = now() WHERE id = $1', [card.id]);
-    // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
-    member = await db.one(`SELECT name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members
-                           WHERE (id::text = $1 OR sadasyata_number = $1 OR member_card_no = $1) AND deleted_at IS NULL
-                           ORDER BY (id::text = $1) DESC, id LIMIT 1`, [card.member_id]);
-  }
-  res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: card ? { card, member } : false, code });
-}));
+// ---------------------------------------------------------------- tracker, signed ID-card preview, ID card verification
+router.use(require('./public-members'));
 
 router.use('/marketplace', require('./marketplace').pub);
 

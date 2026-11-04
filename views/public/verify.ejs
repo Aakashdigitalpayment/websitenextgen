@@ -8,7 +8,7 @@
     </div>
     <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button></div>
   </form>
-  <% if (result === false) { %><div class="alert alert-error mt-3"><%= t('परिचयपत्र प्रमाणित हुन सकेन।', 'Card could not be verified.') %></div><% } %>
+  <% if (result === false) { %><div class="alert alert-error mt-3"><%= locals.message || t('परिचयपत्र प्रमाणित हुन सकेन।', 'Card could not be verified.') %></div><% } %>
   <% if (result) { const c = result.card, m = result.member; %>
     <div class="card mt-3"><div class="flex gap-2 items-center">
       <span class="icon-tile" style="margin:0;background:<%= c.status === 'active' ? 'var(--ok-soft)' : 'var(--bad-soft)' %>;color:<%= c.status === 'active' ? 'var(--ok)' : 'var(--bad)' %>"><%- icon(c.status === 'active' ? 'check' : 'alert') %></span>

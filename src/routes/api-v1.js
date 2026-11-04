@@ -332,7 +332,7 @@ router.get('/applications/:module/:ref/files/:field', requireScope('documents:re
   const file = resolveStored(req, row[field.name]);
   if (!file || !fs.existsSync(file)) throw new ApiError(404, 'not_found', 'File missing on disk');
   res.set('Cache-Control', 'no-store');
-  res.download(file, `${row.tracking_id || row.id}-${field.name}${path.extname(file)}`, err => err && next(err));
+  res.download(file, `${row.tracking_id || row.id}-${field.name}${path.extname(file)}`, { dotfiles: 'allow' }, err => err && next(err));
 }));
 
 // ---------------------------------------------------------------- member documents (DMS ↔ portal)
@@ -372,7 +372,7 @@ router.get('/members/:no/documents/:id/file', requireScope('documents:read'), ah
   const file = d ? resolveStored(req, d.file_path) : null;
   if (!file || !fs.existsSync(file)) throw new ApiError(404, 'not_found', 'Document not found');
   res.set('Cache-Control', 'no-store');
-  res.download(file, (d.title || 'document').replace(/[^\wऀ-ॿ .-]/g, '_').slice(0, 80) + path.extname(file), err => err && next(err));
+  res.download(file, (d.title || 'document').replace(/[^\wऀ-ॿ .-]/g, '_').slice(0, 80) + path.extname(file), { dotfiles: 'allow' }, err => err && next(err));
 }));
 
 router.delete('/members/:no/documents/:id', requireScope('documents:write'), ah(async (req, res) => {

@@ -13,8 +13,24 @@
   <div class="card">
     <h3><%= t('Column हरू', 'Columns') %></h3>
     <p class="small muted"><%= t('पहिलो row मा header चाहिन्छ। नाम र (सदस्यता नं. वा मोबाइल) अनिवार्य।', 'First row is the header. A name and (member no. or mobile) are required.') %></p>
-    <p class="small"><code>sadasyata_number</code> (member_no) · <code>full_name</code> (name) · <code>name_np</code> · <code>mobile</code> (phone) · <code>email</code> · <code>address</code> · <code>dob_bs</code> / <code>dob_ad</code> (YYYY-MM-DD) · <code>gender</code> · <code>branch</code> · <code>password</code></p>
+    <p class="small"><code>sadasyata_number</code> (member_no) · <code>full_name</code> (name) · <code>name_np</code> · <code>mobile</code> (phone) · <code>email</code> · <code>address</code> · <code>dob_bs</code> / <code>dob_ad</code> (YYYY-MM-DD) · <code>gender</code> · <code>branch</code> · <code>monthly_saving</code> (<%= t('नियमित / नियमित नभएको, खाली = नबदल्ने', 'regular / not regular, blank = keep') %>) · <code>password</code></p>
     <p class="small faint mb-0"><%= t('पासवर्ड नदिएमा सदस्यले "पासवर्ड बिर्सनुभयो" बाट अनुरोध गर्न सक्छन्।', 'Without a password, members can use "Forgot password".') %></p>
+  </div>
+</div>
+<h2 class="mt-4" id="field-update"><%= t('मासिक बचत मात्र अपडेट (field update)', 'Update monthly saving only (field update)') %></h2>
+<div class="grid mt-2" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px">
+  <form class="form-card" method="post" action="/admin/members/import/field-update?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="stack">
+      <div class="field"><label><%= t('CSV फाइल: member_id, monthly_saving', 'CSV file: member_id, monthly_saving') %></label><input class="input" type="file" name="fu_file" accept=".csv,text/csv" required></div>
+      <button class="btn btn-primary" data-confirm="<%= t('भएका सदस्यको मासिक बचत मात्र बदलिन्छ। जारी राख्ने?', 'Only the monthly saving of existing members changes. Continue?') %>"><%- icon('check') %><%= t('अपडेट गर्नुहोस्', 'Update') %></button>
+      <a class="small" href="/admin/members/import/field-sample.csv"><%- icon('download') %><%= t('नमूना CSV', 'Sample CSV') %></a>
+    </div>
+  </form>
+  <div class="card">
+    <p class="small muted"><%= t('भएका सदस्यको मासिक बचत (नियमित / नियमित नभएको) मात्र बदलिन्छ — नयाँ सदस्य बन्दैन, नाम/मोबाइल/KYM छोइँदैन। खाली मान = परिवर्तन छैन। नभेटिएको Member ID वा गलत मानमा केही लेखिँदैन।', 'Changes only the monthly saving flag of existing members — never creates members or touches name / mobile / KYM. Blank = no change. Unknown member IDs or bad values write nothing.') %></p>
+    <% if (fu) { %><div class="kv small"><div><%= t('जम्मा row', 'Rows') %></div><div><%= num(fu.total) %></div><div><%= t('परिवर्तन', 'Changed') %></div><div><%= num(fu.changed) %></div><div><%= t('उस्तै', 'Unchanged') %></div><div><%= num(fu.unchanged) %></div><div><%= t('खाली', 'Blank') %></div><div><%= num(fu.blank) %></div><div><%= t('भेटिएन', 'Not found') %></div><div><%= num(fu.not_found) %></div><div><%= t('गलत', 'Invalid') %></div><div><%= num(fu.invalid) %></div></div>
+      <% if (fu.problems && fu.problems.length) { %><a class="btn btn-ghost btn-sm mt-2" href="/admin/members/import/field-update/problems.csv"><%- icon('download') %><%= t('समस्या भएका row (CSV)', 'Problem rows (CSV)') %></a><% } %><% } %>
   </div>
 </div>
 <% if (jobs.length) { %>

@@ -1,0 +1,30 @@
+<div class="content-head"><div><div class="crumbs"><a href="/member/profile"><%= t('मेरो विवरण', 'My profile') %></a></div><h1><%= title %></h1></div></div>
+<div class="form-card maxw-md">
+  <% if (codes) { %>
+    <div class="alert alert-success"><%= t('2FA सुरु भयो। यी backup code सुरक्षित ठाउँमा लेखेर राख्नुहोस् — फोन हराएमा एक पटक प्रयोग गर्न मिल्छ। यी फेरि देखाइँदैन।', '2FA is on. Write these backup codes down somewhere safe — each works once if you lose your phone. They will not be shown again.') %></div>
+    <div class="card" style="font-family:ui-monospace,monospace;display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:center"><% codes.forEach(c => { %><div><%= c %></div><% }) %></div>
+    <a class="btn btn-primary mt-2" href="/member/profile"><%= t('सकियो', 'Done') %></a>
+  <% } else if (Number(member.twofa_enabled)) { %>
+    <p><span class="badge badge-ok"><%= t('सुरु छ', 'On') %></span> <span class="small muted"><%= t('बाँकी backup code: ', 'Backup codes left: ') %><%= num(remaining) %></span></p>
+    <% if (required) { %><p class="small faint"><%= t('सहकारीले सबै सदस्यलाई 2FA अनिवार्य गरेको छ, त्यसैले बन्द गर्न मिल्दैन। फोन परिवर्तन भएमा कार्यालयबाट 2FA reset गराउनुहोस्।', 'The cooperative requires 2FA for every member, so it cannot be turned off. If you change phones, ask the office to reset it.') %></p>
+    <% } else { %>
+    <form method="post" action="/member/profile/2fa/disable"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-grid">
+        <% if (member.password_hash) { %><div class="field"><label for="d_pw"><%= t('पासवर्ड', 'Password') %></label><input class="input" id="d_pw" name="password" type="password" autocomplete="current-password" required></div><% } %>
+        <div class="field"><label for="d_code"><%= t('Authenticator कोड', 'Authenticator code') %></label><input class="input" id="d_code" name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-outline" data-confirm="<%= t('2FA बन्द गर्ने?', 'Turn off 2FA?') %>"><%= t('2FA बन्द गर्नुहोस्', 'Turn off 2FA') %></button></div>
+    </form><% } %>
+  <% } else { %>
+    <p class="muted small"><%= t('Google Authenticator, Microsoft Authenticator वा Authy एपमा यो QR स्क्यान गर्नुहोस्, अनि देखिएको ६ अंकको कोड राख्नुहोस्।', 'Scan this QR with Google Authenticator, Microsoft Authenticator or Authy, then enter the 6-digit code it shows.') %></p>
+    <div class="text-center"><img src="<%= qr %>" alt="QR" width="200" height="200"></div>
+    <p class="small faint text-center"><%= t('वा यो key टाइप गर्नुहोस्: ', 'Or type this key: ') %><code style="word-break:break-all"><%= secret %></code></p>
+    <form method="post" action="/member/profile/2fa/enable"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-grid">
+        <% if (member.password_hash) { %><div class="field"><label for="e_pw"><%= t('पासवर्ड', 'Password') %></label><input class="input" id="e_pw" name="password" type="password" autocomplete="current-password" required></div><% } %>
+        <div class="field"><label for="e_code"><%= t('६ अंकको कोड', '6-digit code') %></label><input class="input" id="e_code" name="code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('2FA सुरु गर्नुहोस्', 'Turn on 2FA') %></button></div>
+    </form>
+  <% } %>
+</div>

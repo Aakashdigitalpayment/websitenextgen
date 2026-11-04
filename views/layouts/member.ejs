@@ -17,6 +17,7 @@
     <% [['/member', 'home', t('ड्यासबोर्ड', 'Dashboard')], ['/member/accounts', 'wallet', t('मेरो खाता', 'My accounts')], ['/member/requests', 'inbox', t('मेरा आवेदन', 'My applications')], ['/member/notifications', 'bell', t('सूचनाहरू', 'Notifications')], ['/member/id-card', 'id', t('परिचयपत्र', 'ID card')], ['/member/certificate', 'award', t('सदस्यता प्रमाणपत्र', 'Certificate')], ['/member/kyc-print', 'file', t('मेरो KYC', 'My KYC')], ['/member/programs', 'calendar', t('कार्यक्रम', 'Programmes')], ['/member/marketplace', 'store', t('मेरो बजार', 'My marketplace')], ['/member/profile', 'user', t('मेरो विवरण', 'Profile')]].concat(member.information_room_enabled ? [['/member/information-room', 'shield', t('सूचना कक्ष', 'Information room')]] : []).forEach(([href, ic, label]) => { %>
       <a class="side-link <%= cur === href ? 'active' : '' %>" href="<%= href %>"><%- icon(ic) %><%= label %><% if (href === '/member/notifications' && unread) { %><span class="count"><%= num(unread) %></span><% } %></a>
     <% }) %>
+    <a class="side-link <%= cur === '/member/scan' ? 'active' : '' %>" href="/member/scan"><%- icon('qr') %><%= t('QR स्क्यान (उपस्थिति)', 'Scan QR (check-in)') %></a>
     <div class="side-group"><div class="side-title"><%= t('नयाँ आवेदन', 'Apply') %></div>
       <% (locals.applyModules || []).forEach(m => { %><a class="side-link" href="/apply/<%= m.key %>"><%- icon(m.icon) %><%= t(...m.title) %></a><% }) %>
     </div>

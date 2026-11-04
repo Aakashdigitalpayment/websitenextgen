@@ -1,0 +1,26 @@
+<style>[data-scan] [hidden]{display:none!important}</style>
+<div class="content-head"><h1><%= title %></h1><a class="btn btn-ghost btn-sm" href="/member/programs"><%- icon('calendar') %><%= t('उपस्थिति र इतिहास', 'Attendance & history') %></a></div>
+<div class="maxw-md" data-scan
+     data-msg-nocam="<%= t('यो ब्राउजरमा क्यामेरा स्क्यान उपलब्ध छैन। तल QR को लिङ्क वा कोड राख्नुहोस्।', 'Camera scanning is not available in this browser. Enter the QR link or code below.') %>"
+     data-msg-denied="<%= t('क्यामेरा अनुमति दिइएन। ब्राउजर सेटिङबाट अनुमति दिनुहोस् वा तल कोड राख्नुहोस्।', 'Camera permission was denied. Allow it in your browser settings or enter the code below.') %>"
+     data-msg-bad="<%= t('यो कार्यक्रमको उपस्थिति QR होइन।', 'This is not a programme attendance QR code.') %>"
+     data-msg-ok="<%= t('QR भेटियो — खुल्दैछ…', 'QR found — opening…') %>">
+  <div class="alert alert-info"><%- icon('info') %><span><%= t('स्थलमा राखिएको कार्यक्रम QR क्यामेराले स्क्यान गर्नुहोस्। खुल्ने पृष्ठमा Check-in थिच्नुहोस्। तत्काल उपस्थिति भएका कार्यक्रममा तुरुन्तै दर्ता हुन्छ; अन्यथा कार्यालयले स्वीकृत गरेपछि इतिहासमा देखिन्छ।', 'Scan the programme QR at the venue, then press Check-in on the page that opens. Instant programmes record you straight away; others show in your history once the office approves.') %></span></div>
+  <div class="card" style="padding:0;overflow:hidden;background:#000;aspect-ratio:1/1;max-width:420px;position:relative" hidden data-scan-box>
+    <video data-scan-video playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+    <div style="position:absolute;inset:18%;border:3px solid rgba(255,255,255,.85);border-radius:16px;pointer-events:none"></div>
+  </div>
+  <div class="alert alert-error mt-2" hidden data-scan-err></div>
+  <div class="alert alert-success mt-2" hidden data-scan-ok></div>
+  <div class="flex gap-1 mt-2 wrap">
+    <button type="button" class="btn btn-primary btn-lg" data-scan-start><%- icon('qr') %><%= t('क्यामेरा सुरु गर्नुहोस्', 'Start camera') %></button>
+    <button type="button" class="btn btn-outline" hidden data-scan-stop><%= t('रोक्नुहोस्', 'Stop') %></button>
+    <label class="btn btn-outline" data-scan-photo-label hidden><%- icon('image') %><%= t('फोटो खिचेर स्क्यान', 'Scan from a photo') %><input type="file" accept="image/*" capture="environment" data-scan-photo hidden></label>
+  </div>
+  <form class="form-card mt-3" data-scan-manual>
+    <div class="field"><label for="scan_code"><%= t('वा QR मुनिको लिङ्क / कोड राख्नुहोस्', 'Or enter the link / code printed under the QR') %></label><input class="input" id="scan_code" name="code" autocomplete="off" placeholder="https://…/attend?t=…"></div>
+    <div class="form-actions"><button class="btn btn-outline"><%= t('खोल्नुहोस्', 'Open') %></button></div>
+  </form>
+  <p class="small faint mt-2"><%= t('कार्यक्रममा पूर्व दर्ता उपस्थिति होइन। परिचयपत्र जाँच्न ', 'Pre-registration is not attendance. To check an ID card use ') %><a href="/verify">/verify</a>.</p>
+</div>
+<script src="/static/js/member-scan.js" defer></script>

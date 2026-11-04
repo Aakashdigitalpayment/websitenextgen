@@ -1,5 +1,10 @@
-<div class="content-head no-print"><h1><%= title %></h1><% if (card) { %><button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button><% } %></div>
+<div class="content-head no-print"><h1><%= title %></h1><% if (card && !card.locked_at) { %><button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button><% } %></div>
 <% if (!card) { %><div class="empty"><%= t('तपाईंको परिचयपत्र जारी भएको छैन। कार्यालयमा सम्पर्क गर्नुहोस्।', 'No ID card issued yet. Please contact the office.') %></div><% } else { %>
+<% if (card.locked_at) { %>
+  <div class="alert alert-error no-print maxw-md"><%- icon('alert') %><span><%= t('गलत CVV धेरै पटक प्रयास भएकाले यो कार्ड LOCK भएको छ। प्रमाणीकरण गर्न कार्यालयबाट unlock गराउनुहोस्।', 'This card is locked after too many wrong CVV attempts. Ask the office to unlock it before it can be verified.') %>
+  <% if (Number(card.unlock_requested)) { %><br><strong><%= t('Unlock अनुरोध पठाइएको छ।', 'Unlock request sent.') %></strong><% } %></span></div>
+  <% if (!Number(card.unlock_requested)) { %><form method="post" action="/member/id-card/unlock-request" class="no-print mb-3"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary btn-sm"><%= t('Unlock अनुरोध पठाउनुहोस्', 'Request unlock') %></button></form><% } %>
+<% } %>
 <div style="max-width:420px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-lg)">
   <div style="background:var(--brand);color:var(--brand-ink);padding:16px 20px;display:flex;gap:12px;align-items:center">
     <span class="brand-mark" style="background:var(--brand-ink);color:var(--brand)"><%= (siteName || 'C').trim().charAt(0) %></span>

@@ -39,6 +39,7 @@ const ALIASES = {
   branch: ['branch', 'शाखा'],
   remarks: ['remarks', 'note', 'कैफियत'],
   password: ['password', 'पासवर्ड'],
+  monthly_saving: ['monthly_saving', 'monthly saving', 'monthly_saving_regular', 'monthly_saving_status', 'saving_regular', 'masik_bachat', 'masik bachat', 'मासिक_बचत', 'मासिक बचत'],
 };
 
 function mapHeader(header) {
@@ -113,13 +114,15 @@ async function stage(buf, filename, adminId, mode) {
       const key = rec.sadasyata_number || rec.mobile;
       if (seen.has(key)) errs.push('duplicate in file');
       seen.add(key);
+      const ms = require('./member-portal').parseMonthlySaving(get('monthly_saving'));
+      if (!ms.ok) errs.push('monthly_saving: नियमित / नियमित नभएको (1 / 0)');
       const pw = get('password');
       if (pw && pw.length < 6) errs.push('password < 6 chars');
       errs.length ? invalid++ : valid++;
-      await db.query(`INSERT INTO member_import_rows (job_id, row_num, sadasyata_number, full_name, name_np, mobile, email, address, dob, gender, branch, remarks, status, message, password_hash)
-                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      await db.query(`INSERT INTO member_import_rows (job_id, row_num, sadasyata_number, full_name, name_np, mobile, email, address, dob, gender, branch, remarks, status, message, password_hash, monthly_saving)
+                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
         [job.id, r + 1, rec.sadasyata_number, rec.full_name || rec.name_np, rec.name_np, rec.mobile, rec.email, rec.address, dob.value || '', rec.gender || '', rec.branch, rec.remarks,
-          errs.length ? 'invalid' : 'pending', errs.join('; '), pw && !errs.length ? await auth.hashPassword(pw) : null]);
+          errs.length ? 'invalid' : 'pending', errs.join('; '), pw && !errs.length ? await auth.hashPassword(pw) : null, ms.value === null ? '' : String(ms.value)]);
     }
     await db.query('UPDATE member_import_jobs SET parsed_rows = $1, fail_count = $2 WHERE id = $3', [rows.length - 1, invalid, job.id]);
     return { ...job, valid, invalid };
@@ -136,12 +139,14 @@ async function commit(jobId, adminId) {
     try {
       await db.transaction(async () => {
         const existing = await db.one(
-          `SELECT id FROM members WHERE deleted_at IS NULL AND ((sadasyata_number <> '' AND sadasyata_number = $1) OR ($1 = '' AND phone = $2)) LIMIT 1`,
+          `SELECT id FROM members WHERE deleted_at IS NULL AND ((trim(sadasyata_number) <> '' AND upper(trim(sadasyata_number)) = upper(trim($1))) OR ($1 = '' AND phone = $2)) LIMIT 1`,
           [r.sadasyata_number || '', r.mobile || '']);
         const data = {
           name: r.full_name || r.name_np, name_np: r.name_np || '', phone: r.mobile || null, email: r.email || null,
           address: r.address || null, dob: r.dob || null, gender: r.gender || null, sadasyata_number: r.sadasyata_number || '',
         };
+        // मासिक बचत: blank in the sheet keeps what the member already has
+        if (r.monthly_saving === '1' || r.monthly_saving === '0') data.monthly_saving_regular = Number(r.monthly_saving);
         if (existing && job.mode === 'skip') {
           await db.query("UPDATE member_import_rows SET status = 'skipped', message = 'exists', member_id = $1 WHERE id = $2", [existing.id, r.id]);
           skip++; return;
@@ -162,7 +167,7 @@ async function commit(jobId, adminId) {
       });
     } catch (e) {
       fail++;
-      await db.query("UPDATE member_import_rows SET status = 'failed', message = $1 WHERE id = $2", [e.code === '23505' ? 'email already used by another member' : e.message.slice(0, 250), r.id]);
+      await db.query("UPDATE member_import_rows SET status = 'failed', message = $1 WHERE id = $2", [e.code === '23505' ? (/sadasyata/.test(e.constraint || '') ? 'membership number already used by another member' : 'email already used by another member') : e.message.slice(0, 250), r.id]);
     }
   }
   await db.query("UPDATE member_import_jobs SET status = 'done', ok_count = $1, skip_count = $2, fail_count = fail_count + $3 WHERE id = $4", [ok, skip, fail, jobId]);

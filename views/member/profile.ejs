@@ -1,27 +1,96 @@
 <div class="content-head"><h1><%= title %></h1></div>
-<form class="form-card maxw-md" method="post" action="/member/profile">
+<% const d = details || member; const dobVal = d.dob ? String(d.dob instanceof Date ? d.dob.toISOString() : d.dob).slice(0, 10) : ''; %>
+
+<!-- A. name, mobile, date of birth, gender (editable until the KYM is approved) -->
+<div class="form-card maxw-md">
+  <div class="form-section-title"><%= t('क. व्यक्तिगत विवरण', 'A. Personal details') %></div>
+  <% if (kyc) { %><p class="small muted"><%= t('KYM स्थिति: ', 'KYM status: ') %><span class="badge <%= kyc.status === 'approved' ? 'badge-ok' : kyc.status === 'rejected' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(kyc.status || 'pending') %></span></p><% } %>
+  <% if (kycLocked) { %>
+    <div class="kv mb-2">
+      <div><%= t('नाम', 'Name') %></div><div><%= member.name_np || member.name %><% if (member.name_np && member.name) { %> <span class="muted">(<%= member.name %>)</span><% } %></div>
+      <div><%= t('सदस्यता नं.', 'Membership no.') %></div><div><%= member.sadasyata_number || '—' %></div>
+      <div><%= t('मोबाइल', 'Mobile') %></div><div><%= member.phone || '—' %></div>
+      <div><%= t('जन्म मिति', 'Date of birth') %></div><div><%= member.dob ? bsDate(member.dob) : '—' %></div>
+    </div>
+    <p class="small faint"><%= t('तपाईंको केवाइएम स्वीकृत भइसकेको छ। नाम, मोबाइल वा जन्म मिति परिवर्तन गर्न कार्यालयमा सम्पर्क गर्नुहोस्।', 'Your KYM is approved. To change your name, mobile or date of birth, please contact the office.') %></p>
+  <% } else if (kycRejected) { %>
+    <div class="alert alert-error"><%= t('केवाइएम अस्वीकृत छ। Online केवाइएम बाट फेरि भरेर पठाउनुहोस्।', 'Your KYM was rejected. Please submit the online KYM again.') %> <a href="/apply/kyc"><%= t('KYM भर्नुहोस्', 'Fill in KYM') %></a></div>
+  <% } else { %>
+    <form method="post" action="/member/profile/details" novalidate>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="form-grid">
+        <% const de = detailErrors || {}; %>
+        <div class="field <%= de.name ? 'has-error' : '' %>"><label for="pd_name"><%= t('नाम (English)', 'Name (English)') %></label><input class="input" id="pd_name" name="name" value="<%= d.name || '' %>"><% if (de.name) { %><div class="field-error"><%= de.name %></div><% } %></div>
+        <div class="field"><label for="pd_name_np"><%= t('नाम (नेपाली)', 'Name (Nepali)') %></label><input class="input" id="pd_name_np" name="name_np" value="<%= d.name_np || '' %>"></div>
+        <div class="field <%= de.phone ? 'has-error' : '' %>"><label for="pd_phone"><%= t('मोबाइल', 'Mobile') %></label><input class="input" id="pd_phone" name="phone" type="tel" inputmode="numeric" value="<%= d.phone || '' %>"><div class="field-hint"><%= t('नयाँ नम्बरमा OTP पठाइन्छ (SMS नभए कार्यालयले स्वीकृत गर्छ)।', 'A new number is confirmed by OTP (or approved by the office when SMS is off).') %></div><% if (de.phone) { %><div class="field-error"><%= de.phone %></div><% } %></div>
+        <div class="field <%= de.dob ? 'has-error' : '' %>"><label for="pd_dob"><%= t('जन्म मिति (ई.सं.)', 'Date of birth (AD)') %></label><input class="input" id="pd_dob" name="dob" type="date" value="<%= dobVal %>"><% if (de.dob) { %><div class="field-error"><%= de.dob %></div><% } %></div>
+        <div class="field"><label for="pd_gender"><%= t('लिङ्ग', 'Gender') %></label><select class="select" id="pd_gender" name="gender"><option value=""><%= t('छान्नुहोस्', 'Select') %></option><% [['male','पुरुष','Male'],['female','महिला','Female'],['other','अन्य','Other']].forEach(o => { %><option value="<%= o[0] %>" <%= d.gender === o[0] ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary"><%= t('विवरण सुरक्षित गर्नुहोस्', 'Save details') %></button></div>
+    </form>
+  <% } %>
+  <% if (phoneOtp) { %>
+    <div class="alert alert-info mt-2"><span><%= t('नयाँ मोबाइल ', 'Confirm the new mobile ') %><strong><%= phoneOtp.phone %></strong><%= t(' पुष्टि गर्न SMS मा आएको OTP राख्नुहोस्।', ' with the OTP sent by SMS.') %></span></div>
+    <form class="flex gap-1 wrap items-end" method="post" action="/member/profile/phone/verify"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="field"><label for="ph_otp">OTP</label><input class="input" id="ph_otp" name="otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required></div>
+      <button class="btn btn-primary"><%= t('पुष्टि गर्नुहोस्', 'Confirm') %></button>
+    </form>
+    <form method="post" action="/member/profile/phone/cancel" class="mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm"><%= t('रद्द', 'Cancel') %></button></form>
+  <% } else if (pendingPhone) { %>
+    <div class="alert alert-info mt-2"><span><%= t('मोबाइल परिवर्तन अनुरोध कार्यालयमा विचाराधीन छ: ', 'Mobile change waiting for the office: ') %><strong><%= pendingPhone.new_value %></strong></span></div>
+  <% } %>
+</div>
+
+<!-- B. email, address, password -->
+<form class="form-card maxw-md mt-3" method="post" action="/member/profile">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-  <div class="kv mb-3">
-    <div><%= t('नाम', 'Name') %></div><div><%= member.name_np || member.name %></div>
-    <div><%= t('सदस्यता नं.', 'Membership no.') %></div><div><%= member.sadasyata_number || '—' %></div>
-    <div><%= t('मोबाइल', 'Mobile') %></div><div><%= member.phone || '—' %></div>
-  </div>
-  <p class="small faint"><%= t('नाम वा मोबाइल परिवर्तन गर्न कार्यालयमा सम्पर्क गर्नुहोस्।', 'To change your name or mobile, please contact the office.') %></p>
+  <div class="form-section-title"><%= t('ख. सम्पर्क र पासवर्ड', 'B. Contact & password') %></div>
   <div class="form-grid">
     <% [{ name: 'email', label: ['इमेल', 'Email'], type: 'email', wide: true }, { name: 'address', label: ['ठेगाना', 'Address'], type: 'textarea', rows: 2 }].forEach(fl => { %><%- include('../partials/field', { field: fl, values, errors }) %><% }) %>
   </div>
-  <div class="form-section"><div class="form-section-title"><%= t('पासवर्ड परिवर्तन (ऐच्छिक)', 'Change password (optional)') %></div>
+  <div class="form-section"><div class="form-section-title"><%= member.password_hash ? t('पासवर्ड परिवर्तन (ऐच्छिक)', 'Change password (optional)') : t('पासवर्ड सेट गर्नुहोस्', 'Set a password') %></div>
     <div class="form-grid">
-      <% [['current', t('हालको पासवर्ड', 'Current password')], ['password', t('नयाँ पासवर्ड', 'New password')], ['confirm', t('फेरि नयाँ पासवर्ड', 'Confirm')]].forEach(([n, l]) => { %>
+      <% [['current', t('हालको पासवर्ड', 'Current password')], ['password', t('नयाँ पासवर्ड', 'New password')], ['confirm', t('फेरि नयाँ पासवर्ड', 'Confirm')]].filter(([n]) => n !== 'current' || member.password_hash).forEach(([n, l]) => { %>
         <div class="field <%= errors[n] ? 'has-error' : '' %>"><label><%= l %></label><input class="input" type="password" name="<%= n %>" autocomplete="<%= n === 'current' ? 'current-password' : 'new-password' %>"><% if (errors[n]) { %><div class="field-error"><%= errors[n] %></div><% } %></div>
       <% }) %>
     </div>
   </div>
   <div class="form-actions"><button class="btn btn-primary"><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
 </form>
+
+<!-- C. KYC documents -->
+<div class="form-card maxw-md mt-3">
+  <div class="form-section-title"><%= t('ग. KYC कागजात', 'C. KYC documents') %></div>
+  <% if (!kyc) { %>
+    <p class="small muted"><%= t('तपाईंको KYM रेकर्ड भेटिएन। ', 'No KYM record was found. ') %><a href="/apply/kyc"><%= t('KYM फारम भर्नुहोस्', 'Fill in the KYM form') %></a></p>
+  <% } else { const missing = docs.filter(x => x.missing); %>
+    <ul class="list small mb-2"><% docs.forEach(x => { %><li class="list-item" style="padding:6px 0"><span class="grow"><%= t(...x.label) %></span><% if (!x.missing) { %><a href="/member/profile/kyc-file/<%= x.key %>" target="_blank" rel="noopener"><span class="badge badge-ok"><%= t('भएको', 'On file') %></span></a><% } else { %><span class="badge badge-warn"><%= t('बाँकी', 'Missing') %></span><% } %></li><% }) %></ul>
+    <% if (missing.length) { %>
+      <form method="post" action="/member/profile/kyc-docs?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="form-grid">
+          <% missing.forEach(x => { %><div class="field"><label for="kd_<%= x.key %>"><%= t(...x.label) %></label><input class="input" type="file" id="kd_<%= x.key %>" name="<%= x.key %>" accept="image/jpeg,image/png,image/webp" capture="environment"><div class="field-hint">JPG / PNG / WEBP, <%= t('बढीमा ८ MB', 'max 8 MB') %></div></div><% }) %>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary"><%- icon('file') %><%= t('कागजात अपलोड गर्नुहोस्', 'Upload documents') %></button></div>
+      </form>
+    <% } else { %><p class="small faint"><%= t('सबै कागजात भइसकेका छन्। परिवर्तन गर्न कार्यालयमा सम्पर्क गर्नुहोस्।', 'All documents are on file. Contact the office to replace one.') %></p><% } %>
+  <% } %>
+</div>
+
+<!-- D. security: 2FA, Google, Facebook -->
+<div class="card maxw-md mt-3 flex justify-between items-center wrap gap-2">
+  <div><h3 class="mb-0"><%= t('दुई-चरण प्रमाणीकरण (2FA)', 'Two-step sign-in (2FA)') %></h3><div class="small muted"><%= Number(member.twofa_enabled) ? t('सुरु छ — लगइनमा Authenticator कोड चाहिन्छ।', 'On — sign-in asks for your authenticator code.') : twofaRequired ? t('सहकारीले अनिवार्य गरेको छ — अर्को लगइनमा सेटअप हुन्छ।', 'Required by the cooperative — set up at your next sign-in.') : t('बन्द छ। Google Authenticator जस्तो एपले खाता थप सुरक्षित बनाउनुहोस्।', 'Off. Protect your account with an app such as Google Authenticator.') %></div></div>
+  <a class="btn btn-outline btn-sm" href="/member/profile/2fa"><%= Number(member.twofa_enabled) ? t('व्यवस्थापन', 'Manage') : t('सुरु गर्नुहोस्', 'Turn on') %></a>
+</div>
 <% if (locals.googleEnabled || member.google_id) { %>
 <div class="card maxw-md mt-3 flex justify-between items-center wrap gap-2">
   <div><h3 class="mb-0">Google</h3><div class="small muted"><%= member.google_id ? t('तपाईंको Google खाता जोडिएको छ।', 'Your Google account is linked.') : t('Google खाता जोडेर छिटो लगइन गर्नुहोस्।', 'Link your Google account for quick sign-in.') %></div></div>
   <% if (member.google_id) { %><form method="post" action="/member/oauth/google/unlink"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('Google खाता हटाउने?', 'Unlink Google?') %>"><%= t('हटाउनुहोस्', 'Unlink') %></button></form>
   <% } else { %><a class="btn btn-outline btn-sm" href="/member/oauth/google/link"><%= t('Google जोड्नुहोस्', 'Link Google') %></a><% } %>
+</div><% } %>
+<% if (facebookEnabled || member.facebook_id) { %>
+<div class="card maxw-md mt-3 flex justify-between items-center wrap gap-2">
+  <div><h3 class="mb-0">Facebook</h3><div class="small muted"><%= member.facebook_id ? t('तपाईंको Facebook खाता जोडिएको छ।', 'Your Facebook account is linked.') : t('Facebook खाता जोडेर छिटो लगइन गर्नुहोस्।', 'Link your Facebook account for quick sign-in.') %></div></div>
+  <% if (member.facebook_id) { %><form method="post" action="/member/oauth/facebook/unlink"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('Facebook खाता हटाउने?', 'Unlink Facebook?') %>"><%= t('हटाउनुहोस्', 'Unlink') %></button></form>
+  <% } else { %><a class="btn btn-outline btn-sm" href="/member/oauth/facebook/link"><%= t('Facebook जोड्नुहोस्', 'Link Facebook') %></a><% } %>
 </div><% } %>

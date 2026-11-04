@@ -1,12 +1,39 @@
 <div class="form-card">
   <h1 style="font-size:1.35rem"><%= title %></h1>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <% if (notice) { %><div class="alert alert-success"><%= notice %></div><% } %>
   <% if (done) { %>
-    <div class="alert alert-success"><%= t('अनुरोध प्राप्त भयो। विवरण मिलेमा कार्यालयले तपाईंलाई फोन गरी अस्थायी पासवर्ड दिनेछ।', 'Request received. If the details match, the office will call you with a temporary password.') %></div>
     <a class="btn btn-outline btn-block" href="/member/login"><%= t('लगइनमा फर्कनुहोस्', 'Back to sign in') %></a>
+  <% } else if (step === 2) { %>
+    <p class="muted small"><%= sentTo ? t('OTP पठाइएको ठेगाना: ', 'OTP sent to: ') + sentTo : t('SMS वा इमेलमा आएको ६ अंकको OTP राख्नुहोस्। OTP १० मिनेटमा सकिन्छ।', 'Enter the 6-digit OTP from your SMS or email. It expires in 10 minutes.') %></p>
+    <form method="post" action="/member/forgot/verify"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="field"><label for="otp">OTP</label><input class="input" id="otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required autofocus style="letter-spacing:.3em;font-size:1.2rem"></div>
+      <button class="btn btn-primary btn-block mt-2"><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button>
+    </form>
+    <div class="flex justify-between small mt-2">
+      <form method="post" action="/member/forgot/resend"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm"><%= t('OTP फेरि पठाउनुहोस्', 'Resend OTP') %></button></form>
+      <form method="post" action="/member/forgot/cancel"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm"><%= t('रद्द', 'Cancel') %></button></form>
+    </div>
+  <% } else if (step === 3) { %>
+    <form method="post" action="/member/forgot/password"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="stack">
+        <div class="field"><label for="np"><%= t('नयाँ पासवर्ड', 'New password') %></label><input class="input" id="np" name="password" type="password" autocomplete="new-password" required minlength="8"><div class="field-hint"><%= t('कम्तिमा ८ अक्षर: ठूलो, सानो अक्षर र अंक सहित।', 'At least 8 characters with upper-case, lower-case and a digit.') %></div></div>
+        <div class="field"><label for="nc"><%= t('फेरि नयाँ पासवर्ड', 'Confirm new password') %></label><input class="input" id="nc" name="confirm" type="password" autocomplete="new-password" required></div>
+        <button class="btn btn-primary btn-block"><%= t('पासवर्ड सेट गर्नुहोस्', 'Set password') %></button>
+      </div>
+    </form>
   <% } else { %>
-  <p class="muted small"><%= t('दर्ता गरिएको मोबाइल वा सदस्यता नम्बर राख्नुहोस्।', 'Enter your registered mobile or membership number.') %></p>
-  <form method="post" action="/member/forgot"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <div class="field"><label for="i"><%= t('मोबाइल / सदस्यता नं.', 'Mobile / member no.') %></label><input class="input" id="i" name="identifier" required></div>
-    <button class="btn btn-primary btn-block mt-2"><%= t('अनुरोध पठाउनुहोस्', 'Send request') %></button>
-  </form><% } %>
+    <p class="muted small"><%= t('दर्ता गरिएको इमेल, मोबाइल वा सदस्यता नम्बर राख्नुहोस्। OTP SMS वा इमेलमा आउँछ।', 'Enter your registered email, mobile or membership number. An OTP will come by SMS or email.') %></p>
+    <form method="post" action="/member/forgot"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div style="position:absolute;left:-5000px" aria-hidden="true"><input name="website" tabindex="-1" autocomplete="off"></div>
+      <div class="stack">
+        <div class="field"><label for="i"><%= t('इमेल / मोबाइल / सदस्यता नं.', 'Email / mobile / member no.') %></label><input class="input" id="i" name="identifier" value="<%= identifier %>" required autocomplete="username"></div>
+        <% if (gateways.sms && gateways.email) { %><div class="field"><label><%= t('OTP कसरी पठाउने?', 'Send the OTP by') %></label>
+          <div class="flex gap-2 small"><label><input type="radio" name="channel" value="auto" checked> <%= t('स्वतः', 'Automatic') %></label><label><input type="radio" name="channel" value="sms"> SMS</label><label><input type="radio" name="channel" value="email"> <%= t('इमेल', 'Email') %></label></div></div><% } %>
+        <% if (gateways.sms || gateways.email) { %><button class="btn btn-primary btn-block" name="action" value="otp"><%= t('OTP पठाउनुहोस्', 'Send OTP') %></button><% } %>
+        <button class="btn <%= gateways.sms || gateways.email ? 'btn-ghost' : 'btn-primary' %> btn-block" name="action" value="office"><%= t('कार्यालयलाई रिसेट अनुरोध पठाउनुहोस्', 'Ask the office to reset it') %></button>
+      </div>
+    </form>
+  <% } %>
+  <p class="text-center small mt-2"><a href="/member/login"><%= t('← लगइन', '← Sign in') %></a></p>
 </div>

@@ -16,7 +16,6 @@ const notify = require('../lib/notify');
 const tenants = require('../lib/tenants');
 const totp = require('../lib/totp');
 const QRCode = require('qrcode');
-const memberImport = require('../lib/member-import');
 const push = require('../lib/push');
 
 const router = express.Router();
@@ -105,6 +104,7 @@ router.use(ah(async (req, res, next) => {
   res.locals.pendingCounts = counts;
   next();
 }));
+router.use(require('./admin-members').badges); // member portal queue count in the sidebar
 
 // ---------------------------------------------------------------- dashboard
 router.get('/', ah(async (req, res) => {
@@ -429,166 +429,19 @@ router.post('/domains', requireAdmin('superadmin'), ah(async (req, res) => {
 }));
 router.use('/', require('./admin-system'));
 
-// ---------------------------------------------------------------- members
-router.get('/members', requireAdmin('staff'), ah(async (req, res) => {
-  const q = String(req.query.q || '').trim();
-  const st = String(req.query.status || '');
-  const where = ['deleted_at IS NULL'], params = [];
-  if (q) { params.push('%' + q + '%'); where.push(`(name ILIKE $${params.length} OR name_np ILIKE $${params.length} OR phone ILIKE $${params.length} OR email ILIKE $${params.length} OR sadasyata_number ILIKE $${params.length} OR member_card_no ILIKE $${params.length})`); }
-  if (st) { params.push(st); where.push(`approval_status = $${params.length}`); }
-  const w = 'WHERE ' + where.join(' AND ');
-  const total = await db.value(`SELECT count(*) FROM members ${w}`, params);
-  const pg = util.paginate(total, util.int(req.query.page, 1), 30);
-  const rows = await db.many(`SELECT * FROM members ${w} ORDER BY id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params);
-  res.render('admin/members', { title: res.locals.t('सदस्यहरू', 'Members'), rows, pg, q, st });
-}));
-
-const MEMBER_FIELDS = ['name', 'name_np', 'email', 'phone', 'sadasyata_number', 'member_card_no', 'address', 'dob', 'gender', 'approval_status', 'is_active', 'information_room_enabled'];
-
-// ---------------------------------------------------------------- bulk member import (CSV)
-router.get('/members/import', requireAdmin('admin'), ah(async (req, res) => {
-  const jobs = await db.many('SELECT * FROM member_import_jobs ORDER BY id DESC LIMIT 20');
-  res.render('admin/member-import', { title: res.locals.t('सदस्य CSV आयात', 'Import members (CSV)'), jobs, error: null });
-}));
-router.get('/members/import/sample.csv', requireAdmin('admin'), (req, res) => res.type('text/csv; charset=utf-8').attachment('members-sample.csv').send(memberImport.SAMPLE));
-router.post('/members/import', requireAdmin('admin'), (req, res, next) => {
-  const [mw, csrf] = upload('imports', [{ name: 'csv', kind: 'doc' }], { maxMb: 10 });
-  mw(req, res, err => (err ? next(err) : csrf(req, res, next)));
-}, ah(async (req, res) => {
-  const fail = async error => res.status(422).render('admin/member-import', { title: res.locals.t('सदस्य CSV आयात', 'Import members (CSV)'), jobs: await db.many('SELECT * FROM member_import_jobs ORDER BY id DESC LIMIT 20'), error });
-  const stored = req.uploaded && req.uploaded.csv;
-  if (req.uploadError || !stored || !/\.csv$/i.test(stored)) return fail(req.uploadError || res.locals.t('.csv फाइल छान्नुहोस्', 'Choose a .csv file'));
-  const fs = require('fs');
-  const file = require('path').join(require('../lib/uploads').tenantDir(req), stored);
-  try {
-    const job = await memberImport.stage(fs.readFileSync(file), req.body.original_name || stored.split('/').pop(), req.admin.id, req.body.mode === 'skip' ? 'skip' : 'update');
-    await auth.audit(req, 'import_stage', 'member_import_jobs', job.id, `CSV staged: ${job.valid} valid, ${job.invalid} invalid`);
-    res.redirect('/admin/members/import/' + job.id);
-  } catch (e) { return fail(e.message); } finally { fs.rm(file, { force: true }, () => {}); }
-}));
-router.get('/members/import/:id', requireAdmin('admin'), ah(async (req, res, next) => {
-  const job = await db.one('SELECT * FROM member_import_jobs WHERE id = $1', [util.int(req.params.id)]);
-  if (!job) return next();
-  const filter = ['invalid', 'pending', 'created', 'updated', 'skipped', 'failed'].includes(req.query.status) ? req.query.status : '';
-  const counts = Object.fromEntries((await db.many('SELECT status, count(*) AS n FROM member_import_rows WHERE job_id = $1 GROUP BY status', [job.id])).map(r => [r.status, r.n]));
-  const rows = await db.many(`SELECT * FROM member_import_rows WHERE job_id = $1 ${filter ? 'AND status = $2' : ''} ORDER BY row_num LIMIT 300`, filter ? [job.id, filter] : [job.id]);
-  res.render('admin/member-import-job', { title: res.locals.t('आयात', 'Import') + ' #' + job.id, job, rows, counts, filter });
-}));
-router.post('/members/import/:id/commit', requireAdmin('admin'), ah(async (req, res) => {
-  const id = util.int(req.params.id);
-  try {
-    const r = await memberImport.commit(id, req.admin.id);
-    await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${r.ok} ok, ${r.skip} skipped, ${r.fail} failed`);
-    flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${r.ok} सफल, ${r.skip} छोडियो, ${r.fail} असफल`, `Import done: ${r.ok} saved, ${r.skip} skipped, ${r.fail} failed`));
-  } catch (e) { flash(req, 'error', e.message); }
-  res.redirect('/admin/members/import/' + id);
-}));
-
-router.get('/members/new', requireAdmin('staff'), (req, res) => res.render('admin/member-form', { title: res.locals.t('नयाँ सदस्य', 'New member'), item: null, values: { approval_status: 'approved', is_active: 1 }, errors: {} }));
-router.get('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
-  const item = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [util.int(req.params.id)]);
-  if (!item) return next();
-  const cards = await db.many('SELECT * FROM member_id_cards WHERE member_id IN ($1, $2, $3) ORDER BY id DESC', [String(item.id), item.sadasyata_number || '-', item.member_card_no || '-']);
-  const [accounts, docs] = await Promise.all([
-    db.many('SELECT * FROM member_accounts WHERE member_id = $1 ORDER BY kind, account_no', [item.id]),
-    db.many('SELECT id, title, doc_type, file_path, source, visible_to_member, created_at FROM member_documents WHERE member_id = $1 ORDER BY created_at DESC', [item.id]),
-  ]);
-  res.render('admin/member-form', { title: item.name_np || item.name, item, values: item, errors: {}, cards, accounts, docs });
-}));
-
-async function saveMember(req, res, item) {
-  const b = req.body, errors = {};
-  const data = {};
-  for (const k of MEMBER_FIELDS) data[k] = typeof b[k] === 'string' ? b[k].trim() || null : null;
-  data.is_active = b.is_active ? 1 : 0;
-  data.information_room_enabled = b.information_room_enabled ? 1 : 0;
-  data.sadasyata_number = data.sadasyata_number || '';
-  data.name_np = data.name_np || '';
-  if (!data.name) errors.name = 'आवश्यक छ / required';
-  if (data.email && !util.isEmail(data.email)) errors.email = 'Invalid email';
-  if (data.phone) data.phone = nd.toLatinDigits(data.phone);
-  if (!['pending', 'approved', 'rejected'].includes(data.approval_status)) data.approval_status = 'pending';
-  const pw = String(b.password || '');
-  if (pw && pw.length < 8) errors.password = 'कम्तीमा ८ अक्षर / min 8 characters';
-  if (Object.keys(errors).length) return res.status(422).render('admin/member-form', { title: 'Member', item, values: { ...item, ...b }, errors, cards: [] });
-  if (pw) { data.password_hash = await auth.hashPassword(pw); data.must_change_password = 1; }
-  if (data.approval_status === 'approved' && (!item || item.approval_status !== 'approved')) { data.approved_at = new Date(); data.approved_by = req.admin.id; }
-  try {
-    const row = item ? await db.update('members', item.id, data) : await db.insert('members', { ...data, created_by: req.admin.id, is_verified: 1 });
-    if (item && (pw || !data.is_active)) await auth.bumpSessionVersion('members', item.id);
-    notify.later(() => require('../lib/webhooks').emit(item ? 'member.updated' : 'member.created', { id: row.id, member_no: row.sadasyata_number || null, name: row.name, name_np: row.name_np || null, phone: row.phone || null, email: row.email || null, active: !!Number(row.is_active), approval_status: row.approval_status, changed_by: req.admin.username }));
-    await auth.audit(req, item ? 'update' : 'create', 'members', row.id, `Member ${row.name}`);
-    flash(req, 'success', res.locals.t('सदस्य विवरण सुरक्षित भयो।', 'Member saved.'));
-    res.redirect('/admin/members/' + row.id);
-  } catch (e) {
-    if (e.code === '23505') return res.status(422).render('admin/member-form', { title: 'Member', item, values: { ...item, ...b }, errors: { email: res.locals.t('यो इमेल पहिले नै छ', 'Email already used') }, cards: [] });
-    throw e;
-  }
-}
-router.post('/members', requireAdmin('staff'), ah((req, res) => saveMember(req, res, null)));
-router.post('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
-  const item = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [util.int(req.params.id)]);
-  if (!item) return next();
-  await saveMember(req, res, item);
-}));
-
-router.post('/members/:id/card', requireAdmin('staff'), ah(async (req, res) => {
-  const m = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [util.int(req.params.id)]);
-  if (!m) return res.redirect('/admin/members');
-  const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const rnd = n => Array.from(crypto.randomBytes(n), x => alphabet[x % alphabet.length]).join('');
-  const prefix = (req.tenant.slug.slice(0, 3) || 'MEM').toUpperCase();
-  const code = `${prefix}-${rnd(4)}-${rnd(4)}`;
-  const cvv = String(crypto.randomInt(0, 10000)).padStart(4, '0');
-  const cardNo = m.member_card_no || `${prefix}${String(m.id).padStart(6, '0')}`;
-  const expiry = new Date(Date.now() + 5 * 365 * 86400_000).toISOString().slice(0, 10);
-  await db.transaction(async () => {
-    await db.query("UPDATE member_id_cards SET status = 'revoked' WHERE member_id = $1 AND status = 'active'", [String(m.id)]);
-    await db.query(`INSERT INTO member_id_cards (member_id, card_no, verification_code, cvv, issued_date, expiry_date, status, created_by, created_at)
-                    VALUES ($1, $2, $3, $4, CURRENT_DATE, $5, 'active', $6, now())`, [String(m.id), cardNo + '-' + rnd(3), code, cvv, expiry, req.admin.id]);
-    await db.query('UPDATE members SET member_card_no = $1, id_card_generated = 1, id_card_generated_at = now(), card_expires_at = $2 WHERE id = $3', [cardNo, expiry, m.id]);
-  });
-  await auth.audit(req, 'card', 'members', m.id, 'Issued ID card');
-  flash(req, 'success', res.locals.t(`परिचयपत्र जारी भयो। कोड ${code}, CVV ${cvv}`, `ID card issued. Code ${code}, CVV ${cvv}`));
-  res.redirect('/admin/members/' + m.id);
-}));
-
-router.post('/members/:id/delete', requireAdmin('admin'), ah(async (req, res) => {
-  await db.query('UPDATE members SET deleted_at = now(), is_active = 0 WHERE id = $1', [util.int(req.params.id)]);
-  await auth.audit(req, 'delete', 'members', util.int(req.params.id), 'Member deleted');
-  flash(req, 'success', res.locals.t('सदस्य हटाइयो।', 'Member removed.'));
-  res.redirect('/admin/members');
-}));
-
-router.get('/password-requests', requireAdmin('staff'), ah(async (req, res) => {
-  const rows = await db.many(`SELECT r.*, m.name, m.phone, m.sadasyata_number FROM member_password_reset_requests r LEFT JOIN members m ON m.id = r.member_id ORDER BY r.status = 'pending' DESC, r.requested_at DESC LIMIT 100`);
-  res.render('admin/password-requests', { title: res.locals.t('पासवर्ड रिसेट अनुरोध', 'Password reset requests'), rows, temp: req.session.tempPassword });
-  delete req.session.tempPassword;
-}));
-
-router.post('/password-requests/:id/resolve', requireAdmin('staff'), ah(async (req, res) => {
-  const r = await db.one("SELECT * FROM member_password_reset_requests WHERE id = $1 AND status = 'pending'", [util.int(req.params.id)]);
-  if (r) {
-    const temp = crypto.randomBytes(5).toString('base64url');
-    await db.query('UPDATE members SET password_hash = $1, must_change_password = 1 WHERE id = $2', [await auth.hashPassword(temp), r.member_id]);
-    await auth.bumpSessionVersion('members', r.member_id);
-    await db.query("UPDATE member_password_reset_requests SET status = 'resolved', admin_id = $1, resolved_at = now() WHERE id = $2", [req.admin.id, r.id]);
-    await auth.audit(req, 'password_reset', 'members', r.member_id, 'Temporary password issued');
-    req.session.tempPassword = { id: r.id, temp };
-  }
-  res.redirect('/admin/password-requests');
-}));
+// ---------------------------------------------------------------- members, member portal queue, password requests
+router.use(require('./admin-members'));
 
 // ---------------------------------------------------------------- settings
 const SETTING_GROUPS = {
   general: ['सामान्य', 'General'], contact: ['सम्पर्क', 'Contact'], about: ['परिचय', 'About'],
   social: ['सामाजिक सञ्जाल', 'Social'], apps: ['एप/बैंकिङ', 'Apps'], seo: ['SEO', 'SEO'],
-  notify: ['SMS / इमेल', 'SMS / email'], ai: ['AI च्याट', 'AI chat'], oauth: ['Google लगइन', 'Google sign-in'],
+  notify: ['SMS / इमेल', 'SMS / email'], ai: ['AI च्याट', 'AI chat'], oauth: ['Google / Facebook लगइन', 'Google / Facebook sign-in'],
 };
 const SECRET_KEY = /password|api_key|token|secret|private/;
 router.get('/settings', requireAdmin('admin'), ah(async (req, res) => {
   const rows = await settings.grouped();
-  res.render('admin/settings', { title: res.locals.t('सेटिङ', 'Settings'), rows, groups: SETTING_GROUPS, tab: req.query.tab || 'general', oauthRedirect: `${req.protocol}://${req.get('host')}/member/oauth/google/callback` });
+  res.render('admin/settings', { title: res.locals.t('सेटिङ', 'Settings'), rows, groups: SETTING_GROUPS, tab: req.query.tab || 'general', oauthRedirect: `${req.protocol}://${req.get('host')}/member/oauth/google/callback`, facebookRedirect: `${req.protocol}://${req.get('host')}/member/oauth/facebook/callback` });
 }));
 
 router.post('/settings', requireAdmin('admin'), (req, res, next) => {

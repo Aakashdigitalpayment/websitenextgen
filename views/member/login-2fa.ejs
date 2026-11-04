@@ -1,0 +1,24 @@
+<div class="form-card">
+  <h1 style="font-size:1.35rem"><%= title %></h1>
+  <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
+  <% if (mode === 'backup_ack' && codes) { %>
+    <div class="alert alert-success"><%= t('2FA सुरु भयो। यी backup code सुरक्षित ठाउँमा लेखेर राख्नुहोस् — फोन हराएमा एक पटक प्रयोग गर्न मिल्छ।', '2FA is on. Write these backup codes down somewhere safe — each works once if you lose your phone.') %></div>
+    <div class="card" style="font-family:ui-monospace,monospace;display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:center"><% codes.forEach(c => { %><div><%= c %></div><% }) %></div>
+    <form method="post" action="/member/login/2fa<%= query.next ? '?next=' + encodeURIComponent(query.next) : '' %>" class="mt-2"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary btn-block"><%= t('मैले code सुरक्षित गरें — जारी राख्नुहोस्', 'I saved the codes — continue') %></button></form>
+  <% } else if (mode === 'backup_ack') { %>
+    <form method="post" action="/member/login/2fa"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary btn-block"><%= t('जारी राख्नुहोस्', 'Continue') %></button></form>
+  <% } else { %>
+    <% if (mode === 'setup') { %>
+      <p class="muted small"><%= t('सहकारीले सदस्य लगइनमा दुई-चरण प्रमाणीकरण अनिवार्य गरेको छ। Google Authenticator / Authy एपमा यो QR स्क्यान गर्नुहोस् र देखिएको ६ अंकको कोड राख्नुहोस्।', 'The cooperative requires two-step sign-in. Scan this QR with Google Authenticator / Authy and enter the 6-digit code it shows.') %></p>
+      <div class="text-center"><img src="<%= qr %>" alt="QR" width="200" height="200"></div>
+      <p class="small faint text-center"><%= t('वा यो key टाइप गर्नुहोस्: ', 'Or type this key: ') %><code style="word-break:break-all"><%= secret %></code></p>
+    <% } else { %>
+      <p class="muted small"><%= t('Authenticator एपमा देखिएको ६ अंकको कोड, वा एउटा backup code राख्नुहोस्।', 'Enter the 6-digit code from your authenticator app, or one of your backup codes.') %></p>
+    <% } %>
+    <form method="post" action="/member/login/2fa<%= query.next ? '?next=' + encodeURIComponent(query.next) : '' %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="field"><label for="code"><%= t('कोड', 'Code') %></label><input class="input" id="code" name="code" inputmode="<%= mode === 'setup' ? 'numeric' : 'text' %>" autocomplete="one-time-code" required autofocus style="letter-spacing:.2em;font-size:1.15rem"></div>
+      <button class="btn btn-primary btn-block mt-2"><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button>
+    </form>
+  <% } %>
+  <p class="text-center small mt-2"><a href="/member/login"><%= t('← लगइन', '← Sign in') %></a></p>
+</div>
