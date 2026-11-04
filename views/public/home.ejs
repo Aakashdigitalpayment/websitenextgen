@@ -15,7 +15,7 @@
           <div class="slider" data-slider>
             <% sliders.forEach((s, i) => { %>
               <div class="slide <%= i === 0 ? 'active' : '' %>">
-                <img src="<%= mediaUrl(s.image) %>" alt="<%= s.title || '' %>" <%= i ? 'loading=lazy' : '' %>>
+                <picture><%- avifSource(s.image, '100vw') %><img src="<%= mediaUrl(s.image) %>"<%- srcset(s.image, '100vw') %> alt="<%= s.title || '' %>" <%= i ? 'loading=lazy' : 'fetchpriority=high' %> decoding="async"></picture>
                 <% if (s.title) { %><div class="slide-caption"><strong style="font-weight:500"><%= s.title %></strong><% if (s.subtitle) { %><div class="muted small"><%= s.subtitle %></div><% } %></div><% } %>
               </div>
             <% }) %>
@@ -134,7 +134,7 @@
     <div class="grid grid-3">
       <% news.forEach(n => { %>
         <a class="card card-link" href="/news/<%= n.id %>">
-          <% if (n.image) { %><div class="card-media"><img src="<%= mediaUrl(n.image) %>" alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('news') %></span><% } %>
+          <% if (n.image) { %><div class="card-media"><img src="<%= mediaUrl(n.image) %>"<%- srcset(n.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy" decoding="async"></div><% } else { %><span class="icon-tile"><%- icon('news') %></span><% } %>
           <div class="card-meta"><%= bsDate(n.created_at) %></div>
           <h3><%= f(n, 'title') %></h3>
           <p class="muted small"><%= util.excerpt(f(n, 'content'), 110) %></p>
@@ -172,7 +172,7 @@
   <div class="modal-box">
     <div class="modal-head"><strong style="font-weight:600"><%= f(popup, 'title') %></strong><button class="btn btn-ghost btn-icon" data-close aria-label="Close"><%- icon('close') %></button></div>
     <div class="modal-body">
-      <% if (popup.popup_image) { %><img src="<%= mediaUrl(popup.popup_image) %>" alt="" style="border-radius:10px;width:100%"><% } %>
+      <% if (popup.popup_image) { %><img src="<%= mediaUrl(popup.popup_image) %>"<%- srcset(popup.popup_image, '(max-width: 600px) 92vw, 560px') %> alt="" style="border-radius:10px;width:100%"><% } %>
       <% if (!popup.popup_photo_only) { %><div class="prose mt-2"><%- util.richText(f(popup, 'content')) %></div><% } %>
       <a class="btn btn-soft btn-sm mt-2" href="/notices/<%= popup.id %>"><%= t('पूरा पढ्नुहोस्', 'Read more') %></a>
     </div>

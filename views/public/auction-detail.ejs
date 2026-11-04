@@ -1,8 +1,8 @@
 <%- include('../partials/page-head', { crumbs: [['/auctions', t('लिलाम', 'Auctions')]] }) %>
 <section class="section"><div class="container layout-side">
   <div>
-    <% if (item.image) { %><img src="<%= mediaUrl(item.image) %>" alt="" style="border-radius:var(--radius);width:100%;margin-bottom:16px"><% } %>
-    <% if (images.length) { %><div class="gallery" style="columns:3 140px"><% images.forEach(im => { %><a href="<%= mediaUrl(im) %>" target="_blank" rel="noopener"><img src="<%= mediaUrl(im) %>" alt="" loading="lazy"></a><% }) %></div><% } %>
+    <% if (item.image) { %><img src="<%= mediaUrl(item.image) %>"<%- srcset(item.image, '(max-width: 1180px) 100vw, 760px') %> alt="" style="border-radius:var(--radius);width:100%;margin-bottom:16px"><% } %>
+    <% if (images.length) { %><div class="gallery" style="columns:3 140px"><% images.forEach(im => { %><a href="<%= mediaUrl(im) %>" target="_blank" rel="noopener"><img src="<%= mediaUrl(im) %>"<%- srcset(im, '(max-width: 1180px) 100vw, 760px') %> alt="" loading="lazy"></a><% }) %></div><% } %>
     <div class="prose"><%- util.richText(f(item, 'description')) %></div>
     <% if (item.document) { %><a class="btn btn-outline mt-2" href="<%= mediaUrl(item.document) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('सूचना', 'Notice document') %></a><% } %>
   </div>

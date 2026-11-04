@@ -6,7 +6,7 @@
     <% if (g.c) { %><h2 class="mt-3"><%= f(g.c, 'name') %></h2><% } %>
     <div class="grid grid-3 mt-2"><% g.items.forEach(s => { %>
       <a class="card card-link" href="/services/<%= s.id %>">
-        <% if (s.image) { %><div class="card-media"><img src="<%= mediaUrl(s.image) %>" alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('wallet') %></span><% } %>
+        <% if (s.image) { %><div class="card-media"><img src="<%= mediaUrl(s.image) %>"<%- srcset(s.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('wallet') %></span><% } %>
         <h3><%= f(s, 'title') %></h3><p class="muted small"><%= util.excerpt(f(s, 'description'), 140) %></p>
       </a>
     <% }) %></div>

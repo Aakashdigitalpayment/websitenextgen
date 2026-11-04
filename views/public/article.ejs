@@ -1,7 +1,7 @@
 <%- include('../partials/page-head', { crumbs: [[base, crumb]], lead: date ? bsDate(date) : '' }) %>
 <section class="section"><div class="container layout-side">
   <article>
-    <% if (image) { %><img src="<%= mediaUrl(image) %>" alt="" style="border-radius:var(--radius);margin-bottom:24px;width:100%"><% } %>
+    <% if (image) { %><img src="<%= mediaUrl(image) %>"<%- srcset(image, '(max-width: 1180px) 100vw, 1180px') %> alt="" style="border-radius:var(--radius);margin-bottom:24px;width:100%"><% } %>
     <div class="prose"><%- util.richText(locals.content) %></div>
     <% if (locals.attachment) { %><a class="btn btn-outline mt-2" href="<%= mediaUrl(attachment) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('संलग्न फाइल', 'Attachment') %></a><% } %>
   </article>

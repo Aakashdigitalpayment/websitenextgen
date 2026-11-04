@@ -144,6 +144,17 @@ What it does:
 3. Right before switching, run the migration again (`fresh`) so the last day's applications come along.
 4. Map the real domain in the platform console and switch DNS.
 
+### Images up to 8K UHD
+Every public photo (slides, news, gallery, team, logo…) gets AVIF + WebP copies at 640, 1280, 1920, 3840 (4K)
+and 7680 (8K) px wide, made in the background right after upload. Pages send `srcset`/`sizes`, so an 8K or
+Retina screen downloads the 8K file and a phone downloads the small one. Built-in illustrations, icons and
+fonts are vector, so they are sharp at any resolution.
+
+- Upload limit for images: `MAX_IMAGE_MB` (default 40). The proxy configs in `deploy/` allow 64 MB bodies.
+- After migrating a PHP site, or for images uploaded before this feature, create the copies once:
+  `npm run images:variants` (all tenants) or `npm run images:variants -- <slug>`.
+- Admin shows each photo's size (e.g. `7680×4320 · 8K`) and warns when a slide is smaller than 1920 px.
+
 ## 5. Backups
 
 - **Docker:** the `backup` service writes a nightly `pg_dump` per tenant plus uploads to `./backups/` and keeps 14 days.
@@ -173,6 +184,8 @@ sudo npm ci --omit=dev && sudo -u coop npm run db:migrate && sudo systemctl rest
 Migrations in `db/migrations/` are applied to every tenant, and each one runs only once.
 
 ## 7. Checklist before going live
+
+- `PII_KEY` set (and backed up offline) so citizenship numbers are encrypted at rest.
 
 - [ ] `SESSION_SECRET`, `CREDENTIALS_KEY` and the database password are long, random and backed up somewhere safe.
 - [ ] `NODE_ENV=production` (secure cookies, generic error pages).

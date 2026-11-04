@@ -4,7 +4,7 @@
     <% if (f(cycle, 'intro')) { %><div class="prose mb-3"><%- util.richText(f(cycle, 'intro')) %></div><% } %>
     <% positions.forEach(p => { const list = candidates.filter(c => c.position_id === p.id); %>
       <h2 class="mt-3"><%= f(p, 'title') %> <span class="badge"><%= num(p.seats || 1) %> <%= t('पद', 'seats') %></span></h2>
-      <div class="grid grid-3 mt-2"><% list.forEach(c => { %><div class="card person"><div class="person-photo"><% if (c.photo) { %><img src="<%= mediaUrl(c.photo) %>" alt=""><% } else { %><%= (f(c, 'name') || '?').charAt(0) %><% } %></div><div class="person-name"><%= f(c, 'name') %></div><% if (c.symbol_no) { %><div class="person-role"><%= t('चिन्ह नं. ', 'Symbol ') %><%= num(c.symbol_no) %></div><% } %></div><% }) %></div>
+      <div class="grid grid-3 mt-2"><% list.forEach(c => { %><div class="card person"><div class="person-photo"><% if (c.photo) { %><img src="<%= mediaUrl(c.photo) %>"<%- srcset(c.photo, '240px') %> alt=""><% } else { %><%= (f(c, 'name') || '?').charAt(0) %><% } %></div><div class="person-name"><%= f(c, 'name') %></div><% if (c.symbol_no) { %><div class="person-role"><%= t('चिन्ह नं. ', 'Symbol ') %><%= num(c.symbol_no) %></div><% } %></div><% }) %></div>
       <% if (!list.length) { %><p class="muted"><%= t('उम्मेदवार विवरण छैन।', 'No candidates listed.') %></p><% } %>
     <% }) %>
   </div>

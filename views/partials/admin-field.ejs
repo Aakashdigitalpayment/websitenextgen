@@ -17,10 +17,14 @@
         <% opts.forEach(o => { %><option value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select>
     <% } else if (fl.type === 'image' || fl.type === 'file') { %>
       <% if (val) { %><div class="file-current">
-        <% if (fl.type === 'image') { %><img class="thumb" src="<%= mediaUrl(val) %>" alt=""><% } else { %><%- icon('file') %><a href="<%= mediaUrl(val) %>" target="_blank" rel="noopener"><%= String(val).split('/').pop() %></a><% } %>
+        <% if (fl.type === 'image') { const ii = locals.imageInfo ? imageInfo(val) : null; %><img class="thumb" src="<%= mediaUrl(val) %>" alt="">
+          <% if (ii) { %><span class="badge <%= ii.width >= 3840 ? 'badge-ok' : ii.width >= 1920 ? '' : 'badge-warn' %>" title="<%= t('बनेका आकार', 'Sizes made') %>: <%= (ii.widths || []).join(', ') %>"><%= ii.width %>×<%= ii.height %><%= ii.width >= 7680 ? ' · 8K' : ii.width >= 3840 ? ' · 4K' : '' %></span>
+            <% if (ii.width < 1920) { %><span class="small" style="color:var(--warn)"><%= t('सानो फोटो — ठूलो स्क्रिनमा धमिलो देखिन सक्छ', 'Small image — may look soft on large screens') %></span><% } %><% } %>
+        <% } else { %><%- icon('file') %><a href="<%= mediaUrl(val) %>" target="_blank" rel="noopener"><%= String(val).split('/').pop() %></a><% } %>
         <label class="choice" style="padding:4px 10px"><input type="checkbox" name="remove_<%= fl.name %>" value="1"> <%= t('हटाउने', 'Remove') %></label>
       </div><% } %>
       <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" <%= fl.type === 'image' ? 'accept=image/jpeg,image/png,image/webp,image/gif' : '' %>>
+      <% if (fl.type === 'image') { %><div class="field-hint"><%= t('JPG/PNG/WebP, ८K (7680×4320) सम्म। सबै स्क्रिनका लागि साना-ठूला आकार (AVIF/WebP) आफैं बन्छन्। ब्यानर/स्लाइडका लागि कम्तीमा 1920px चौडा, उत्कृष्टका लागि 3840–7680px।', 'JPG/PNG/WebP up to 8K (7680×4320). Smaller sizes for every screen (AVIF/WebP) are made automatically. Banners/slides: at least 1920 px wide, best 3840–7680 px.') %></div><% } %>
     <% } else { %>
       <input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>"
         type="<%= fl.type === 'date' ? 'date' : fl.type === 'datetime' ? 'datetime-local' : fl.type === 'color' ? 'color' : fl.type === 'url' ? 'url' : 'text' %>"

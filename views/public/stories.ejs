@@ -2,7 +2,7 @@
 <section class="section"><div class="container"><div class="grid grid-2">
   <% stories.forEach(s => { %>
     <article class="card">
-      <div class="flex gap-2 items-center mb-2"><div class="person-photo" style="width:64px;height:64px;margin:0"><% if (s.photo) { %><img src="<%= mediaUrl(s.photo) %>" alt=""><% } else { %><%= (f(s, 'member_name') || '?').charAt(0) %><% } %></div>
+      <div class="flex gap-2 items-center mb-2"><div class="person-photo" style="width:64px;height:64px;margin:0"><% if (s.photo) { %><img src="<%= mediaUrl(s.photo) %>"<%- srcset(s.photo, '64px') %> alt=""><% } else { %><%= (f(s, 'member_name') || '?').charAt(0) %><% } %></div>
         <div><div class="person-name"><%= f(s, 'member_name') %></div><div class="small muted"><%= f(s, 'profession') %><%= s.location ? ' · ' + f(s, 'location') : '' %></div></div></div>
       <h3><%= lang === 'en' ? (s.headline_en || s.headline_np) : s.headline_np %></h3>
       <div class="muted"><%- util.richText(lang === 'en' ? (s.story_en || s.story_np) : s.story_np) %></div>

@@ -3,7 +3,7 @@
   <% if (tenures.length > 1) { %><div class="tabs"><% tenures.forEach(x => { %><a class="tab <%= tenure && x.id === tenure.id ? 'active' : '' %>" href="?tenure=<%= x.id %>"><%= f(x, 'tenure_name') %><%= x.is_current ? ' · ' + t('हालको', 'current') : '' %></a><% }) %></div><% } %>
   <% if (!members.length) { %><div class="empty"><%= t('सदस्य विवरण छैन।', 'No members listed.') %></div><% } %>
   <div class="grid grid-4"><% members.forEach(p => { %>
-    <div class="card person"><div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>" alt="" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
+    <div class="card person"><div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>"<%- srcset(p.photo, '240px') %> alt="" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
       <div class="person-name"><%= f(p, 'name') %></div><div class="person-role"><%= f(p, 'position') %></div></div>
   <% }) %></div>
 </div></section>

@@ -17,7 +17,8 @@
     "tenant:create": "node scripts/tenant-create.js",
     "tenant:admin": "node scripts/tenant-admin.js",
     "demo:seed": "node scripts/demo-seed.js",
-    "migrate:site": "node scripts/migrate-site.js"
+    "migrate:site": "node scripts/migrate-site.js",
+    "images:variants": "node scripts/image-variants.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -35,6 +36,7 @@
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "sanitize-html": "^2.18.1",
+    "sharp": "^0.33.5",
     "undici": "^7.30.1",
     "web-push": "^3.6.7"
   },

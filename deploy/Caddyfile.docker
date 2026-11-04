@@ -17,7 +17,7 @@ https:// {
 	respond @ask 404
 	encode zstd gzip
 	request_body {
-		max_size 25MB
+		max_size 64MB
 	}
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

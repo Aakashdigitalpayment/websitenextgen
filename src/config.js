@@ -15,6 +15,7 @@ const config = {
   rootDir: path.resolve(__dirname, '..'),
   uploadDir: path.resolve(__dirname, '..', process.env.UPLOAD_DIR || 'uploads'),
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 8),
+  maxImageMb: Number(process.env.MAX_IMAGE_MB || 40), // 8K UHD photos (7680×4320) are often 10–25 MB
   // Multi-tenant
   // Base domain for subdomain tenants: <slug>.<baseDomain>  (e.g. aakash.coopcloud.np)
   baseDomain: (process.env.BASE_DOMAIN || 'localhost').toLowerCase(),

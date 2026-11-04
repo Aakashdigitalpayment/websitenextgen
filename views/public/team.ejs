@@ -1,7 +1,7 @@
 <%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
 <% const card = p => { %>
   <div class="card person">
-    <div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>" alt="<%= f(p, 'name') %>" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
+    <div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>"<%- srcset(p.photo, '240px') %> alt="<%= f(p, 'name') %>" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
     <div class="person-name"><%= f(p, 'name') %></div>
     <div class="person-role"><%= f(p, 'position') %></div>
     <% if (p.phone) { %><div class="small mt-1"><a href="tel:<%= p.phone %>"><%= p.phone %></a></div><% } %>

@@ -9,7 +9,7 @@
   <% if (!rows.length) { %><div class="empty"><%= t('अहिले कुनै सूची छैन।', 'Nothing listed yet.') %> <a href="/member/marketplace/new"><%= t('आफ्नो सूची राख्नुहोस्', 'Add your listing') %></a></div><% } %>
   <div class="grid grid-3"><% rows.forEach(l => { %>
     <a class="card card-link" href="/marketplace/<%= l.id %>">
-      <% if (l.image) { %><div class="card-media"><img src="<%= mediaUrl(l.image) %>" alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon(l.listing_type === 'skill' ? 'briefcase' : 'store') %></span><% } %>
+      <% if (l.image) { %><div class="card-media"><img src="<%= mediaUrl(l.image) %>"<%- srcset(l.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon(l.listing_type === 'skill' ? 'briefcase' : 'store') %></span><% } %>
       <div class="card-meta"><span class="badge"><%= catLabel(l.category) %></span><%= l.location || '' %></div>
       <h3><%= l.title %></h3>
       <p class="small muted"><%= util.excerpt(l.description, 100) %></p>

@@ -35,7 +35,7 @@
   <header class="site-header">
     <div class="container">
       <a class="brand" href="/">
-        <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt="<%= siteName %>">
+        <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>"<%- srcset(settings.logo, '160px') %> alt="<%= siteName %>">
         <% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
         <span>
           <span class="brand-name"><%= siteName %></span>
@@ -80,7 +80,7 @@
       <div class="footer-grid">
         <div>
           <a class="brand" href="/">
-            <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>" alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
+            <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>"<%- srcset(settings.logo, '160px') %> alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
             <span class="brand-name"><%= siteName %></span>
           </a>
           <p class="mt-2"><%= util.excerpt(settings.about_short, 200) %></p>

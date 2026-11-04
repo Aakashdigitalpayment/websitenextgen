@@ -1,7 +1,7 @@
 <%- include('../partials/page-head', { crumbs: [['/services', t('सेवाहरू', 'Services')]] }) %>
 <section class="section"><div class="container layout-side">
   <div>
-    <% if (service.image) { %><img src="<%= mediaUrl(service.image) %>" alt="" style="border-radius:var(--radius);margin-bottom:24px;width:100%"><% } %>
+    <% if (service.image) { %><img src="<%= mediaUrl(service.image) %>"<%- srcset(service.image, '(max-width: 1180px) 100vw, 1180px') %> alt="" style="border-radius:var(--radius);margin-bottom:24px;width:100%"><% } %>
     <div class="prose"><%- util.richText(f(service, 'description')) %></div>
     <% if (products.length) { %>
       <h2 class="mt-4"><%= t('उपलब्ध योजनाहरू', 'Products') %></h2>

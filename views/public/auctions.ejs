@@ -3,7 +3,7 @@
   <% if (!items.length) { %><div class="empty"><%= t('लिलाम सूचना छैन।', 'No auction notices.') %></div><% } %>
   <div class="grid grid-3"><% items.forEach(a => { %>
     <a class="card card-link" href="/auctions/<%= a.id %>">
-      <% if (a.image) { %><div class="card-media"><img src="<%= mediaUrl(a.image) %>" alt="" loading="lazy"></div><% } %>
+      <% if (a.image) { %><div class="card-media"><img src="<%= mediaUrl(a.image) %>"<%- srcset(a.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy"></div><% } %>
       <div class="card-meta"><span class="badge <%= a.status === 'ongoing' ? 'badge-ok' : a.status === 'upcoming' ? 'badge-info' : '' %>"><%= a.status %></span><%= a.auction_date ? bsDate(a.auction_date) : '' %></div>
       <h3><%= f(a, 'title') %></h3><p class="small muted"><%= a.location || '' %></p>
       <% if (a.minimum_price) { %><div style="font-weight:500"><%= t('न्यूनतम मूल्य: रु. ', 'Minimum: Rs. ') %><%= money(a.minimum_price) %></div><% } %>

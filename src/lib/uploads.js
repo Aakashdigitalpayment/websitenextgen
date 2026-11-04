@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const config = require('../config');
 const { verifyCsrf } = require('./security');
+const images = require('./images');
 
 const IMAGE = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 const DOCS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'];
@@ -43,7 +44,12 @@ function contentLooksRight(file, ext) {
  *   upload('news', [{ name: 'image', kind: 'image' }])
  * After it runs, req.uploaded[field] = "news/<file>" for each accepted file.
  */
-function upload(folder, fields, { maxMb = config.maxUploadMb, private: isPrivate = false } = {}) {
+function upload(folder, fields, { maxMb, private: isPrivate = false } = {}) {
+  // documents keep the normal limit; image fields may be up to MAX_IMAGE_MB so full 8K UHD photos are accepted
+  const docMb = maxMb || config.maxUploadMb;
+  const imgMb = maxMb || Math.max(config.maxImageMb, config.maxUploadMb);
+  const hasImage = fields.some(f => (f.kind || 'any') !== 'doc');
+  maxMb = hasImage ? Math.max(docMb, imgMb) : docMb;
   // private files live under uploads/<tenant>/_private/ and are never served by the public /uploads route
   const base = isPrivate ? '_private/' + folder : folder;
   if (!FOLDER_RE.test(folder)) throw new Error('bad upload folder');
@@ -82,6 +88,9 @@ function upload(folder, fields, { maxMb = config.maxUploadMb, private: isPrivate
         for (const f of files) {
           const ext = path.extname(f.filename);
           if (!contentLooksRight(f.path, ext)) { fs.rmSync(f.path, { force: true }); req.uploadError = 'फाइलको सामग्री मिलेन'; continue; }
+          const isImg = IMAGE.includes(ext.toLowerCase());
+          if (f.size > (isImg ? imgMb : docMb) * 1024 * 1024) { fs.rmSync(f.path, { force: true }); req.uploadError = `फाइल ${isImg ? imgMb : docMb}MB भन्दा ठूलो भयो`; continue; }
+          if (isImg && !isPrivate) images.enqueue(f.path); // responsive AVIF/WebP variants up to 8K, in the background
           ok.push(`${base}/${f.filename}`);
         }
         req.uploaded[field] = (fields.find(x => x.name === field)?.maxCount || 1) > 1 ? ok : ok[0];
@@ -109,6 +118,7 @@ function remove(req, stored) {
   if (!stored || /^https?:/i.test(stored)) return;
   const rel = String(stored).replace(/^\/+/, '').replace(/^assets\/uploads\//, '');
   if (rel.includes('..')) return;
+  images.removeVariants(path.join(tenantDir(req), rel));
   fs.rm(path.join(tenantDir(req), rel), { force: true }, () => {});
 }
 
@@ -134,4 +144,17 @@ function sendStored(req, res, next, stored) {
   res.sendFile(rel, opts);
 }
 
-module.exports = { upload, mediaUrl, remove, tenantDir, resolveStored, sendStored };
+/**
+ * srcset/sizes attributes for a public stored image (empty until its variants exist).
+ * Usage in views:  <img src="<%= mediaUrl(x) %>"<%- srcset(x, '100vw') %>>
+ */
+function srcsetAttr(req, stored, sizes = '100vw') {
+  if (!stored || /^https?:/i.test(stored)) return '';
+  const rel = String(stored).replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+  if (rel.includes('..') || rel.startsWith('_private/') || !images.RASTER.test(rel)) return '';
+  const set = images.srcsetFor(path.join(tenantDir(req), rel), mediaUrl(stored));
+  const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return set ? ` srcset="${esc(set)}" sizes="${esc(sizes)}"` : '';
+}
+
+module.exports = { upload, mediaUrl, remove, tenantDir, resolveStored, sendStored, srcsetAttr };

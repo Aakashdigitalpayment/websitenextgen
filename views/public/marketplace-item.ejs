@@ -1,7 +1,7 @@
 <%- include('../partials/page-head', { crumbs: [['/marketplace', t('सदस्य बजार', 'Marketplace')]] }) %>
 <section class="section"><div class="container layout-side">
   <div>
-    <% if (l.image) { %><img src="<%= mediaUrl(l.image) %>" alt="" style="border-radius:var(--radius);width:100%;max-height:480px;object-fit:cover;margin-bottom:20px"><% } %>
+    <% if (l.image) { %><img src="<%= mediaUrl(l.image) %>"<%- srcset(l.image, '(max-width: 1180px) 100vw, 760px') %> alt="" style="border-radius:var(--radius);width:100%;max-height:480px;object-fit:cover;margin-bottom:20px"><% } %>
     <div class="flex gap-1 wrap mb-2"><span class="badge badge-brand"><%= l.listing_type === 'skill' ? t('सीप/सेवा', 'Skill / service') : t('उत्पादन', 'Product') %></span><span class="badge"><%= catLabel(l.category) %></span></div>
     <div class="prose" style="white-space:pre-wrap"><%= l.description %></div>
     <div class="kv mt-3">

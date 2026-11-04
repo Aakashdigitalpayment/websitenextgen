@@ -1,7 +1,7 @@
 <%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
 <section class="section"><div class="container layout-side" style="grid-template-columns:260px 1fr">
   <div class="person">
-    <div class="person-photo" style="width:200px;height:200px"><% if (photo) { %><img src="<%= mediaUrl(photo) %>" alt="<%= name || '' %>"><% } else { %><%- icon('user', 'icon-lg') %><% } %></div>
+    <div class="person-photo" style="width:200px;height:200px"><% if (photo) { %><img src="<%= mediaUrl(photo) %>"<%- srcset(photo, '200px') %> alt="<%= name || '' %>"><% } else { %><%- icon('user', 'icon-lg') %><% } %></div>
     <% if (name) { %><div class="person-name"><%= name %></div><% } %><% if (role) { %><div class="person-role"><%= role %></div><% } %>
   </div>
   <div class="prose"><%- message ? util.richText(message) : '<p class="muted">' + t('सन्देश चाँडै राखिनेछ।', 'Message coming soon.') + '</p>' %></div>

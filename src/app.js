@@ -183,6 +183,14 @@ function createApp() {
       if (want !== req.lang) setLang(req, res, want);
       res.locals.languages = enabled;
       res.locals.siteLayout = layouts.resolve(s);
+      // responsive images up to 8K: <img src=…<%- srcset(path, sizes) %>> and AVIF <source> for heroes
+      const up = require('./lib/uploads'), imgs = require('./lib/images');
+      res.locals.srcset = (stored, sizes) => up.srcsetAttr(req, stored, sizes);
+      res.locals.avifSource = (stored, sizes = '100vw') => {
+        const a = up.srcsetAttr(req, stored, sizes);
+        return a ? '<source type="image/avif"' + a.replace(/\.webp /g, '.avif ') + '>' : '';
+      };
+      res.locals.imageInfo = stored => (stored && !/^https?:/i.test(stored) ? imgs.info(require('path').join(up.tenantDir(req), String(stored).replace(/^\/+/, '').replace(/^assets\/uploads\//, ''))) : null);
       res.locals.siteName = (req.lang === 'en' ? s.site_name_en : s.site_name) || s.site_name || req.tenant.name;
       res.locals.brandColor = /^#[0-9a-f]{3,8}$/i.test(s.primary_color || '') ? s.primary_color : '#0f766e';
       next();

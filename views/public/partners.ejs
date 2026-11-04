@@ -4,7 +4,7 @@
   <div class="grid grid-3"><% partners.forEach(p => { %>
     <div class="card">
       <div class="flex gap-2 items-center mb-2">
-        <% if (p.logo_path) { %><img src="<%= mediaUrl(p.logo_path) %>" alt="" style="width:52px;height:52px;object-fit:contain;border-radius:10px;border:1px solid var(--line)"><% } else { %><span class="icon-tile" style="margin:0"><%- icon('store') %></span><% } %>
+        <% if (p.logo_path) { %><img src="<%= mediaUrl(p.logo_path) %>"<%- srcset(p.logo_path, '52px') %> alt="" style="width:52px;height:52px;object-fit:contain;border-radius:10px;border:1px solid var(--line)"><% } else { %><span class="icon-tile" style="margin:0"><%- icon('store') %></span><% } %>
         <div><h3 class="mb-0"><%= f(p, 'partner_name') %></h3><div class="small muted"><%= p.facility_type || '' %> <%= p.location ? '· ' + p.location : '' %></div></div>
       </div>
       <% if (p.discount_percent || p.discount_label) { %><span class="badge badge-ok" style="font-size:.85rem"><%= p.discount_label || num(p.discount_percent) + '% ' + t('छुट', 'off') %></span><% } %>
