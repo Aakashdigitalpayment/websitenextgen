@@ -1,0 +1,61 @@
+# One-click (or automatic) deploy to Yeti Cloud (docs/YETI.md §4).
+#
+#   Actions → "Deploy to Yeti" → Run workflow          deploy main (or roll back) with one click
+#   repository variable YETI_AUTO_DEPLOY = true        deploy by itself after the "tests" workflow passed on main
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   YETI_SSH           e.g. "12345-67890@gate.ktm.yetiappcloud.com -p 3022" (dashboard → Web SSH ▾ → SSH)
+#   YETI_SSH_KEY       private key whose public half is in the Yeti dashboard (account → SSH Keys)
+#   YETI_KNOWN_HOSTS   optional: `ssh-keyscan -p 3022 gate.ktm.yetiappcloud.com` output (pins the gate's key)
+name: Deploy to Yeti
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy (main) or rollback (previous release)
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-yeti
+  cancel-in-progress: false   # never cut a deploy short while it migrates
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && vars.YETI_AUTO_DEPLOY == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.YETI_SSH_KEY }}
+          KNOWN: ${{ secrets.YETI_KNOWN_HOSTS }}
+          TARGET: ${{ secrets.YETI_SSH }}
+        run: |
+          { test -n "$KEY" && test -n "$TARGET"; } || { echo "::error::Set the YETI_SSH and YETI_SSH_KEY secrets (see the top of this file)"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/yeti && chmod 600 ~/.ssh/yeti
+          echo "YETI_SSH_KEY_FILE=$HOME/.ssh/yeti" >> "$GITHUB_ENV"
+          if [ -n "$KNOWN" ]; then printf '%s\n' "$KNOWN" >> ~/.ssh/known_hosts; echo "YETI_STRICT=1" >> "$GITHUB_ENV"; else echo "YETI_STRICT=0" >> "$GITHUB_ENV"; fi
+      - name: ${{ github.event.inputs.action || 'deploy' }}
+        env:
+          YETI_SSH: ${{ secrets.YETI_SSH }}
+        run: bash deploy/yeti/remote.sh "${{ github.event.inputs.action || 'deploy' }}"
+      - name: Status
+        if: always()
+        env:
+          YETI_SSH: ${{ secrets.YETI_SSH }}
+        run: bash deploy/yeti/remote.sh status || true

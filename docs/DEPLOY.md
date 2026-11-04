@@ -1,5 +1,7 @@
 # Deploying the cooperative platform
 
+> **Yeti Cloud (app.yetiapp.cloud):** one-command set-up and deploys — see [docs/YETI.md](YETI.md) (`npm run yeti -- setup` / `npm run yeti -- deploy`).
+
 This guide covers one server (VPS) hosting many cooperatives. Each cooperative gets `https://<slug>.<BASE_DOMAIN>` and can add its own domain.
 
 > **cPanel shared hosting:** this is a Node.js + PostgreSQL app. It does not run like the PHP site on ordinary cPanel hosting. It works only on cPanel plans that offer both *Setup Node.js App* and PostgreSQL, and even then a VPS is strongly recommended. The PHP site can keep running on cPanel until you switch DNS.
