@@ -28,8 +28,21 @@ function csrf(req, res, next) {
   // a value that only mints the token when a template actually prints it (copying locals does not)
   res.locals.csrfToken = { toString: () => csrfToken(req), toJSON: () => csrfToken(req) };
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  // anonymous theme choice only sets a cookie: a same-origin check is enough and keeps page views session-free
+  if (req.path === '/theme' && !req.session.adminId && !req.session.memberId) {
+    return sameOrigin(req) ? next() : res.status(403).json({ error: 'cross-site request' });
+  }
   if (!csrfValid(req)) return res.status(403).render('public/error', { layout: req.tenant ? undefined : false, title: 'Session expired', code: 403, message: 'फारमको समय सकियो। पृष्ठ रिफ्रेस गरेर फेरि प्रयास गर्नुहोस्। (Form expired — please reload and try again.)' });
   next();
+}
+
+/** Browser-sent Origin / Sec-Fetch-Site says the request came from this host. */
+function sameOrigin(req) {
+  const site = req.get('sec-fetch-site');
+  if (site) return site === 'same-origin';
+  const origin = req.get('origin') || req.get('referer');
+  if (!origin) return false;
+  try { return new URL(origin).host === req.get('host'); } catch { return false; }
 }
 
 function verifyCsrf(req, res, next) {

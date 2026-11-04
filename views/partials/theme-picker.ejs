@@ -3,7 +3,7 @@
 <details class="theme-picker" data-theme-picker>
   <summary class="btn btn-ghost btn-icon" aria-label="<%= t('रूप (थिम)', 'Theme') %>" title="<%= t('रूप (थिम)', 'Theme') %>"><%- icon(theme.mode === 'dark' ? 'moon' : 'sun') %></summary>
   <form class="theme-pop" method="post" action="/theme" data-theme-form>
-    <input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>"><input type="hidden" name="next" value="<%= path %>">
+    <% if (locals.member || locals.admin) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %><input type="hidden" name="next" value="<%= path %>">
     <div class="theme-label"><%= t('मोड', 'Mode') %></div>
     <div class="theme-modes" role="radiogroup">
       <% [['system', 'settings', t('उपकरण', 'System')], ['light', 'sun', t('उज्यालो', 'Light')], ['dark', 'moon', t('अँध्यारो', 'Dark')]].forEach(([k, ic, label]) => { %>

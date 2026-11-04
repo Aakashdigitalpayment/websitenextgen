@@ -54,20 +54,26 @@ test('resolve: default, cookie, account, invalid and stale values', () => {
 
 test('visitor can pick a theme; it is rendered server-side on the next page', async () => {
   const agent = request.agent(app);
-  const _csrf = await token(agent, '/');
-  const r = await agent.post('/theme').set('Host', HOST).set('Accept', 'application/json').type('form').send({ _csrf, palette: 'violet', mode: 'dark' });
+  const _csrf = '';
+  const r = await agent.post('/theme').set('Host', HOST).set('Origin', 'http://' + HOST).set('Accept', 'application/json').type('form').send({ palette: 'violet', mode: 'dark' });
   assert.equal(r.status, 200);
   assert.equal(r.body.brand, '#7c3aed');
   const page = await agent.get('/').set('Host', HOST);
   assert.deepEqual(htmlTheme(page.text), { attr: 'dark', brand: '#7c3aed' });
   // garbage input falls back to the current choice, never reflected
-  await agent.post('/theme').set('Host', HOST).type('form').send({ _csrf, palette: '"><script>', mode: 'x' });
+  await agent.post('/theme').set('Host', HOST).set('Origin', 'http://' + HOST).type('form').send({ _csrf, palette: '"><script>', mode: 'x' });
   assert.doesNotMatch((await agent.get('/').set('Host', HOST)).text, /"><script>/);
 });
 
-test('POST /theme requires CSRF', async () => {
-  const r = await request(app).post('/theme').set('Host', HOST).type('form').send({ palette: 'rose', mode: 'dark' });
-  assert.equal(r.status, 403);
+test('POST /theme: anonymous needs same origin; signed-in users need the CSRF token', async () => {
+  const cross = await request(app).post('/theme').set('Host', HOST).set('Origin', 'https://evil.example').type('form').send({ palette: 'rose', mode: 'dark' });
+  assert.equal(cross.status, 403);
+  const none = await request(app).post('/theme').set('Host', HOST).type('form').send({ palette: 'rose', mode: 'dark' });
+  assert.equal(none.status, 403);
+  const same = await request(app).post('/theme').set('Host', HOST).set('Sec-Fetch-Site', 'same-origin').type('form').send({ palette: 'rose', mode: 'dark' });
+  assert.equal(same.status, 302);
+  assert.match(same.headers['set-cookie'].join(';'), /theme=rose\.dark\./);
+  assert.ok(!same.headers['set-cookie'].join(';').includes('coop.sid'), 'no session for anonymous theme choice');
 });
 
 test('admin sets the default, can lock user choice and reset everyone', async () => {
@@ -96,11 +102,8 @@ test('admin sets the default, can lock user choice and reset everyone', async ()
   const locked = await visitor.get('/').set('Host', HOST);
   assert.doesNotMatch(locked.text, /data-theme-picker/);
   assert.equal(htmlTheme(locked.text).attr, 'dark');
-  const vt = locked.text.match(/name="_csrf" value="([^"]+)"/);
-  if (vt) {
-    const r = await visitor.post('/theme').set('Host', HOST).set('Accept', 'application/json').type('form').send({ _csrf: vt[1], palette: 'rose', mode: 'light' });
-    assert.equal(r.status, 403);
-  }
+  const r = await visitor.post('/theme').set('Host', HOST).set('Origin', 'http://' + HOST).set('Accept', 'application/json').type('form').send({ palette: 'rose', mode: 'light' });
+  assert.equal(r.status, 403);
 });
 
 test('only admin role and above can change the default', async () => {
