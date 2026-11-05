@@ -135,8 +135,19 @@ if [ -n "$T_SLUG" ]; then
 fi
 
 pm2 save >/dev/null 2>&1 || true
+# one-word commands in Web SSH (like the DMS server): coop-deploy · coop-rollback · coop-status · coop-logs
+if ! grep -q 'alias coop-deploy=' "$HOME/.bashrc" 2>/dev/null; then
+  cat >> "$HOME/.bashrc" <<'ALIASES'
+# cooperative website (docs/YETI.md)
+alias coop-deploy='cd /home/jelastic/ROOT && bash deploy/yeti/deploy.sh'
+alias coop-rollback='cd /home/jelastic/ROOT && bash deploy/yeti/deploy.sh --rollback'
+alias coop-status='pm2 status; curl -fsS http://127.0.0.1:8080/healthz; echo'
+alias coop-logs='pm2 logs coop-web --nostream --lines 120'
+ALIASES
+  ok "commands added to ~/.bashrc: coop-deploy, coop-rollback, coop-status, coop-logs (open a new Web SSH tab)"
+fi
 printf '\n✓ Yeti set-up complete.\n'
 printf '  Platform console: https://%s/platform\n' "$(env_get PLATFORM_HOST)"
 [ -n "${SITE_HOST:-}" ] && printf '  Cooperative site: https://%s  (admin: https://%s/admin)\n' "$SITE_HOST" "$SITE_HOST"
-printf '  Next releases:    npm run yeti -- deploy   (your computer)  ·  bash deploy/yeti/deploy.sh   (here)\n'
+printf '  Next releases:    coop-deploy   (Web SSH, new tab)  ·  npm run yeti -- deploy   (your computer)\n'
 printf '  Keep a copy of %s (PII_KEY, CREDENTIALS_KEY) in your password manager.\n' "$ENV_FILE"
