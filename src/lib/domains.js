@@ -36,10 +36,11 @@ function isApex(d) {
   return parts.length === 3 && SECOND_LEVEL.test(parts[1]) && parts[2].length === 2;
 }
 
-function validate(domain) {
+/** @param {{allowPlatformHost?: boolean}} [opts] operator/CLI only: let one cooperative share the platform host */
+function validate(domain, { allowPlatformHost = false } = {}) {
   const d = String(domain || '').trim().toLowerCase().replace(/\.$/, '');
   if (!DOMAIN_RE.test(d)) return { error: 'Not a valid domain name (example: www.mycoop.com.np)' };
-  if (d === config.platformHost) return { error: 'This host is reserved for the platform' };
+  if (d === config.platformHost && !allowPlatformHost) return { error: 'This host is reserved for the platform' };
   return { domain: d };
 }
 

@@ -118,3 +118,24 @@ test('after verification the client domain is served, becomes primary, and other
 test('a domain cannot be claimed by two tenants', async () => {
   await assert.rejects(() => tenants.addDomain(tenant.id, `www.${SLUG}-client.com.np`), e => e.code === '23505');
 });
+
+test('platform host: reserved for cooperative admins, but the operator may share it with one cooperative', async () => {
+  const config = require('../src/config');
+  assert.ok(domains.validate(config.platformHost).error, 'tenant admins cannot claim the platform host');
+  assert.equal(domains.validate(config.platformHost, { allowPlatformHost: true }).domain, config.platformHost);
+  const slug = 'ph' + SUFFIX;
+  const t = await tenants.createTenant({ slug, name: 'Shared Host Coop', domains: [config.platformHost], adminPassword: 'Admin@12345!', starterContent: false });
+  try {
+    tenants.clearCache();
+    const site = await request(app).get('/').set('Host', config.platformHost);
+    assert.equal(site.status, 200);
+    assert.match(site.text, /Shared Host Coop/);
+    assert.equal((await request(app).get('/platform/login').set('Host', config.platformHost)).status, 200, 'console still on /platform');
+    // a cooperative admin's domain form still refuses it
+    await assert.rejects(() => require('../src/routes/platform').domainAction(tenant.id, { action: 'add', domain: config.platformHost }), /reserved/);
+  } finally {
+    await db.query(`DROP SCHEMA IF EXISTS tenant_${slug} CASCADE`);
+    await db.query('DELETE FROM platform.tenants WHERE id = $1', [t.id]);
+    tenants.clearCache();
+  }
+});

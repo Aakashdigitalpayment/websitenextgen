@@ -114,16 +114,19 @@ bash deploy/yeti/deploy.sh --no-fetch
 
 # ------------------------------------------------------------------------------------------- 5
 step "5/5 First cooperative"
+# no own domain yet (platform host = Yeti address): the first cooperative shares it — site on /, console on /platform
+if [ "$(env_get BASE_DOMAIN)" = "$(env_get PLATFORM_HOST)" ]; then SITE_DEFAULT=$(env_get PLATFORM_HOST); else SITE_DEFAULT="<slug>.$(env_get BASE_DOMAIN)"; fi
 if [ -z "$T_SLUG" ] && tty && confirm "Create the first cooperative now (also possible later in the console)?"; then
   ask T_SLUG "Slug (letters/digits, e.g. aakash)"; ask T_NAME "Name (Nepali)"; ask T_NAME_EN "Name (English)"
-  ask T_DOMAIN "Its own domain if ready (blank = $T_SLUG.$(env_get BASE_DOMAIN))"
+  ask T_DOMAIN "Its own domain if ready (blank = $SITE_DEFAULT)"
   ask DESIGN "Design: saving_credit | multipurpose | agriculture | women | microfinance" "$DESIGN"
   ask PLAN "Plan: lite | basic | advance | extra" "$PLAN"
 fi
 if [ -n "$T_SLUG" ]; then
   [ -n "$T_NAME" ] || { echo "✗ --tenant-name is needed with --tenant-slug"; exit 1; }
   if secret ADMIN_PASSWORD "Cooperative admin password (12+ characters, not shown)"; then
-    domains=(--domain="$T_SLUG.$(env_get BASE_DOMAIN)"); [ -n "$T_DOMAIN" ] && domains+=(--domain="$T_DOMAIN")
+    if [ "$(env_get BASE_DOMAIN)" = "$(env_get PLATFORM_HOST)" ]; then SITE_HOST=$(env_get PLATFORM_HOST); else SITE_HOST="$T_SLUG.$(env_get BASE_DOMAIN)"; fi
+    domains=(--domain="$SITE_HOST"); [ -n "$T_DOMAIN" ] && domains+=(--domain="$T_DOMAIN")
     ( cd "$(readlink -f /home/jelastic/coop-releases/current)" && ADMIN_PASSWORD="$ADMIN_PASSWORD" node --env-file="$ENV_FILE" scripts/tenant-create.js \
         --slug="$T_SLUG" --name="$T_NAME" ${T_NAME_EN:+--name-en="$T_NAME_EN"} "${domains[@]}" --admin=admin --design="$DESIGN" --plan="$PLAN" )
     ok "cooperative $T_SLUG (admin login: admin)"
@@ -134,6 +137,6 @@ fi
 pm2 save >/dev/null 2>&1 || true
 printf '\n✓ Yeti set-up complete.\n'
 printf '  Platform console: https://%s/platform\n' "$(env_get PLATFORM_HOST)"
-[ -n "$T_SLUG" ] && printf '  Cooperative site: https://%s.%s  (admin: /admin)\n' "$T_SLUG" "$(env_get BASE_DOMAIN)"
+[ -n "${SITE_HOST:-}" ] && printf '  Cooperative site: https://%s  (admin: https://%s/admin)\n' "$SITE_HOST" "$SITE_HOST"
 printf '  Next releases:    npm run yeti -- deploy   (your computer)  ·  bash deploy/yeti/deploy.sh   (here)\n'
 printf '  Keep a copy of %s (PII_KEY, CREDENTIALS_KEY) in your password manager.\n' "$ENV_FILE"
