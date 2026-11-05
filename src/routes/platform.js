@@ -119,17 +119,18 @@ router.post('/2fa', ah(async (req, res) => {
 }));
 
 /** Shared domain actions for the platform console and the tenant admin page. */
-async function domainAction(tenantId, b) {
+/** @param {{operator?: boolean}} [who] operator=true only from the platform console (may use the platform host) */
+async function domainAction(tenantId, b, { operator = false } = {}) {
   const did = Number(b.domain_id) || 0;
   const owns = async () => !!(await db.value('SELECT 1 FROM platform.tenant_domains WHERE id = $1 AND tenant_id = $2', [did, tenantId]));
   switch (b.action) {
     case 'add': {
       const plan = await db.value('SELECT plan FROM platform.tenants WHERE id = $1', [tenantId]);
-      const v = require('../lib/domains').validate(b.domain);
+      const v = require('../lib/domains').validate(b.domain, { allowPlatformHost: operator });
       if (v.domain && !require('../lib/domains').inOwnZone(v.domain) && !require('../lib/plans').has(plan, 'custom_domain')) {
         throw new Error('Own domains are part of the Basic plan or higher.');
       }
-      const row = await tenants.addDomain(tenantId, b.domain);
+      const row = await tenants.addDomain(tenantId, b.domain, { allowPlatformHost: operator });
       return row.status === 'active' ? `${row.domain} is active.` : `${row.domain} added — waiting for DNS. ${row.check && row.check.reason ? '(' + row.check.reason + ')' : ''}`;
     }
     case 'verify': {
@@ -207,7 +208,7 @@ router.post('/tenants/:id/domains', ah(async (req, res) => {
   const id = Number(req.params.id);
   try {
     if (!(await tenants.get(id))) throw new Error('Tenant not found');
-    flash(req, 'success', await domainAction(id, req.body));
+    flash(req, 'success', await domainAction(id, req.body, { operator: true }));
   } catch (e) { flash(req, 'error', e.code === '23505' ? 'That domain is already used by a cooperative.' : e.message); }
   res.redirect('/platform#tenant-' + id);
 }));

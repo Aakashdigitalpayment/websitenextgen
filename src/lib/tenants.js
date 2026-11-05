@@ -155,7 +155,8 @@ async function createTenant({ slug, name, nameEn = '', domains: domainList = [],
     `INSERT INTO platform.tenants (slug, name, schema_name, contact_email, cname_target, plan) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
     [slug, name, schemaName, contactEmail, domainsLib.generateTarget(slug), require('./plans').isPlan(plan) ? plan : 'extra']);
   try {
-    for (const d of domainList.map(normalizeHost).filter(Boolean)) await addDomain(tenant.id, d, { verifyNow: false });
+    // createTenant is operator/CLI only, so the platform host may be given (site on /, console on /platform)
+    for (const d of domainList.map(normalizeHost).filter(Boolean)) await addDomain(tenant.id, d, { verifyNow: false, allowPlatformHost: true });
     if (domainList.length) await refreshPrimary(tenant.id);
     await migrateTenant(tenant);
     await db.withSchema(schemaName, async () => {
@@ -190,10 +191,11 @@ async function setStatus(id, status) {
  * Add a domain. Domains in our own zone are active immediately; client domains start
  * 'pending' and become 'active' once DNS points at the tenant (verifyDomain).
  */
-async function addDomain(tenantId, domain, { verifyNow = true } = {}) {
-  const v = domainsLib.validate(domain);
+async function addDomain(tenantId, domain, { verifyNow = true, allowPlatformHost = false } = {}) {
+  const v = domainsLib.validate(domain, { allowPlatformHost });
   if (v.error) throw new Error(v.error);
-  const own = domainsLib.inOwnZone(v.domain);
+  // the platform's own host (operator-controlled) needs no client DNS check, like the platform zone
+  const own = domainsLib.inOwnZone(v.domain) || (allowPlatformHost && v.domain === config.platformHost);
   const row = await db.one(`INSERT INTO platform.tenant_domains (tenant_id, domain, status, verified_at) VALUES ($1, $2, $3, $4) RETURNING *`,
     [tenantId, v.domain, own ? 'active' : 'pending', own ? new Date() : null]);
   clearCache();

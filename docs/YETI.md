@@ -33,6 +33,7 @@ Browser ── HTTPS ──► Yeti shared load balancer (SSL) ──► Node.js
 |---|---|
 | Application server | **Node.js**, image tag **`…-pm2`**, version **22.x LTS** |
 | Vertical scaling | Reserved **2–4** cloudlets, Scaling limit **8** (1 GiB); 8K फोटो धेरै upload हुने भए **16** |
+| Node.js version | 22.x LTS सिफारिस; 24/26 पनि चल्छ (Node 20+ चाहिन्छ) |
 | Disk limit | 20 GB+ (फोटो/कागजात यहीँ) |
 | SSL | **ON** (Built-in: `https://<env>.ktm.yetiappcloud.com`) |
 | SQL | **PostgreSQL 16**, Reserved 2, Scaling limit 8 |
@@ -43,51 +44,83 @@ Create पछि PostgreSQL को **webadmin** password email मा आउँ�
 **आफ्नो SSH key** (कम्प्युटरबाट चलाउने भए): dashboard → account (माथि दायाँ) → **Settings → SSH Keys → Add public key**।
 SSH login dashboard मै देखिन्छ: Node.js node → **Web SSH ▾ → SSH** tab (`ssh 12345-67890@gate.… -p 3022`)।
 
-## 2. पहिलो setup — एउटै command
+## 2. पहिलो setup — Web SSH मा एउटै paste (DMS जस्तै)
 
-### क) आफ्नो कम्प्युटरबाट (सिफारिस)
-
-```bash
-cp deploy/yeti/remote.env.example deploy/yeti/remote.env    # YETI_SSH="12345-67890@gate.ktm.yetiappcloud.com -p 3022" राख्ने
-npm run yeti -- setup --db-host nodeNNNNN-coopweb.ktm.yetiappcloud.com --base-domain coopcloud.com.np
-```
-
-यसले server मा:
-1. read-only **deploy key** बनाउँछ र देखाउँछ → GitHub → repo → **Settings → Deploy keys → Add deploy key** (write access OFF) → Enter।
-   (`GITHUB_TOKEN` राखे — यो repo मात्र, "Administration: write" भएको token — key आफैँ थपिन्छ।)
-2. repo लाई `/home/jelastic/ROOT` मा clone गर्छ (Yeti को नमुना app छेउ लगाएर)।
-3. **webadmin password** सोध्छ (देखिँदैन) → role/database `coop` र `/home/jelastic/coop.env` (SESSION_SECRET, PII_KEY, CREDENTIALS_KEY आफैँ बन्छन्)।
-4. **Platform operator** को username/password सोध्छ (console: `https://<PLATFORM_HOST>/platform`)।
-5. पहिलो deploy (2–4 मिनेट): packages → migration → pm2 → `/healthz` जाँच।
-6. "पहिलो सहकारी बनाउने?" — slug, नाम, design (saving_credit / multipurpose / agriculture / women / microfinance), plan (lite / basic / advance / extra), admin password। पछि console बाट पनि बनाउन सकिन्छ।
-
-### ख) Yeti Web SSH भित्रबाटै
-
-Node.js node → **Web SSH**। पहिले `deploy/yeti/bootstrap.sh` को सामग्री paste गरी (वा deploy key/clone आफैँ गरेर) अनि:
+Dashboard → environment (जस्तै **Aakashweb**) → **Application Servers** मा **Web SSH** खोल्ने।
+तलको **पूरै block** copy गरेर Web SSH मा paste गर्ने र **Enter** थिच्ने:
 
 ```bash
-cd /home/jelastic/ROOT && bash deploy/yeti/install.sh --db-host nodeNNNNN-coopweb.ktm.yetiappcloud.com --base-domain coopcloud.com.np
+{ K=~/.ssh/coopweb_deploy; mkdir -p ~/.ssh && chmod 700 ~/.ssh
+[ -f $K ] || ssh-keygen -q -t ed25519 -C "yeti coopweb deploy" -f $K -N ""
+grep -q '^Host github-coopweb$' ~/.ssh/config 2>/dev/null || printf 'Host github-coopweb\n  HostName ssh.github.com\n  Port 443\n  User git\n  IdentityFile %s\n  IdentitiesOnly yes\n' $K >> ~/.ssh/config
+chmod 600 ~/.ssh/config $K
+grep -q '^\[ssh.github.com\]:443 ssh-ed25519' ~/.ssh/known_hosts 2>/dev/null || echo '[ssh.github.com]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> ~/.ssh/known_hosts
+if ! ssh -o BatchMode=yes -T git@github-coopweb 2>&1 | grep -q successfully; then
+  echo; echo "== यो key GitHub मा थप्नुहोस्: Aakashdigitalpayment/websitenextgen → Settings → Deploy keys → Add deploy key (Allow write access OFF) =="; echo; cat $K.pub; echo
+  read -rp "Key थपेपछि Enter थिच्नुहोस्… " _
+fi
+cd /home/jelastic && if git -C ROOT remote get-url origin 2>/dev/null | grep -q websitenextgen; then git -C ROOT pull -q; else rm -rf ROOT.new && git clone -q git@github-coopweb:Aakashdigitalpayment/websitenextgen.git ROOT.new && { [ ! -d ROOT ] || mv ROOT "ROOT.sample.$(date +%s)"; } && mv ROOT.new ROOT; fi && git -C ROOT log -1 --oneline && read -rp "PostgreSQL node (dashboard → SQL node को नाम, जस्तै nodeNNNNN-aakashweb.ktm.yetiappcloud.com): " DBH && bash /home/jelastic/ROOT/deploy/yeti/install.sh --db-host "$DBH"; }
 ```
 
-फेरि चलाउँदा केही बिग्रँदैन: भइसकेका चरण छोडिन्छन्।
+यसले क्रमैसँग:
 
-**Non-interactive (CI/script)**: password हरू `COOP_DB_ADMIN_PASSWORD`, `PLATFORM_ADMIN_PASSWORD`, `ADMIN_PASSWORD` env मा, अनि `--yes --tenant-slug … --tenant-name … --design … --plan …`।
+1. **Deploy key** बनाएर देखाउँछ (`ssh-ed25519 …` लाइन)।
+   - GitHub → `Aakashdigitalpayment/websitenextgen` → **Settings → Deploy keys → Add deploy key** मा जानुहोस्।
+   - title: `Yeti server`; key: त्यो लाइन paste; **Allow write access OFF** → **Add key**।
+   - Web SSH मा फर्केर **Enter** थिच्नुहोस्।
+2. Code `/home/jelastic/ROOT` मा clone गर्छ (Yeti को नमुना app छेउ लगाएर)।
+3. **PostgreSQL node** को नाम सोध्छ — dashboard मा SQL (हात्ती चिन्ह) node को नाम: `nodeNNNNN-aakashweb.ktm.yetiappcloud.com`।
+4. "Other pm2 app(s) … remove them?" सोधे `y` (Yeti को नमुना app ले port 8080 ओगटेको हुन्छ)।
+5. **webadmin password** — PostgreSQL बनाउँदा Yeti ले email मा पठाएको (टाइप गर्दा देखिँदैन)।
+6. **Platform operator** को username र password (१२+ अक्षर) — `/platform` console को login।
+7. पहिलो deploy (२–४ मिनेट): packages → migration → pm2 → `/healthz` जाँच।
+8. "Create the first cooperative now?" → `y`: slug (जस्तै `aakash`), नाम नेपाली/English, design, plan, admin password।
 
-## 3. नयाँ version live गर्ने — एउटै command
+### आफ्नै domain नभएसम्म (Yeti ठेगाना मात्र)
 
-```bash
-npm run yeti -- deploy          # कम्प्युटरबाट
-bash deploy/yeti/deploy.sh      # वा Web SSH मा, /home/jelastic/ROOT बाट
-```
+सबै एउटै ठेगानामा चल्छ:
 
-Script ले: एक पटकमा एउटा deploy (lock) → `origin/main` → नयाँ release folder (पुरानो चलिरहन्छ) → `npm ci` → **pg_dump copy** (पछिल्ला ३) → migration → `current` सार्ने → pm2 reload → `/healthz`। **Health check असफल भए अघिल्लो release आफैँ फर्किन्छ।** पछिल्ला ३ release राखिन्छन्।
-
-| Command | काम |
+| ठेगाना | के |
 |---|---|
-| `npm run yeti -- rollback` | अघिल्लो release मा (केही सेकेन्ड; migration उल्टाइँदैन — सधैँ additive) |
-| `npm run yeti -- status` | pm2 status, health, live commit |
-| `npm run yeti -- logs 200` | पछिल्ला 200 log लाइन |
-| `npm run yeti -- ssh` | node मा shell |
+| `https://aakashweb.ktm.yetiappcloud.com` | पहिलो सहकारीको website |
+| `https://aakashweb.ktm.yetiappcloud.com/admin` | सहकारीको admin (username `admin`) |
+| `https://aakashweb.ktm.yetiappcloud.com/member/login` | सदस्य पोर्टल |
+| `https://aakashweb.ktm.yetiappcloud.com/platform` | Platform console (operator) |
+
+आफ्नै domain (जस्तै `coopcloud.com.np`) आएपछि थप सहकारीहरू `<slug>.coopcloud.com.np` मा: section 5।
+
+> **पहिलो console login पछि:** console → 2FA खोल्ने, अनि `nano /home/jelastic/coop.env` बाट `PLATFORM_ADMIN_PASSWORD=` लाइन हटाउने।
+
+बीचमा केही रोकियो भने **उही block फेरि paste** गर्नुहोस् — भइसकेका चरण छोडिन्छन्।
+
+### कम्प्युटरबाट (वैकल्पिक)
+
+Web SSH को सट्टा आफ्नै कम्प्युटर (Git Bash / Terminal) बाट पनि हुन्छ। Dashboard मा SSH key थपेपछि:
+
+```bash
+git clone https://github.com/Aakashdigitalpayment/websitenextgen.git && cd websitenextgen && YETI_SSH="<Web SSH ▾ → SSH मा देखिने login, जस्तै 12345-67890@gate.ktm.yetiappcloud.com -p 3022>" npm run yeti -- setup --db-host nodeNNNNN-aakashweb.ktm.yetiappcloud.com
+```
+
+**Non-interactive (CI/script)**: password हरू `COOP_DB_ADMIN_PASSWORD`, `PLATFORM_ADMIN_PASSWORD`, `ADMIN_PASSWORD` env मा, अनि `install.sh --yes --tenant-slug … --tenant-name … --design … --plan …`।
+
+## 3. नयाँ version live गर्ने — एउटै शब्द
+
+Setup पछि **नयाँ Web SSH tab** खोल्नुहोस्, अनि:
+
+```bash
+coop-deploy
+```
+
+यसले GitHub को `main` बाट code तान्छ → नयाँ release folder (पुरानो चलिरहन्छ) → `npm ci` → DB copy → migration → `current` सार्ने → pm2 reload → `/healthz`। **जाँच असफल भए अघिल्लो version आफैँ फर्किन्छ।**
+
+| Web SSH command | काम |
+|---|---|
+| `coop-deploy` | नयाँ version live (`cd /home/jelastic/ROOT && bash deploy/yeti/deploy.sh`) |
+| `coop-rollback` | अघिल्लो version मा (केही सेकेन्ड) |
+| `coop-status` | pm2 status र health |
+| `coop-logs` | पछिल्ला log |
+
+कम्प्युटरबाट: `npm run yeti -- deploy | rollback | status | logs 200`।
 
 ## 4. GitHub बाट एक click (ऐच्छिक)
 
