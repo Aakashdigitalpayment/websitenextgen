@@ -39,7 +39,8 @@
     "sanitize-html": "^2.18.1",
     "sharp": "^0.33.5",
     "undici": "^7.30.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "yauzl": "^3.4.0"
   },
   "optionalDependencies": {
     "mysql2": "^3.24.6"

@@ -85,50 +85,77 @@ function fileColumns() {
   return map;
 }
 
+// ---------------------------------------------------------------- sources
+/**
+ * Where the old data comes from. Two kinds share one small interface:
+ *   mysqlSource(url)  — a live MySQL / MariaDB server (CLI, or the old host if it allows remote access)
+ *   dumpSource(...)   — a .sql dump file (src/lib/sql-dump.js): no MySQL needed, e.g. on Yeti Cloud
+ * Interface: label, info(), tables(), count(t), columns(t), rows(t, cols, offset, limit), sample(t, col, limit), end()
+ */
+async function mysqlSource(url) {
+  let mysql;
+  try { mysql = require('mysql2/promise'); } catch { throw new Error('mysql2 is not installed: npm install mysql2 (or upload an SQL dump instead)'); }
+  const my = await mysql.createConnection({ uri: url, dateStrings: true, supportBigNumbers: true, bigNumberStrings: false, charset: 'utf8mb4', connectTimeout: 15_000 });
+  const q = name => '`' + String(name).replace(/`/g, '``') + '`';
+  return {
+    label: redact(url),
+    async info() { const [[v]] = await my.query('SELECT VERSION() AS v, @@character_set_database AS cs'); return { version: v.v, charset: v.cs }; },
+    async tables() { const [tr] = await my.query('SHOW TABLES'); return tr.map(r => Object.values(r)[0]); },
+    async count(t) { const [[{ n }]] = await my.query(`SELECT COUNT(*) AS n FROM ${q(t)}`); return Number(n); },
+    async columns(t) { const [mc] = await my.query(`SHOW COLUMNS FROM ${q(t)}`); return mc.map(c => c.Field); },
+    async rows(t, cols, offset, limit) {
+      const [rows] = await my.query(`SELECT ${cols.map(q).join(', ')} FROM ${q(t)} ${cols.includes('id') ? 'ORDER BY id' : ''} LIMIT ${Number(limit)} OFFSET ${Number(offset)}`);
+      return rows;
+    },
+    async sample(t, c, limit) {
+      const [rows] = await my.query(`SELECT ${q(c)} AS v FROM ${q(t)} WHERE ${q(c)} IS NOT NULL AND ${q(c)} <> '' LIMIT ${Number(limit)}`).catch(() => [[]]);
+      return rows.map(r => r.v);
+    },
+    end: () => my.end(),
+  };
+}
+
 // ---------------------------------------------------------------- main
 /**
- * @param {object} o  { tenant, mysqlUrl, uploads, credKey, piiKey, dryRun, mode: 'fresh'|'incremental', log }
+ * @param {object} o  { tenant, source | mysqlUrl, uploads, credKey, piiKey, dryRun, mode: 'fresh'|'incremental', log }
  * @returns report object
  */
 async function migrate(o) {
   const log = o.log || (() => {});
-  const report = { tenant: o.tenant, started_at: new Date().toISOString(), dry_run: !!o.dryRun, mode: o.mode || 'fresh', source: redact(o.mysqlUrl), steps: [], tables: [], warnings: [], errors: [], files: {}, verify: {} };
+  const report = { tenant: o.tenant, started_at: new Date().toISOString(), dry_run: !!o.dryRun, mode: o.mode || 'fresh', source: o.source ? o.source.label : redact(o.mysqlUrl), steps: [], tables: [], warnings: [], errors: [], files: {}, verify: {} };
   const step = (name, status, detail = '') => { report.steps.push({ name, status, detail }); log(`${status === 'ok' ? '✓' : status === 'warn' ? '!' : status === 'skip' ? '·' : '✗'} ${name}${detail ? ' — ' + detail : ''}`); };
   const warn = w => { report.warnings.push(w); log('  ! ' + w); };
 
-  let mysql;
-  try { mysql = require('mysql2/promise'); } catch { throw new Error('mysql2 is not installed: npm install mysql2'); }
   const tenant = await db.one('SELECT * FROM platform.tenants WHERE slug = $1', [o.tenant]);
   if (!tenant) throw new Error(`Tenant "${o.tenant}" does not exist (use --create)`);
   report.schema = tenant.schema_name;
 
   // ---- preflight
-  const my = await mysql.createConnection({ uri: o.mysqlUrl, dateStrings: true, supportBigNumbers: true, bigNumberStrings: false, charset: 'utf8mb4', connectTimeout: 15_000 });
+  const src = o.source || await mysqlSource(o.mysqlUrl);
   try {
-    const [[ver]] = await my.query('SELECT VERSION() AS v, @@character_set_database AS cs');
-    step('connect to MySQL', 'ok', `${ver.v}, charset ${ver.cs}`);
-    if (!/utf8/.test(ver.cs)) warn(`database charset is ${ver.cs}; Nepali text may need conversion`);
-    const [tr] = await my.query('SHOW TABLES');
-    const myTables = tr.map(r => Object.values(r)[0]);
+    const ver = await src.info();
+    step(o.source ? 'read SQL dump' : 'connect to MySQL', 'ok', `${ver.version}, charset ${ver.charset}`);
+    if (!/utf8/.test(ver.charset)) warn(`database charset is ${ver.charset}; Nepali text may need conversion`);
+    const myTables = await src.tables();
     const pgTables = new Set((await db.many(`SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`, [tenant.schema_name])).map(r => r.table_name));
 
     // mojibake check on a few text columns
     for (const [t, c] of [['members', 'name_np'], ['notices', 'title_np'], ['site_settings', 'setting_value']]) {
       if (!myTables.includes(t)) continue;
-      const [rows] = await my.query(`SELECT \`${c}\` AS v FROM \`${t}\` WHERE \`${c}\` IS NOT NULL AND \`${c}\` <> '' LIMIT 200`).catch(() => [[]]);
-      const bad = rows.filter(r => MOJIBAKE.test(String(r.v))).length;
+      const rows = await src.sample(t, c, 200);
+      const bad = rows.filter(v => MOJIBAKE.test(String(v))).length;
       if (bad) warn(`${t}.${c}: ${bad} of ${rows.length} sampled values look double-encoded (e.g. "à¤…") — fix the source charset before migrating`);
     }
 
     // ---- plan
     for (const t of myTables) {
-      const [[{ n }]] = await my.query(`SELECT COUNT(*) AS n FROM \`${t}\``);
+      const n = await src.count(t);
       const entry = { table: t, source_rows: Number(n), target_rows: null, copied: 0, skipped: 0, dropped_columns: [], status: '' };
       if (!pgTables.has(t) || t === 'schema_migrations') { entry.status = 'not in new schema'; if (Number(n)) warn(`table ${t} (${n} rows) has no equivalent and is not migrated`); report.tables.push(entry); continue; }
       const pgCols = await db.withSchema(tenant.schema_name, () => db.columns(t));
-      const [mc] = await my.query(`SHOW COLUMNS FROM \`${t}\``);
-      entry.columns = mc.map(c => c.Field).filter(c => pgCols.has(c));
-      entry.dropped_columns = mc.map(c => c.Field).filter(c => !pgCols.has(c));
+      const mc = await src.columns(t);
+      entry.columns = mc.filter(c => pgCols.has(c));
+      entry.dropped_columns = mc.filter(c => !pgCols.has(c));
       entry.status = Number(n) ? 'planned' : 'empty';
       report.tables.push(entry);
     }
@@ -162,7 +189,7 @@ async function migrate(o) {
         const BATCH = 500;
         let offset = 0;
         for (;;) {
-          const [rows] = await my.query(`SELECT ${cols.map(c => '`' + c + '`').join(', ')} FROM \`${entry.table}\` ${hasId ? 'ORDER BY id' : ''} LIMIT ${BATCH} OFFSET ${offset}`);
+          const rows = await src.rows(entry.table, cols, offset, BATCH);
           if (!rows.length) break;
           offset += rows.length;
           await db.transaction(async () => {
@@ -170,7 +197,11 @@ async function migrate(o) {
             for (const row of rows) {
               await db.query('SAVEPOINT r');
               try {
-                const res = await db.query(sql, cols.map(c => fixValue(row[c], pgCols.get(c))));
+                // values a dump left out (undefined) take the column default, like MySQL did
+                const given = cols.filter(c => row[c] !== undefined);
+                const res = given.length === cols.length
+                  ? await db.query(sql, cols.map(c => fixValue(row[c], pgCols.get(c))))
+                  : await db.query(`INSERT INTO ${db.ident(entry.table)} (${given.map(db.ident).join(', ')}) VALUES (${given.map((_, i) => '$' + (i + 1)).join(', ')}) ON CONFLICT DO NOTHING`, given.map(c => fixValue(row[c], pgCols.get(c))));
                 if (res.rowCount) entry.copied++; else entry.skipped++;
                 await db.query('RELEASE SAVEPOINT r');
               } catch (e) {
@@ -191,7 +222,7 @@ async function migrate(o) {
       await db.query('UPDATE members SET updated_at = COALESCE(updated_at, created_at, now())').catch(() => {});
     });
     step('import data', report.errors.length ? 'warn' : 'ok', `${planned.reduce((a, t) => a + t.copied, 0)} rows in ${Math.round((Date.now() - t0) / 1000)} s`);
-  } finally { await my.end(); }
+  } finally { await src.end(); }
 
   // ---- files
   const dest = path.join(config.uploadDir, tenant.slug);
@@ -348,4 +379,4 @@ async function convertPii(oldKey, step = () => {}, warn = () => {}) {
   return { ok, bad, found };
 }
 
-module.exports = { readPhpSite, migrate, htmlReport, fixValue, redact, fileColumns, convertPii };
+module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii };

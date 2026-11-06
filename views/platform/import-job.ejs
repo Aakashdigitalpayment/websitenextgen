@@ -1,0 +1,16 @@
+<div class="content-head"><div><h1><%= job.dryRun ? 'Dry run' : 'Migration' %>: <%= job.tenant %></h1>
+  <div class="muted small">Started <%= job.started_at.toLocaleString('en-GB') %> by <%= job.operator %> · mode <%= job.mode %><%= job.files.zip ? ' · zip' : '' %><%= job.files.sql ? ' · SQL' : '' %></div></div>
+  <a class="btn btn-ghost btn-sm" href="/platform/tenants/<%= job.tenantId %>/data">← Back</a></div>
+
+<% if (job.status === 'running') { %><div class="alert alert-info">Working … this page refreshes every few seconds. You can close it; the job keeps running.</div>
+<% } else if (job.status === 'failed') { %><div class="alert alert-error">Stopped: <%= job.error %></div>
+<% } else { %>
+  <div class="alert <%= job.status === 'done' ? 'alert-success' : 'alert-warn' %>">
+    <%= job.dryRun ? 'Dry run finished' : 'Migration finished' %>: <%= job.summary.planned %> tables<%= job.dryRun ? ' planned' : ', ' + job.summary.rows + ' rows copied' %> · <%= job.summary.warnings %> warnings · <%= job.summary.errors %> row errors.
+    <a href="/platform/tenants/<%= job.tenantId %>/reports/<%= job.id %>" target="_blank" rel="noopener"><b>Open the report</b></a>
+  </div>
+  <% if (!job.dryRun && job.summary.verify) { %><div class="card"><div class="small">Now in the site: <b><%= job.summary.verify.members %></b> members (<%= job.summary.verify.members_with_password %> can sign in with their old password), <b><%= job.summary.verify.admins_active %></b> active admins, <b><%= job.summary.verify.notices %></b> notices.
+    <% if (job.summary.snapshot) { %><br><span class="faint">Safety copy of the replaced tables: <code><%= job.summary.snapshot %></code> in the import folder's reports.</span><% } %></div></div><% } %>
+  <% if (job.dryRun) { %><p class="small muted">Read the report. If it looks right, go back and run it again without "Dry run".</p><% } %>
+<% } %>
+<div class="card"><h3>Progress</h3><pre class="small" style="white-space:pre-wrap;max-height:60vh;overflow:auto;margin:0"><%= job.lines.join('\n') %></pre></div>

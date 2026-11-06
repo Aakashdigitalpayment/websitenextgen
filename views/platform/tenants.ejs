@@ -10,7 +10,8 @@
           <div class="flex gap-1">
             <form method="post" action="/platform/tenants/<%= tn.id %>/plan" class="flex gap-1 items-center"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <select class="select" name="plan" data-autosubmit style="padding:4px 8px;width:auto"><% (locals.PLANS || []).forEach(p => { %><option value="<%= p.key %>" <%= (tn.plan || 'extra') === p.key ? 'selected' : '' %>><%= p.en %></option><% }) %></select></form>
-            <form method="post" action="/platform/tenants/<%= tn.id %>/migrate"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm">Migrate</button></form>
+            <a class="btn btn-soft btn-sm" href="/platform/tenants/<%= tn.id %>/data">Demo data &amp; old site import</a>
+            <form method="post" action="/platform/tenants/<%= tn.id %>/migrate"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" title="Apply database schema updates">Update schema</button></form>
             <form method="post" action="/platform/tenants/<%= tn.id %>/status"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="status" value="<%= tn.status === 'active' ? 'suspended' : 'active' %>"><button class="btn btn-sm <%= tn.status === 'active' ? 'btn-ghost' : 'btn-soft' %>" data-confirm="<%= tn.status === 'active' ? 'Suspend' : 'Activate' %> <%= tn.slug %>?"><%= tn.status === 'active' ? 'Suspend' : 'Activate' %></button></form>
           </div>
         </div>

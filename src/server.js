@@ -6,6 +6,8 @@ const tenants = require('./lib/tenants');
 (async () => {
   await tenants.applyPlatformSchema();
   const server = createApp().listen(config.port, process.env.HOST || (config.isProd ? '127.0.0.1' : '0.0.0.0'), () => console.log(`Cooperative platform listening on http://localhost:${config.port}`));
+  // big uploads (platform → old site migration) may take longer than Node's 5-minute default; headers still time out at 60 s
+  server.requestTimeout = Number(process.env.REQUEST_TIMEOUT_MS || 60 * 60_000);
   if (process.env.WEBHOOK_WORKER !== 'off') require('./lib/webhooks').startWorker();
   if (process.env.DOMAIN_WORKER !== 'off') tenants.startDomainWorker();
   const shutdown = sig => {

@@ -38,7 +38,7 @@ npm install
 npm run db:migrate              # creates the platform schema, migrates all tenants
 npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --name-en="Aakash Cooperative" \
      --domain=aakash.localhost --password='ChangeMe@12345'
-npm run demo:seed -- aakash     # optional sample content
+npm run demo:seed -- aakash     # optional sample content (--remove takes it out again; also in the platform console)
 npm start                       # http://aakash.localhost:3000  (admin: /admin)
 ```
 
@@ -50,7 +50,7 @@ npm start                       # http://aakash.localhost:3000  (admin: /admin)
 
 ## Moving an existing PHP site over
 
-The recommended way is the migration tool: `npm run migrate:site -- --tenant=<slug> --php-root=<old public_html> --dry-run`. See docs/DEPLOY.md §4. The lower-level importer below still works.
+The recommended way is the migration tool: Platform console → **Demo data & old site import** (upload the public_html .zip and the phpMyAdmin .sql — no MySQL server needed), or `npm run migrate:site -- --tenant=<slug> --zip=<public_html.zip> --sql=<dump.sql> --dry-run` / `--php-root=<old public_html>`. See docs/DEPLOY.md §4. The lower-level importer below still works.
 
 
 ```bash

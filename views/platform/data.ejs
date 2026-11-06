@@ -1,0 +1,65 @@
+<div class="content-head"><div><h1><%= t.name %> <span class="small muted"><code><%= t.slug %></code></span></h1><div class="muted small">Demo content and migration from the old PHP / MySQL website</div></div>
+  <a class="btn btn-ghost btn-sm" href="/platform#tenant-<%= t.id %>">← Cooperatives</a></div>
+
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start">
+  <div class="stack">
+    <div class="card">
+      <h3>Demo data</h3>
+      <p class="small muted">Sample notices, news, team, branches, figures, programmes, a job and a success story, so the site can be shown or tested before the cooperative's own content exists. Empty settings (phone, address, about …) get sample text; settings that already have a value are not touched.</p>
+      <% if (demoStatus.present) { %>
+        <div class="alert alert-warn">Demo data is in this site: <b><%= demoStatus.rows %></b> rows<%= demoStatus.at ? ', added ' + new Date(demoStatus.at).toLocaleString('en-GB') : '' %>. Remove it before the site goes live.</div>
+        <form method="post" action="/platform/tenants/<%= t.id %>/demo"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="remove">
+          <button class="btn btn-outline" data-confirm="Remove the demo rows from <%= t.slug %>? The cooperative's own content stays.">Remove demo data</button></form>
+        <p class="small faint mt-1">Only the rows the demo added are deleted, and only settings still holding the demo text are cleared.</p>
+      <% } else { %>
+        <form method="post" action="/platform/tenants/<%= t.id %>/demo"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="insert">
+          <button class="btn btn-primary" data-confirm="Add demo content to <%= t.slug %>?">Insert demo data</button></form>
+      <% } %>
+    </div>
+
+    <div class="card">
+      <h3>Earlier migrations</h3>
+      <% if (running) { %><div class="alert alert-info">Running now: <a href="/platform/imports/<%= running.id %>"><%= running.tenant %> — <%= running.dryRun ? 'dry run' : 'import' %></a></div><% } %>
+      <% if (!reports.length) { %><div class="empty small">No migration has been run for this cooperative yet.</div><% } else { %>
+        <div class="table-wrap"><table class="table"><thead><tr><th>When</th><th>Kind</th><th>Result</th><th></th></tr></thead><tbody>
+        <% reports.forEach(r => { %><tr>
+          <td class="small"><%= new Date(r.started_at).toLocaleString('en-GB') %></td>
+          <td class="small"><%= r.dry_run ? 'Dry run' : 'Import (' + r.mode + ')' %></td>
+          <td><span class="badge <%= r.errors ? 'badge-bad' : r.warnings ? 'badge-warn' : 'badge-ok' %>"><%= r.errors ? r.errors + ' errors' : r.warnings ? r.warnings + ' warnings' : 'OK' %></span></td>
+          <td><a class="small" href="/platform/tenants/<%= t.id %>/reports/<%= r.id %>" target="_blank" rel="noopener">Report</a></td>
+        </tr><% }) %></tbody></table></div>
+      <% } %>
+    </div>
+  </div>
+
+  <form class="form-card" method="post" action="/platform/tenants/<%= t.id %>/import?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <h3>Migrate the old website (PHP + MySQL)</h3>
+    <ol class="small muted" style="padding-left:18px;margin-top:0">
+      <li>Old cPanel → <b>File Manager</b> → right-click <code>public_html</code> → <b>Compress</b> → Zip.</li>
+      <li>Old cPanel → <b>phpMyAdmin</b> → the site's database → <b>Export</b> → Quick → SQL → download the <code>.sql</code> file.</li>
+      <li>Upload both here, run a <b>dry run</b>, read the report, then run it for real.</li>
+    </ol>
+    <div class="stack">
+      <div class="field"><label>Old site: public_html .zip</label><input class="input" type="file" name="archive" accept=".zip,application/zip">
+        <div class="field-hint">Photos and documents (assets/uploads), the old encryption keys and settings are taken from it. PHP code is not copied.</div></div>
+      <div class="field"><label>Database export: .sql or .sql.gz</label><input class="input" type="file" name="sqldump" accept=".sql,.gz">
+        <div class="field-hint">Not needed if the .sql file is already inside the zip.</div></div>
+      <details <%= files.length ? 'open' : '' %>><summary class="small" style="cursor:pointer">Large files? Use the import folder on the server (<%= files.length %> found)</summary>
+        <p class="small muted mt-1">Uploads above <%= maxUploadMb %> MB, or a slow connection: copy the files to <code style="word-break:break-all"><%= importDir %></code> with Yeti's file manager or SFTP, reload this page and choose them here.</p>
+        <div class="field"><label>Zip from the import folder</label><select class="select" name="server_zip"><option value="">—</option><% files.filter(f => f.kind === 'zip').forEach(f => { %><option value="<%= f.name %>"><%= f.name %> (<%= fmtSize(f.size) %>)</option><% }) %></select></div>
+        <div class="field"><label>SQL from the import folder</label><select class="select" name="server_sql"><option value="">—</option><% files.filter(f => f.kind === 'sql').forEach(f => { %><option value="<%= f.name %>"><%= f.name %> (<%= fmtSize(f.size) %>)</option><% }) %></select></div>
+      </details>
+      <div class="field"><label>Mode</label>
+        <select class="select" name="mode">
+          <option value="fresh">Fresh — replace this site's data with the old site's (first migration)</option>
+          <option value="incremental">Incremental — only add rows that are not here yet (run again later)</option>
+        </select>
+        <div class="field-hint">Fresh empties every table the old site has data for, admin logins included: the old site's admins and members sign in with their old passwords. A safety copy of those tables is saved first.</div></div>
+      <label class="check"><input type="checkbox" name="dry_run" value="1" checked> Dry run — check everything and write a report, change nothing</label>
+      <div class="field"><label>To import for real, type <code><%= t.slug %></code></label><input class="input" name="confirm_slug" autocomplete="off" placeholder="<%= t.slug %>"></div>
+      <button class="btn btn-primary" <%= running ? 'disabled' : '' %>><%= running ? 'Another migration is running' : 'Start' %></button>
+      <div class="small faint">The upload can take a while for a big zip — keep this tab open until the progress page appears.</div>
+    </div>
+  </form>
+</div>
