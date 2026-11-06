@@ -10,6 +10,9 @@
  *   # or give the pieces yourself
  *   npm run migrate:site -- --tenant=aakash --mysql=mysql://user:pass@host:3306/db --uploads=/path/assets/uploads
  *
+ *   # no MySQL server (e.g. on Yeti): the public_html zip and the phpMyAdmin export (.sql / .sql.gz)
+ *   npm run migrate:site -- --tenant=aakash --zip=/path/public_html.zip --sql=/path/coop_db.sql --dry-run
+ *
  *   # create the tenant on the way
  *   npm run migrate:site -- --tenant=aakash --create --name="आकाश सहकारी" --domain=www.aakashsaccos.com.np \
  *        --admin-password='Temp@12345678' --php-root=/home/olduser/public_html
@@ -56,6 +59,8 @@ async function confirm(q) {
   }
   await tenants.applyPlatformSchema();
 
+  if (a.zip || a.sql) return fileImport(a);
+
   const src = a['php-root'] ? mig.readPhpSite(a['php-root']) : { notes: [] };
   const mysqlUrl = a.mysql || src.mysqlUrl || process.env.MYSQL_URL;
   const uploads = a.uploads || src.uploads || null;
@@ -94,3 +99,21 @@ async function confirm(q) {
   await db.pool.end();
   process.exit(report.errors.length ? 1 : 0);
 })().catch(async e => { console.error('✗ ' + e.message); await db.pool.end().catch(() => {}); process.exit(1); });
+
+/** --zip / --sql: the same import as Platform console → Demo data & old site import. */
+async function fileImport(a) {
+  const tenant = await db.one('SELECT * FROM platform.tenants WHERE slug = $1', [a.tenant]);
+  if (!tenant) throw new Error(`Tenant "${a.tenant}" does not exist — create it first (npm run tenant:create).`);
+  const mode = a.mode === 'incremental' ? 'incremental' : 'fresh';
+  if (!a['dry-run'] && !a.yes && mode === 'fresh') {
+    const ok = await confirm(`Mode "fresh" replaces this tenant's data for every table the old site has rows in. Continue? (yes/no) `);
+    if (!ok) { console.log('Aborted. (Use --yes to skip this question, or --dry-run first.)'); await db.pool.end(); process.exit(1); }
+  }
+  const { report, reportFile } = await require('../src/lib/site-import').runImport({
+    tenant, zipPath: a.zip ? path.resolve(a.zip) : null, sqlPath: a.sql ? path.resolve(a.sql) : null, dryRun: !!a['dry-run'], mode, log: s => console.log(s),
+  });
+  console.log(`\n${report.ok === false ? '!' : '✓'} ${report.dry_run ? 'Dry run finished' : 'Migration finished'} — ${report.warnings.length} warnings, ${report.errors.length} row errors`);
+  console.log(`  report: ${reportFile}`);
+  await db.pool.end();
+  process.exit(report.errors.length ? 1 : 0);
+}

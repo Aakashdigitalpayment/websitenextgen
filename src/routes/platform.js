@@ -232,5 +232,86 @@ router.post('/tenants/:id/migrate', ah(async (req, res) => {
   res.redirect('/platform');
 }));
 
+// ---------------------------------------------------------------- data: demo content + migration from the old PHP site
+const demo = require('../lib/demo-data');
+const siteImport = require('../lib/site-import');
+const fsx = require('fs');
+const pathx = require('path');
+const { verifyCsrf } = require('../lib/security');
+
+const fmtSize = n => (n >= 1e9 ? (n / 1e9).toFixed(2) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB');
+
+router.get('/tenants/:id/data', ah(async (req, res) => {
+  const t = await tenants.get(Number(req.params.id));
+  if (!t) return res.redirect('/platform');
+  const demoStatus = await db.withSchema(t.schema_name, () => demo.status()).catch(() => ({ present: false, rows: 0 }));
+  render(res, 'data', {
+    title: 'Data · ' + t.slug, t, demoStatus, files: siteImport.serverFiles(), importDir: siteImport.importDir(), fmtSize,
+    running: siteImport.runningJob(), reports: siteImport.reportsFor(t.slug), maxUploadMb: MAX_UPLOAD_MB,
+  });
+}));
+
+router.post('/tenants/:id/demo', ah(async (req, res) => {
+  const t = await tenants.get(Number(req.params.id));
+  if (!t) return res.redirect('/platform');
+  try {
+    const r = await db.withSchema(t.schema_name, () => (req.body.action === 'remove' ? demo.remove() : demo.insert()));
+    console.log(`[platform] ${req.operator.username}: demo data ${req.body.action === 'remove' ? 'removed from' : 'added to'} ${t.slug}`);
+    flash(req, 'success', req.body.action === 'remove' ? `Demo data removed (${r.rows} rows).` : `Demo data added: ${r.rows} rows${r.settings ? `, ${r.settings} empty settings filled` : ''}. Remove it from here before the site goes live.`);
+  } catch (e) { flash(req, 'error', e.message); }
+  res.redirect(`/platform/tenants/${t.id}/data`);
+}));
+
+const MAX_UPLOAD_MB = Number(process.env.MIGRATION_MAX_UPLOAD_MB || 4096);
+const importUpload = require('multer')({
+  storage: require('multer').diskStorage({
+    destination: (req, file, cb) => { try { cb(null, siteImport.ensureDirs().incoming); } catch (e) { cb(e); } },
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${/\.sql\.gz$/i.test(file.originalname) ? '.sql.gz' : pathx.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024, files: 2, fields: 20 },
+  fileFilter: (req, file, cb) => {
+    const ok = file.fieldname === 'archive' ? siteImport.ZIP_RE.test(file.originalname) : file.fieldname === 'sqldump' ? siteImport.SQL_RE.test(file.originalname) : false;
+    cb(ok ? null : new Error(file.fieldname === 'archive' ? 'The site file must be a .zip of public_html.' : 'The database file must be .sql or .sql.gz.'), ok);
+  },
+}).fields([{ name: 'archive', maxCount: 1 }, { name: 'sqldump', maxCount: 1 }]);
+
+router.post('/tenants/:id/import', (req, res, next) => importUpload(req, res, err => {
+  if (!err) return next();
+  for (const f of Object.values(req.files || {}).flat()) fsx.rm(f.path, { force: true }, () => {});
+  flash(req, 'error', err.code === 'LIMIT_FILE_SIZE' ? `File is larger than ${MAX_UPLOAD_MB} MB — copy it to the import folder on the server instead.` : err.message);
+  res.redirect(`/platform/tenants/${Number(req.params.id)}/data`);
+}), verifyCsrf, ah(async (req, res) => {
+  const uploaded = Object.values(req.files || {}).flat().map(f => f.path);
+  const fail = msg => { for (const f of uploaded) fsx.rm(f, { force: true }, () => {}); flash(req, 'error', msg); res.redirect(`/platform/tenants/${Number(req.params.id)}/data`); };
+  const t = await tenants.get(Number(req.params.id));
+  if (!t) return fail('Tenant not found');
+  const b = req.body;
+  try {
+    const zipPath = (req.files && req.files.archive && req.files.archive[0].path) || siteImport.serverFile(b.server_zip || '') || null;
+    const sqlPath = (req.files && req.files.sqldump && req.files.sqldump[0].path) || siteImport.serverFile(b.server_sql || '') || null;
+    if (!zipPath && !sqlPath) return fail('Choose the public_html .zip and/or the .sql export.');
+    const dryRun = [].concat(b.dry_run || []).includes('1');
+    if (!dryRun && String(b.confirm_slug || '').trim() !== t.slug) return fail(`To import for real, type the slug "${t.slug}" in the confirmation box (or tick "Dry run").`);
+    const job = siteImport.startJob({ tenant: t, zipPath, sqlPath, dryRun, mode: b.mode, operator: req.operator.username, cleanup: uploaded });
+    console.log(`[platform] ${req.operator.username}: ${dryRun ? 'dry run' : 'migration'} ${job.id} for ${t.slug}`);
+    res.redirect(`/platform/imports/${job.id}`);
+  } catch (e) { fail(e.message); }
+}));
+
+router.get('/imports/:job', ah(async (req, res) => {
+  const job = siteImport.getJob(req.params.job);
+  if (!job) { flash(req, 'error', 'That migration job is no longer in memory (the app restarted) — see the reports list.'); return res.redirect('/platform'); }
+  if (job.status === 'running') res.set('Refresh', '3');
+  render(res, 'import-job', { title: 'Migration · ' + job.tenant, job });
+}));
+
+router.get('/tenants/:id/reports/:job', ah(async (req, res) => {
+  const t = await tenants.get(Number(req.params.id));
+  const file = t && siteImport.reportFile(req.params.job, t.slug);
+  if (!file) return res.status(404).send('Report not found');
+  res.set({ 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'X-Content-Type-Options': 'nosniff' });
+  res.type('html').send(fsx.readFileSync(file, 'utf8'));
+}));
+
 module.exports = router;
 module.exports.domainAction = domainAction;

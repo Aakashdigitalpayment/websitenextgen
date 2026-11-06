@@ -115,6 +115,8 @@ The tool copies the database, uploaded files, settings, admins (with their passw
 npm install mysql2      # once; only needed for migrations
 
 # 1) Check first. Nothing is written; you get a plan and an HTML report.
+# no MySQL server needed: the public_html zip and the phpMyAdmin export (also in Platform console → Demo data & old site import)
+npm run migrate:site -- --tenant=aakash --zip=/path/public_html.zip --sql=/path/coop_db.sql --dry-run
 npm run migrate:site -- --tenant=aakash --php-root=/home/olduser/public_html --dry-run
 
 # 2) Migrate. --create also creates the tenant if it does not exist yet.

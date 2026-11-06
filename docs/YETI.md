@@ -149,14 +149,37 @@ DNS नमिल्दासम्म: `https://coopweb.ktm.yetiappcloud.com` (P
 - `/home/jelastic/coop.env` को copy password manager मा — **PII_KEY र CREDENTIALS_KEY कहिल्यै नबदल्नुहोस्** (नागरिकता नम्बर र कार्यालय password पढ्ने एक मात्र उपाय)।
 - फोटो/कागजात: `/home/jelastic/coop-data/uploads` (disk backup मा समावेश)।
 
-## 7. पुरानो PHP site सार्ने
+## 7. Demo data र पुरानो PHP site सार्ने (Platform console बाट)
 
-PHP site को folder र MySQL dump Yeti node मा ल्याएर (वा पहुँच भएको कम्प्युटरबाट `DATABASE_URL` राखेर):
+`/platform` → सहकारीको card मा **Demo data & old site import**।
+
+### Demo data
+- **Insert demo data**: नमुना सूचना, समाचार, टिम, शाखा, वित्तीय विवरण, कार्यक्रम, जागिर र सफलताको कथा थपिन्छ। Site देखाउन/जाँच्न।
+- पहिल्यै भरिएका सेटिङ (फोन, ठेगाना…) छोइँदैनन्; खाली भएका मात्र भरिन्छन्।
+- **Remove demo data**: demo ले थपेका row मात्र हट्छन् — सहकारीको आफ्नै सामग्री रहन्छ। Site live हुनुअघि हटाउनुहोस्।
+- Web SSH बाट: `npm run demo:seed -- <slug>` / `npm run demo:seed -- <slug> --remove`
+
+### पुरानो site (PHP + MySQL) सार्ने
+1. पुरानो cPanel → **File Manager** → `public_html` मा right-click → **Compress** → Zip → download।
+2. पुरानो cPanel → **phpMyAdmin** → site को database → **Export** → Quick → SQL → `.sql` download।
+3. Console मा दुवै file छान्नुहोस् → **Dry run** (tick भएकै) → **Start** → report पढ्नुहोस्।
+4. Report ठीक भए: Dry run को tick हटाउनुहोस्, तल slug टाइप गर्नुहोस् → **Start**।
+
+- Zip बाट `assets/uploads` (फोटो/कागजात), पुराना encryption key र सेटिङ मात्र लिइन्छ; PHP code कहिल्यै copy हुँदैन।
+- MySQL server चाहिँदैन — `.sql` file बाटै सबै data आउँछ। `.sql` zip भित्रै राखे छुट्टै upload गर्नुपर्दैन।
+- **Fresh** mode ले पुरानो site मा data भएका table खाली गरेर भर्छ (admin login पनि पुरानै हुन्छन् — पुराना admin र सदस्य पुरानै password ले login गर्छन्)। अघि ती table को safety copy `/home/jelastic/coop-data/imports/reports/<job>-before.json.gz` मा बस्छ।
+- **Incremental**: पछि फेरि चलाउँदा नयाँ row मात्र थपिन्छ।
+- **ठूलो zip (धेरै GB) वा upload रोकियो भने**: file हरू Yeti file manager / SFTP बाट `/home/jelastic/coop-data/imports/` मा राख्नुहोस्, page reload गरी "import folder" बाट छान्नुहोस्।
+- सकिएपछि Web SSH मा पुराना फोटोको 8K/4K/HD आकार बनाउन:
 
 ```bash
-cd /home/jelastic/coop-releases/current
-node --env-file=/home/jelastic/coop.env scripts/migrate-site.js …     # विकल्पहरू: docs/DEPLOY.md §4
-node --env-file=/home/jelastic/coop.env scripts/image-variants.js     # पुराना फोटोको 8K/4K/HD आकार
+cd /home/jelastic/coop-releases/current && node --env-file=/home/jelastic/coop.env scripts/image-variants.js
+```
+
+Web SSH बाटै (console बिना):
+
+```bash
+cd /home/jelastic/coop-releases/current && node --env-file=/home/jelastic/coop.env scripts/migrate-site.js --tenant=<slug> --zip=/home/jelastic/coop-data/imports/public_html.zip --sql=/home/jelastic/coop-data/imports/coop_db.sql --dry-run
 ```
 
 ## 8. Troubleshooting
