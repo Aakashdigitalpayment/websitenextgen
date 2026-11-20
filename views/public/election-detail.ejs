@@ -1,15 +1,25 @@
 <%- include('../partials/page-head', { crumbs: [['/elections', t('निर्वाचन', 'Elections')]], lead: cycle.period_label || '' }) %>
 <section class="section"><div class="container layout-side">
   <div>
+    <% const when = d => d ? bsDate(d) + ' ' + new Date(d).toTimeString().slice(0, 5) : ''; %>
+    <% if (state === 'open') { %><div class="alert alert-success mb-2"><%- icon('vote') %><span><b style="font-weight:600"><%= t('मतदान अहिले खुला छ', 'Voting is open now') %></b> — <%= t('बन्द हुने: ', 'closes ') + when(cycle.vote_end_at) %>
+      <a class="btn btn-primary btn-sm" href="/member/elections/<%= cycle.id %>"><%= t('लगइन गरी मतदान गर्नुहोस्', 'Log in and vote') %></a></span></div>
+    <% } else if (state === 'upcoming') { %><div class="alert alert-warn mb-2"><%- icon('clock') %><span><%= t('मतदान खुल्ने: ', 'Voting opens ') + when(cycle.vote_start_at) %> → <%= when(cycle.vote_end_at) %> <span class="faint">(NPT)</span></span></div>
+    <% } else if (state === 'ended') { %><div class="alert alert-info mb-2"><%- icon('check') %><span><%= t('मतदान सकियो।', 'Voting has ended.') %><% if (Number(cycle.results_finalized)) { %> <%= t('नतिजा अन्तिम भयो — सदस्य पोर्टलमा उपलब्ध छ।', 'Results are final — available in the member portal.') %><% } %></span></div>
+    <% } else if (cycle.vote_start_at && cycle.vote_end_at) { %><div class="alert alert-info mb-2"><%- icon('calendar') %><span><%= t('मतदान समय: ', 'Voting window: ') + when(cycle.vote_start_at) %> → <%= when(cycle.vote_end_at) %></span></div><% } %>
     <% if (f(cycle, 'intro')) { %><div class="prose mb-3"><%- util.richText(f(cycle, 'intro')) %></div><% } %>
-    <% positions.forEach(p => { const list = candidates.filter(c => c.position_id === p.id); %>
+    <% groups.forEach(g => { %><% if (g.label && groups.length > 1) { %><h2 class="mt-4"><%= t(...g.label) %></h2><% } %>
+    <% g.positions.forEach(p => { const list = candidates.filter(c => c.position_id === p.id); %>
       <h2 class="mt-3"><%= f(p, 'title') %> <span class="badge"><%= num(p.seats || 1) %> <%= t('पद', 'seats') %></span></h2>
       <div class="grid grid-3 mt-2"><% list.forEach(c => { %><div class="card person"><div class="person-photo"><% if (c.photo) { %><img src="<%= mediaUrl(c.photo) %>"<%- srcset(c.photo, '240px') %> alt=""><% } else { %><%= (f(c, 'name') || '?').charAt(0) %><% } %></div><div class="person-name"><%= f(c, 'name') %></div><% if (c.symbol_no) { %><div class="person-role"><%= t('चिन्ह नं. ', 'Symbol ') %><%= num(c.symbol_no) %></div><% } %></div><% }) %></div>
       <% if (!list.length) { %><p class="muted"><%= t('उम्मेदवार विवरण छैन।', 'No candidates listed.') %></p><% } %>
-    <% }) %>
+    <% }) %><% }) %>
   </div>
   <aside class="card"><h3><%= t('कार्यतालिका', 'Schedule') %></h3>
     <% if (!milestones.length) { %><p class="muted small"><%= t('कार्यतालिका प्रकाशित भएको छैन।', 'Not published yet.') %></p><% } %>
     <ul class="timeline"><% milestones.forEach(m => { %><li><div class="small faint"><%= bsDate(m.event_date) %></div><div style="font-weight:500"><%= f(m, 'title') %></div><% if (f(m, 'detail')) { %><div class="small muted" style="white-space:pre-wrap"><%= f(m, 'detail') %></div><% } %><% if (m.attachment) { %><a class="small" href="<%= mediaUrl(m.attachment) %>" target="_blank" rel="noopener"><%= t('सूचना', 'Notice') %></a><% } %></li><% }) %></ul>
+    <% if (others.length) { %><h3 class="mt-3"><%= t('अन्य निर्वाचन', 'Other elections') %></h3>
+      <ul class="list small"><% others.forEach(o => { %><li class="list-item"><a href="/elections/<%= o.id %>"><%= f(o, 'title') %></a><% if (o.period_label) { %> <span class="faint"><%= o.period_label %></span><% } %></li><% }) %></ul>
+      <a class="small" href="/elections?all=1"><%= t('सबै निर्वाचन', 'All elections') %> →</a><% } %>
   </aside>
 </div></section>

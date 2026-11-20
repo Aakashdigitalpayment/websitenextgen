@@ -405,6 +405,22 @@ test('partners: type pills with counts, search, table view, featured strip, cont
   assert.ok(r.text.includes('<table') && r.text.includes('Book Shop'));
 });
 
+// ---------------------------------------------------------------- P2-8 elections
+test('elections: latest cycle by default, voting window banner, archive list', async () => {
+  const [old, cur] = await inA(async () => [
+    await db.value("INSERT INTO election_cycles (title_en, title_np, is_published, sort_order) VALUES ('Old election', 'पुरानो निर्वाचन', 1, 2) RETURNING id"),
+    await db.value("INSERT INTO election_cycles (title_en, title_np, is_published, sort_order, voting_enabled, vote_start_at, vote_end_at) VALUES ('New election', 'नयाँ निर्वाचन', 1, 1, 1, now() - interval '1 hour', now() + interval '1 day') RETURNING id"),
+  ]);
+  let r = await get('/elections');
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.location, '/elections/' + cur);
+  r = await get('/elections/' + cur);
+  assert.ok(r.text.includes('मतदान अहिले खुला छ') && r.text.includes('/member/elections/' + cur));
+  assert.ok(r.text.includes('/elections/' + old), 'archive');
+  r = await get('/elections?all=1');
+  assert.equal(r.status, 200);
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');

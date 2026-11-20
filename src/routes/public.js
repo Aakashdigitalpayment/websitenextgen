@@ -598,20 +598,33 @@ router.get('/auctions/:id', ah(async (req, res, next) => {
   res.render('public/auction-detail', { title: res.locals.f(item, 'title'), item, bids, open: require('../lib/auctions').isOpen(item), images: String(item.images || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean) });
 }));
 
+// election-information.php: the latest published cycle by default (?all=1 lists them), voting-window banner, positions grouped by committee
 router.get('/elections', ah(async (req, res) => {
   const cycles = await db.many('SELECT * FROM election_cycles WHERE is_published = 1 ORDER BY sort_order, date_from DESC NULLS LAST, id DESC');
+  if (cycles.length && req.query.all === undefined) return res.redirect('/elections/' + cycles[0].id);
   res.render('public/elections', { title: res.locals.t('निर्वाचन', 'Elections'), cycles });
 }));
 
 router.get('/elections/:id', ah(async (req, res, next) => {
   const cycle = await db.one('SELECT * FROM election_cycles WHERE id = $1 AND is_published = 1', [util.int(req.params.id)]);
   if (!cycle) return next();
-  const [milestones, positions, candidates] = await Promise.all([
+  const [milestones, positions, candidates, types, others] = await Promise.all([
     db.many(`SELECT * FROM election_milestones WHERE cycle_id = $1 AND ${ACTIVE} ORDER BY event_date, display_order`, [cycle.id]),
     db.many(`SELECT * FROM election_positions WHERE cycle_id = $1 AND ${ACTIVE} ORDER BY display_order, id`, [cycle.id]),
     db.many(`SELECT * FROM election_candidates WHERE cycle_id = $1 AND ${ACTIVE} ORDER BY display_order, id`, [cycle.id]),
+    db.many('SELECT id, name, name_np FROM committee_types ORDER BY display_order, id'),
+    db.many('SELECT id, title_np, title_en, date_from, period_label FROM election_cycles WHERE is_published = 1 AND id <> $1 ORDER BY sort_order, date_from DESC NULLS LAST, id DESC LIMIT 12', [cycle.id]),
   ]);
-  res.render('public/election-detail', { title: res.locals.f(cycle, 'title'), cycle, milestones, positions, candidates });
+  const el = require('../lib/elections');
+  const groups = [];
+  for (const p of positions) {
+    const key = p.committee_type_id || 0;
+    let g = groups.find(x => x.key === key);
+    if (!g) { const ct = types.find(x => x.id === key); groups.push(g = { key, label: ct ? [ct.name_np || ct.name, ct.name || ct.name_np] : null, positions: [] }); }
+    g.positions.push(p);
+  }
+  res.render('public/election-detail', { title: res.locals.f(cycle, 'title'), cycle, milestones, positions, candidates, groups, others,
+    state: el.windowState(cycle), resultsPublic: el.resultsVisible(cycle) });
 }));
 
 // ---------------------------------------------------------------- tools
