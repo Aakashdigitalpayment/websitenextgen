@@ -551,7 +551,7 @@ test('PWA: manifest lists 192/512 PNG icons rendered from the favicon', async ()
   await setSetting('site_favicon', 'settings/fav.png');
   const c = client();
   const m = JSON.parse((await c.get('/manifest.webmanifest')).text);
-  assert.deepEqual(m.icons.map(i => i.sizes), ['192x192', '512x512']);
+  assert.deepEqual(m.icons.filter(i => i.purpose === 'any').map(i => i.sizes), ['192x192', '512x512']); // + a 512 maskable icon (public parity P2-13)
   const r = await c.get('/pwa-icon-192.png').buffer(true);
   assert.equal(r.status, 200);
   const meta = await require('sharp')(r.body).metadata();
