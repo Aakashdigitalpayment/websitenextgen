@@ -205,9 +205,24 @@ router.get('/service-centers', ah(async (req, res) => {
   res.render('public/service-centers', { title: res.locals.t('सेवा केन्द्र तथा शाखा', 'Branches & service centres'), centers });
 }));
 
+// partner-facilities.php: type pills with counts, search, cards / table, featured strip (pin_hash never leaves the server)
 router.get('/partner-facilities', ah(async (req, res) => {
-  const partners = await db.many(`SELECT * FROM partner_facilities WHERE ${ACTIVE} ORDER BY is_featured DESC, display_order, id`);
-  res.render('public/partners', { title: res.locals.t('साझेदार सुविधा', 'Partner discounts'), partners });
+  const all = await db.many(`SELECT id, partner_name, partner_name_en, location, facility_type, discount_percent, discount_label, description, description_en, terms_np,
+      logo_path, contact_phone, contact_email, website_url, partner_code, is_featured FROM partner_facilities WHERE ${ACTIVE} ORDER BY is_featured DESC, display_order, partner_name`);
+  const typeCounts = {};
+  for (const p of all) { const k = String(p.facility_type || '').trim(); if (k) typeCounts[k] = (typeCounts[k] || 0) + 1; }
+  const type = Object.hasOwn(typeCounts, req.query.type) ? req.query.type : '';
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  const view = req.query.view === 'table' ? 'table' : 'cards';
+  const needle = q.toLowerCase();
+  const partners = all.filter(p => (!type || String(p.facility_type || '').trim() === type)
+    && (!needle || [p.partner_name, p.partner_name_en, p.location, p.facility_type, p.description, p.description_en, p.discount_label].some(v => String(v || '').toLowerCase().includes(needle))));
+  for (const p of all) {
+    p.discount = p.discount_label || (Number(p.discount_percent) ? String(Number(p.discount_percent)).replace(/\.0+$/, '') + res.locals.t('% छुट', '% off') : '');
+    p.site = /^https?:\/\/[^\s"'<>]+$/i.test(p.website_url || '') ? p.website_url : '';
+  }
+  res.render('public/partners', { title: res.locals.t('साझेदार सुविधा', 'Partner discounts'), partners, total: all.length, typeCounts, type, q, view,
+    featured: !type && !q ? all.filter(p => Number(p.is_featured)).slice(0, 8) : [] });
 }));
 
 // ---------------------------------------------------------------- people

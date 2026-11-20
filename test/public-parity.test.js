@@ -389,6 +389,22 @@ test('gallery: photo / video tabs with counts, album covers, legacy album name, 
   assert.ok(r.text.includes('/awards/' + aid));
 });
 
+// ---------------------------------------------------------------- P2-5 partners
+test('partners: type pills with counts, search, table view, featured strip, contact details, no PIN hash', async () => {
+  await inA(() => db.query(`INSERT INTO partner_facilities (partner_name, facility_type, discount_percent, location, contact_email, website_url, partner_code, pin_hash, is_featured, is_active) VALUES
+    ('City Hospital', 'Hospital', 10.00, 'Kathmandu', 'h@example.com', 'https://hospital.example.com', 'H1', '$2a$10$secret', 1, 1),
+    ('Book Shop', 'Shop', 5.50, 'Pokhara', '', 'javascript:x', 'B1', '', 0, 1)`));
+  let r = await get('/partner-facilities');
+  assert.ok(r.text.includes('Hospital (१)') && r.text.includes('featured-strip'));
+  assert.ok(r.text.includes('10% छुट') && r.text.includes('5.5% छुट'), 'trailing zeros trimmed');
+  assert.ok(r.text.includes('h@example.com') && r.text.includes('https://hospital.example.com') && !r.text.includes('javascript:x'));
+  assert.ok(!r.text.includes('$2a$10$secret'));
+  r = await get('/partner-facilities?type=Shop');
+  assert.ok(r.text.includes('Book Shop') && !r.text.includes('id="partner-') === false && !r.text.includes('City Hospital</h3>'));
+  r = await get('/partner-facilities?q=pokhara&view=table');
+  assert.ok(r.text.includes('<table') && r.text.includes('Book Shop'));
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');

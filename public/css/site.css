@@ -114,3 +114,7 @@
 .lightbox iframe { width: min(960px, 92vw); aspect-ratio: 16 / 9; border: 0; border-radius: 8px; }
 .lightbox .btn { position: fixed; color: #fff; background: rgba(0, 0, 0, .4); }
 .lb-close { top: 16px; right: 16px; } .lb-prev { left: 12px; top: 50%; } .lb-next { right: 12px; top: 50%; }
+.steps-3 { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.steps-3 li { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.featured-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.featured-strip .tab { white-space: nowrap; }

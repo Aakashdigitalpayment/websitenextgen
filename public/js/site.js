@@ -136,6 +136,12 @@
     if (items.length < 2) { $('[data-lb-prev]', lb).hidden = true; $('[data-lb-next]', lb).hidden = true; }
   }
 
+  // ---------------------------------------------------------------- live filter (partners): hide rows that do not contain the typed text
+  $$('[data-live-filter]').forEach(input => input.addEventListener('input', () => {
+    const v = input.value.trim().toLowerCase();
+    $$(input.dataset.liveFilter).forEach(el => { el.hidden = !!v && !el.textContent.toLowerCase().includes(v); });
+  }));
+
   // ---------------------------------------------------------------- legacy about.php#anchors → their own pages
   if (location.pathname === '/about' && location.hash) {
     const h = location.hash.toLowerCase();
