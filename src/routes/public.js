@@ -976,29 +976,43 @@ router.post('/programs/:id/register', preregLimiter, ah(async (req, res) => {
 router.get('/attend', (req, res) => res.redirect('/member/attend?t=' + encodeURIComponent(String(req.query.t || '').replace(/[^A-Za-z0-9_-]/g, ''))));
 
 // ---------------------------------------------------------------- PWA
+// manifest.php: name, description, icons 192/512 (any) + 512 maskable, shortcuts; /manifest.json redirects here
 router.get('/manifest.webmanifest', (req, res) => {
-  const s = res.locals.settings;
+  const s = res.locals.settings, t = res.locals.t;
+  const name = s.pwa_app_name || res.locals.siteName;
   const has = s.site_favicon || s.logo;
-  res.type('application/manifest+json').send(JSON.stringify({
-    name: res.locals.siteName, short_name: (s.pwa_short_name || res.locals.siteName).slice(0, 24), start_url: '/', scope: '/', display: 'standalone',
-    background_color: '#fafaf9', theme_color: res.locals.brandColor, lang: 'ne',
-    icons: has ? [192, 512].map(n => ({ src: `/pwa-icon-${n}.png`, sizes: `${n}x${n}`, type: 'image/png', purpose: 'any' })) : [],
+  const icons = has ? [
+    ...[192, 512].map(n => ({ src: `/pwa-icon-${n}.png`, sizes: `${n}x${n}`, type: 'image/png', purpose: 'any' })),
+    { src: '/pwa-icon-512.png?maskable=1', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+  ] : [];
+  const shortcut = (n, url) => ({ name: n, short_name: n, url });
+  res.set('Cache-Control', 'public, max-age=3600').type('application/manifest+json').send(JSON.stringify({
+    id: '/', name, short_name: (s.pwa_short_name || name).slice(0, 12), description: util.excerpt(s.meta_description || s.about_short || '', 200),
+    start_url: '/?source=pwa', scope: '/', display: 'standalone', orientation: 'any', categories: ['finance', 'business'],
+    background_color: '#fafaf9', theme_color: res.locals.brandColor, lang: req.lang === 'en' ? 'en' : 'ne', icons,
+    shortcuts: [shortcut(t('सेवाहरू', 'Services'), '/services'), shortcut(t('ब्याजदर', 'Interest rates'), '/interest-rates'), shortcut(t('आवेदन ट्र्याक', 'Track application'), '/track'), shortcut(t('सम्पर्क', 'Contact'), '/contact')],
   }));
 });
-// square PNG app icons from the favicon or logo (legacy includes/pwa-icons.php), cached per source file
+// square PNG app icons from the favicon or logo (legacy includes/pwa-icons.php), cached per source file; ?maskable=1 pads on the brand colour
+const PWA_SIZES = [72, 96, 128, 144, 152, 180, 192, 384, 512];
 router.get('/pwa-icon-:size.png', ah(async (req, res, next) => {
   const size = Number(req.params.size);
   const src = res.locals.settings.site_favicon || res.locals.settings.logo;
-  if (![192, 512].includes(size) || !src) return next();
+  if (!PWA_SIZES.includes(size) || !src) return next();
   const up = require('../lib/uploads');
   const file = up.resolveStored(req, src);
-  if (!file || !require('fs').existsSync(file) || !/\.(png|jpe?g|webp|gif)$/i.test(file)) return next();
+  if (!file || !require('fs').existsSync(file) || !/\.(png|jpe?g|webp|gif|svg)$/i.test(file)) return next();
   const path = require('path'), fs = require('fs');
+  const maskable = req.query.maskable === '1';
+  const bg = maskable ? res.locals.brandColor : '#ffffff';
   const dir = path.join(up.tenantDir(req), '_pwa');
-  const out = path.join(dir, `${require('crypto').createHash('sha1').update(src + fs.statSync(file).mtimeMs).digest('hex').slice(0, 12)}-${size}.png`);
+  const out = path.join(dir, `${require('crypto').createHash('sha1').update(src + fs.statSync(file).mtimeMs + bg).digest('hex').slice(0, 12)}-${size}${maskable ? '-m' : ''}.png`);
   if (!fs.existsSync(out)) {
     fs.mkdirSync(dir, { recursive: true });
-    await require('sharp')(file).resize(size, size, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' }).png().toFile(out);
+    const sharp = require('sharp');
+    const inner = maskable ? Math.round(size * 0.8) : size; // maskable safe zone
+    const logo = await sharp(file, { limitInputPixels: 40_000_000 }).resize(inner, inner, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' }).png().toBuffer();
+    await sharp({ create: { width: size, height: size, channels: 3, background: bg } }).composite([{ input: logo, gravity: 'center' }]).png().toFile(out);
   }
   res.set({ 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' }).type('image/png').sendFile(path.basename(out), { root: path.resolve(dir) }); // root: the install path may contain dot folders
 }));
@@ -1010,20 +1024,61 @@ router.get('/share-og.svg', (req, res) => {
   res.set('Cache-Control', 'public, max-age=3600').set('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'")
     .type('image/svg+xml').send(seo.shareCardSvg(req, res.locals.settings, res.locals.siteName, res.locals.brandColor));
 });
+// share-og.php: the same card as PNG (Facebook / WhatsApp ignore SVG), cached per tenant by a hash of its inputs
+router.get('/share-og.png', ah(async (req, res) => {
+  const path = require('path'), fs = require('fs'), up = require('../lib/uploads');
+  const svg = seo.shareCardSvg(req, res.locals.settings, res.locals.siteName, res.locals.brandColor);
+  const dir = path.join(up.tenantDir(req), '_cache');
+  const name = 'share-og-' + require('crypto').createHash('sha1').update(svg).digest('hex').slice(0, 16) + '.png';
+  if (!fs.existsSync(path.join(dir, name))) {
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of fs.readdirSync(dir)) if (/^share-og-.*\.png$/.test(f)) fs.rmSync(path.join(dir, f), { force: true });
+    try {
+      await require('sharp')(Buffer.from(svg), { density: 72 }).png().toFile(path.join(dir, name));
+    } catch { return res.redirect(302, '/share-og.svg'); }
+  }
+  res.set({ 'Cache-Control': 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff' }).type('image/png').sendFile(name, { root: path.resolve(dir) });
+}));
+// robots.php
 router.get('/robots.txt', (req, res) => {
-  res.type('text').send(`User-agent: *\nDisallow: /admin\nDisallow: /member\nSitemap: ${req.protocol}://${req.get('host')}/sitemap.xml\n`);
+  const lines = ['User-agent: *', 'Allow: /', ...['/admin', '/member', '/platform', '/api/', '/track', '/verify', '/attend', '/apply/kyc', '/apply/survey', '/search', '/uploads/_private', '/lang/', '/theme'].map(p => 'Disallow: ' + p),
+    `Sitemap: ${req.protocol}://${req.get('host')}/sitemap.xml`];
+  res.set('Cache-Control', 'public, max-age=3600').type('text').send(lines.join('\n') + '\n');
 });
 
+// sitemap.php: static pages with priority / changefreq (filtered by the plan), dynamic entries with lastmod
+const SITEMAP_STATIC = [
+  ['/', 1.0, 'daily'], ['/about', 0.9], ['/services', 0.9], ['/interest-rates', 0.9], ['/contact', 0.85], ['/notices', 0.85, 'daily'], ['/news', 0.85, 'daily'], ['/careers', 0.85],
+  ['/programs', 0.8], ['/service-centers', 0.8], ['/team', 0.8], ['/faqs', 0.8], ['/digital-services', 0.75], ['/elections', 0.75], ['/institutional-profile', 0.75],
+  ['/message/chairman', 0.75], ['/message/ceo', 0.75], ['/success-stories', 0.75], ['/vision-mission', 0.75], ['/gallery', 0.75], ['/partner-facilities', 0.7],
+  ['/committees', 0.7], ['/downloads', 0.7], ['/calendar', 0.7], ['/marketplace', 0.7], ['/exchange-rate', 0.65, 'daily'], ['/reports', 0.65], ['/auctions', 0.65],
+  ['/awards', 0.65], ['/emi-calculator', 0.6], ['/apply', 0.6], ['/date-converter', 0.55], ['/important-links', 0.55],
+];
 router.get('/sitemap.xml', ah(async (req, res) => {
   const base = `${req.protocol}://${req.get('host')}`;
-  const staticPaths = ['/', '/about', '/services', '/interest-rates', '/team', '/news', '/notices', '/downloads', '/gallery', '/careers', '/contact', '/apply', '/emi-calculator', '/faqs', '/reports'];
-  const [news, notices, pages] = await Promise.all([
-    db.many(`SELECT id FROM news WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 500`),
-    db.many(`SELECT id FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 500`),
-    db.many(`SELECT slug FROM pages WHERE ${ACTIVE}`),
+  const day = v => { if (!v) return ''; if (v instanceof Date) return v.toISOString().slice(0, 10); return nd.toAd(v) || ''; };
+  const [news, notices, pages, careers, auctions, elections, services] = await Promise.all([
+    db.many(`SELECT id, created_at FROM news WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 500`),
+    db.many(`SELECT id, notice_date, created_at FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 500`),
+    db.many(`SELECT slug, updated_at FROM pages WHERE ${ACTIVE}`),
+    db.many(`SELECT id, created_at FROM careers WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 80`),
+    db.many(`SELECT id, created_at FROM auction_notices WHERE ${ACTIVE} ORDER BY id DESC LIMIT 80`),
+    db.many('SELECT id, created_at FROM election_cycles WHERE is_published = 1 ORDER BY id DESC LIMIT 20'),
+    db.many(`SELECT id, created_at FROM services WHERE ${ACTIVE} ORDER BY display_order, id`),
   ]);
-  const urls = [...staticPaths, ...news.map(n => '/news/' + n.id), ...notices.map(n => '/notices/' + n.id), ...pages.map(p => '/page/' + encodeURIComponent(p.slug))];
-  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(u => `<url><loc>${util.escapeHtml(base + u)}</loc></url>`).join('')}</urlset>`);
+  const plan = res.locals.plan;
+  const urls = [
+    ...SITEMAP_STATIC.filter(([p]) => !plan || plan.allows(p)).map(([loc, priority, freq]) => ({ loc, priority, freq: freq || 'weekly' })),
+    ...services.map(r => ({ loc: '/services/' + r.id, priority: 0.8, freq: 'monthly', mod: day(r.created_at) })),
+    ...news.map(r => ({ loc: '/news/' + r.id, priority: 0.7, freq: 'monthly', mod: day(r.created_at) })),
+    ...notices.map(r => ({ loc: '/notices/' + r.id, priority: 0.7, freq: 'monthly', mod: day(r.notice_date) || day(r.created_at) })),
+    ...pages.map(r => ({ loc: '/page/' + encodeURIComponent(r.slug), priority: 0.6, freq: 'monthly', mod: day(r.updated_at) })),
+    ...(!plan || plan.allows('/careers') ? careers.map(r => ({ loc: '/careers/' + r.id, priority: 0.6, freq: 'weekly', mod: day(r.created_at) })) : []),
+    ...(!plan || plan.allows('/auctions') ? auctions.map(r => ({ loc: '/auctions/' + r.id, priority: 0.5, freq: 'weekly', mod: day(r.created_at) })) : []),
+    ...(!plan || plan.allows('/elections') ? elections.map(r => ({ loc: '/elections/' + r.id, priority: 0.5, freq: 'weekly', mod: day(r.created_at) })) : []),
+  ];
+  const xml = urls.map(u => `<url><loc>${util.escapeHtml(base + u.loc)}</loc>${u.mod ? `<lastmod>${u.mod}</lastmod>` : ''}<changefreq>${u.freq}</changefreq><priority>${u.priority.toFixed(2)}</priority></url>`).join('');
+  res.set('Cache-Control', 'public, max-age=3600').type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${xml}</urlset>`);
 }));
 
 // PHP pages served without ".php" (/career, /news-detail?id=5 …) — only for paths no route above answered

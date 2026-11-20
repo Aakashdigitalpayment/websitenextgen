@@ -333,6 +333,39 @@ test('assistant: refuses sensitive / jailbreak questions, redacts and blocks lea
   assert.ok(r.text.includes('data-chat-chips'));
 });
 
+// ---------------------------------------------------------------- P2-13/14/15 manifest, icons, share PNG, sitemap, robots
+test('manifest with icons + shortcuts, PNG icons and share card, sitemap with lastmod / priority, robots', async () => {
+  const sharp = require('sharp');
+  const dir = path.join(config.uploadDir, A, 'logos');
+  fs.mkdirSync(dir, { recursive: true });
+  await sharp({ create: { width: 300, height: 120, channels: 3, background: '#0f766e' } }).png().toFile(path.join(dir, 'logo.png'));
+  await setting('logo', 'logos/logo.png');
+  await setting('pwa_app_name', 'Coop App');
+  let r = await get('/manifest.webmanifest');
+  const m = JSON.parse(r.text);
+  assert.equal(m.name, 'Coop App');
+  assert.equal(m.id, '/');
+  assert.ok(m.icons.some(i => i.purpose === 'maskable') && m.shortcuts.length === 4);
+  r = await get('/pwa-icon-180.png').buffer(true);
+  assert.equal(r.status, 200);
+  assert.equal((await sharp(r.body).metadata()).width, 180);
+  r = await get('/pwa-icon-512.png?maskable=1').buffer(true);
+  assert.equal(r.status, 200);
+  assert.equal((await get('/pwa-icon-999.png')).status, 404);
+  r = await get('/share-og.png').buffer(true);
+  assert.equal(r.status, 200);
+  const meta = await sharp(r.body).metadata();
+  assert.equal(meta.width, 1200);
+  assert.equal(meta.format, 'png');
+  r = await get('/about');
+  assert.match(r.text, /og:image" content="[^"]+\/share-og\.png"/);
+  r = await get('/sitemap.xml');
+  assert.ok(r.text.includes('<priority>1.00</priority>') && r.text.includes('/vision-mission') && r.text.includes('<lastmod>'));
+  assert.ok(r.text.includes('/careers/'));
+  r = await get('/robots.txt');
+  assert.ok(r.text.includes('Allow: /') && r.text.includes('Disallow: /track') && r.text.includes('Disallow: /api/'));
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');
