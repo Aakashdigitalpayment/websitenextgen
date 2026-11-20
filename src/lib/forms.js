@@ -36,8 +36,10 @@ const optionSources = {
     return rows.map(r => [r.name_np || r.name, r.name_np || r.name, r.name || r.name_np]);
   },
   async loanTypes() {
-    const rows = await db.many(`SELECT name, name_np FROM interest_rates WHERE category = 'loan' AND is_active = 1 ORDER BY display_order, id`);
-    return rows.length ? rows.map(r => [r.name, r.name_np || r.name, r.name]) :
+    const rows = await db.many(`SELECT * FROM interest_rates WHERE category = 'loan' AND is_active = 1 ORDER BY display_order, id`);
+    // the rate next to each type (loan-apply.php "(x.xx%)")
+    const rate = r => { const v = Number(r.rate ?? r.interest_rate); return Number.isFinite(v) && v > 0 ? ` (${v.toFixed(2)}%)` : ''; };
+    return rows.length ? rows.map(r => [r.name, (r.name_np || r.name) + nd.toNepaliDigits(rate(r)), r.name + rate(r)]) :
       [['business', 'व्यवसाय ऋण', 'Business loan'], ['home', 'घर ऋण', 'Home loan'], ['education', 'शैक्षिक ऋण', 'Education loan'], ['agriculture', 'कृषि ऋण', 'Agriculture loan'], ['vehicle', 'सवारी ऋण', 'Vehicle loan'], ['personal', 'व्यक्तिगत ऋण', 'Personal loan']];
   },
   async savingTypes() {
@@ -77,6 +79,20 @@ const optionSources = {
     return rows.map(r => [String(r.id), r.title_np || r.title, r.title || r.title_np]);
   },
   async districts() { return DISTRICTS.map(d => [d, d, d]); },
+  /** getOfficeTimeOptions(): office_time_start … office_time_end every 30 minutes, values like PHP ('10:00 AM'). */
+  async officeTimes() {
+    const s = await require('./settings').all();
+    const parse = (v, d) => { const m = String(v || '').trim().match(/^(\d{1,2}):(\d{2})/); return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? Number(m[1]) * 60 + Number(m[2]) : d; };
+    let a = parse(s.office_time_start, 600), b = parse(s.office_time_end, 1020);
+    if (a > b) [a, b] = [b, a];
+    const out = [];
+    for (let t = a; t <= b && out.length < 96; t += 30) {
+      const h = Math.floor(t / 60), m = t % 60, h12 = h % 12 || 12, ampm = h < 12 ? 'AM' : 'PM';
+      const v = `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+      out.push([v, nd.toNepaliDigits(`${h12}:${String(m).padStart(2, '0')}`) + (h < 12 ? ' बिहान' : h < 16 ? ' दिउँसो' : ' बेलुकी'), v]);
+    }
+    return out;
+  },
   async auctions() {
     const rows = await db.many(`SELECT id, title, title_en, status, is_active, auction_date, auction_time, minimum_price FROM auction_notices
                                 WHERE is_active = 1 AND status IN ('upcoming','ongoing') ORDER BY auction_date NULLS LAST, id DESC`);

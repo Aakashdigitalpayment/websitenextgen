@@ -326,3 +326,25 @@ test('loan: other income, guarantor address and several documents (comma-joined)
   assert.equal(row.guarantor_address, 'Lalitpur');
   assert.equal(row.documents.split(',').length, 2);
 });
+
+// ---------------------------------------------------------------- P2-7 appointment slots and PHP option keys
+test('appointment: 30-minute slots from office hours, PHP purpose keys, server checks the slot', async () => {
+  const settings = require('../src/lib/settings');
+  await inB(async () => { await settings.set('office_time_start', '09:30'); await settings.set('office_time_end', '11:00'); });
+  const slots = await inB(() => forms.optionSources.officeTimes());
+  assert.deepEqual(slots.map(s => s[0]), ['09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM']);
+  const c = client(HB);
+  const page = await c.get('/apply/appointment');
+  assert.match(page.text, /value="kyc_update"/);
+  assert.match(page.text, /value="10:30 AM"/);
+  const tomorrow = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10);
+  const appt = { visit_kind: 'member', name: 'Appt', phone: '9841920001', email: 'a@example.com', purpose: 'kyc_update', preferred_date: tomorrow, preferred_time: '04:00 PM' };
+  let r = await c.form('/apply/appointment', appt);
+  assert.equal(r.status, 422, 'slot outside office hours');
+  r = await c.form('/apply/appointment', { ...appt, preferred_time: '10:30 AM' });
+  assert.equal(r.status, 302, errs(r));
+  // cooperative visit: organisation name becomes the appointment name
+  r = await c.form('/apply/appointment', { visit_kind: 'cooperative', is_coop_member: 'yes', organization_name: 'Sathi Coop', name: 'Hari', contact_person: 'Hari', organization_address: 'Pokhara', phone: '9841920002', preferred_date: tomorrow, preferred_time: '10:00 AM', purpose_detail: 'Study visit' });
+  assert.equal(r.status, 302, errs(r));
+  assert.equal(await inB(() => db.value("SELECT name FROM appointments WHERE phone = '9841920002'")), 'Sathi Coop');
+});
