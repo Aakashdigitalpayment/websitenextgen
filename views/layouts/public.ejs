@@ -128,6 +128,7 @@
     </div>
   </footer>
   <%- include('../partials/float-widgets') %>
+  <%- include('../partials/notice-popup') %>
   <% if ((settings.ai_enabled === '1' || settings.chat_widget === '1') && (!locals.plan || plan.has('ai_chat'))) { %>
   <div class="chat" data-chat data-csrf="<%= csrfToken %>" data-lang="<%= lang %>">
     <button class="chat-fab btn btn-primary" data-chat-toggle aria-label="<%= t('सहयोग', 'Help') %>"><%- icon('message', 'icon-lg') %></button>
@@ -140,5 +141,6 @@
   </div>
   <% } %>
   <script src="/static/js/app.js" defer></script>
+  <script src="/static/js/site.js" defer></script>
 </body>
 </html>

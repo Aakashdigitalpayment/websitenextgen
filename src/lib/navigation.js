@@ -85,4 +85,5 @@ async function middleware(req, res, next) {
   try { res.locals.nav = await build(); next(); } catch (e) { next(e); }
 }
 
-module.exports = { build, middleware, invalidate: () => cache.delete(db.currentSchema()) };
+// admin content saves call invalidate(): also drop the cached public payloads (home, popups, bell, ticker)
+module.exports = { build, middleware, invalidate: () => { cache.delete(db.currentSchema()); require('./public-cache').clear(); } };

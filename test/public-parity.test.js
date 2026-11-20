@@ -106,3 +106,25 @@ test('legacy PHP URLs keep their ids and filters; extensionless PHP paths redire
   r = await get('/contact');
   assert.equal(r.status, 200, 'existing Node routes are not redirected');
 });
+
+// ---------------------------------------------------------------- P1-8 popup carousel on every page
+test('popup notices: carousel of up to 5 on every public page, not on forms; expired ones hidden', async () => {
+  const expiredBs = nd.adToBs(new Date(Date.now() - 5 * 86400_000).toISOString().slice(0, 10));
+  await inA(async () => {
+    for (let i = 1; i <= 6; i++) await db.query("INSERT INTO notices (title, content, is_active, is_popup, attachment) VALUES ($1, 'Body', 1, 1, $2)", ['Popup ' + i, i === 6 ? 'notices/x.pdf' : null]);
+    await db.query("INSERT INTO notices (title, content, is_active, is_popup, popup_expires_at) VALUES ('Expired popup', 'x', 1, 1, $1)", [expiredBs]);
+  });
+  await clearCaches();
+  let r = await get('/about');
+  assert.equal(r.status, 200);
+  const m = r.text.match(/data-notice-popup="([^"]+)"/);
+  assert.ok(m, 'popup on /about');
+  assert.equal(m[1].split('-').length, 5, 'at most 5 slides');
+  assert.ok(!r.text.includes('Expired popup'));
+  assert.match(r.text, /View full notice|पूरा सूचना हेर्नुहोस्/);
+  assert.ok(!/<script>/.test(r.text), 'no inline scripts');
+  r = await get('/apply/loan');
+  assert.ok(!r.text.includes('data-notice-popup'), 'no popup on application forms');
+  await inA(() => db.query('UPDATE notices SET is_popup = 0'));
+  await clearCaches();
+});

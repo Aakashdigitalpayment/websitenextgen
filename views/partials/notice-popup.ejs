@@ -1,0 +1,36 @@
+<% const pops = locals.popups || []; if (pops.length) { const isImg = p => /\.(jpe?g|png|webp|gif)$/i.test(p || ''); %>
+<div class="modal notice-popup" data-notice-popup="<%= pops.map(p => p.id).join('-') %>" role="dialog" aria-modal="true" aria-labelledby="np-title-0" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="badge badge-bad"><%- icon('alert') %><%= t('महत्त्वपूर्ण सूचना', 'Important notice') %></span>
+      <% if (pops.length > 1) { %><span class="small muted" data-np-count aria-live="polite">1 / <%= pops.length %></span><% } %>
+      <button type="button" class="btn btn-ghost btn-icon" data-np-close aria-label="<%= t('बन्द गर्नुहोस्', 'Close') %>"><%- icon('close') %></button>
+    </div>
+    <% if (pops.length > 1) { %><div class="np-progress" aria-hidden="true"><span data-np-bar></span></div><% } %>
+    <div class="modal-body">
+      <% pops.forEach((p, i) => { const img = p.popup_image || (isImg(p.attachment) ? p.attachment : ''); const full = p.attachment ? mediaUrl(p.attachment) : '/notices/' + p.id; %>
+      <div class="np-slide" data-np-slide <%= i ? 'hidden' : '' %>>
+        <h3 id="np-title-<%= i %>" class="mb-1"><%= f(p, 'title') %></h3>
+        <% if (img) { %>
+          <% if (Number(p.popup_photo_only)) { %><a href="<%= full %>" target="_blank" rel="noopener"><% } %>
+          <img src="<%= mediaUrl(img) %>"<%- srcset(img, '(max-width: 600px) 92vw, 560px') %> alt="<%= f(p, 'title') %>" class="np-img" <%= i ? 'loading=lazy' : '' %> decoding="async">
+          <% if (Number(p.popup_photo_only)) { %></a><% } %>
+        <% } %>
+        <% if (!Number(p.popup_photo_only) || !img) { %><div class="prose mt-2"><%- util.richText(util.excerpt(f(p, 'content'), 600)) %></div><% } %>
+        <div class="flex gap-1 wrap mt-2">
+          <% if (p.attachment) { %><a class="btn btn-primary btn-sm" href="<%= mediaUrl(p.attachment) %>" target="_blank" rel="noopener"><%- icon(/\.pdf$/i.test(p.attachment) ? 'file' : isImg(p.attachment) ? 'eye' : 'download') %><%= t('पूरा सूचना हेर्नुहोस्', 'View full notice') %></a><% } %>
+          <a class="btn btn-soft btn-sm" href="/notices/<%= p.id %>"><%= t('विस्तृत पढ्नुहोस्', 'Read more') %></a>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+    <% if (pops.length > 1) { %>
+    <div class="np-controls">
+      <button type="button" class="btn btn-ghost btn-icon" data-np-prev aria-label="<%= t('अघिल्लो', 'Previous') %>"><%- icon('left') %></button>
+      <div class="slider-dots np-dots"><% pops.forEach((p, i) => { %><button type="button" data-np-dot="<%= i %>" class="<%= i ? '' : 'active' %>" aria-label="<%= t('सूचना ', 'Notice ') + (i + 1) %>"></button><% }) %></div>
+      <button type="button" class="btn btn-ghost btn-icon" data-np-next aria-label="<%= t('अर्को', 'Next') %>"><%- icon('right') %></button>
+    </div>
+    <% } %>
+  </div>
+</div>
+<% } %>

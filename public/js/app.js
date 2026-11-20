@@ -62,18 +62,7 @@
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) start();
   });
 
-  // popup notice (once per session)
-  const popup = $('[data-popup]');
-  if (popup) {
-    const key = 'popup-seen-' + popup.dataset.popup;
-    let seen = false;
-    try { seen = sessionStorage.getItem(key) === '1'; } catch (e) { /* storage blocked */ }
-    if (!seen) popup.classList.add('open');
-    const close = () => { popup.classList.remove('open'); try { sessionStorage.setItem(key, '1'); } catch (e) { /* ignore */ } };
-    $$('[data-close]', popup).forEach(b => b.addEventListener('click', close));
-    popup.addEventListener('click', e => { if (e.target === popup) close(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-  }
+  // popup notices: public/js/site.js (carousel on every page)
 
   // EMI calculator (live)
   const emi = $('[data-emi]');

@@ -41,6 +41,26 @@ router.use((req, res, next) => {
   }).catch(next);
 });
 
+// notices shown on every public page: popup carousel (≤ 5, includes/header.php popup V3), header bell and ticker (latest 10)
+const pcache = require('../lib/public-cache');
+router.use((req, res, next) => {
+  if (req.method !== 'GET' || req.path.startsWith('/api/') || /\.[a-z0-9]{2,12}$/i.test(req.path)) return next();
+  pcache.cached('header-notices', 60_000, async () => {
+    const [popups, latest] = await Promise.all([
+      db.many(`SELECT id, title, title_np, content, content_np, attachment, popup_image, popup_photo_only, popup_expires_at FROM notices
+               WHERE is_active = 1 AND deleted_at IS NULL AND is_popup = 1 ORDER BY id DESC LIMIT 12`),
+      db.many('SELECT id, title, title_np, notice_date, attachment, created_at FROM notices WHERE is_active = 1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 10'),
+    ]);
+    // popup_expires_at may hold a BS date typed by the office (nd.daysUntil reads both)
+    return { popups: popups.filter(p => { const d = nd.daysUntil(p.popup_expires_at); return d === null || d >= 0; }).slice(0, 5), latest };
+  }).then(data => {
+    // never interrupt an application form or the offline page
+    res.locals.popups = /^\/(apply|offline|track|verify|attend)(\/|$)/.test(req.path) ? [] : data.popups;
+    res.locals.latestNotices = data.latest;
+    next();
+  }).catch(next);
+});
+
 router.use(require('../lib/legacy-urls').publicRedirects); // PHP-era URLs (printed QR codes, bookmarks) → new routes
 
 // daily visitor/page-view counter for the admin dashboard (no personal data stored)

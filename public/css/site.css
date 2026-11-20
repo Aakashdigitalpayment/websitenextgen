@@ -5,3 +5,15 @@
 .progress > span { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
 .progress > span.is-bad { background: var(--bad); }
 .job-card h3 .badge { vertical-align: middle; margin-left: 6px; }
+
+/* notice popup carousel */
+.notice-popup .modal-head { gap: 10px; }
+.notice-popup .modal-head .badge { display: inline-flex; gap: 4px; align-items: center; }
+.notice-popup .modal-head [data-np-count] { margin-left: auto; }
+.np-progress { height: 3px; background: var(--surface-2); }
+.np-progress span { display: block; height: 100%; width: 0; background: var(--brand); transition: width .1s linear; }
+.np-img { width: 100%; border-radius: 10px; }
+.np-controls { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--line); }
+.np-dots { position: static; }
+.np-dots button { background: var(--line-strong); }
+.np-dots button.active { background: var(--brand); }
