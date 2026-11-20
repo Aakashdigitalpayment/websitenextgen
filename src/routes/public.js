@@ -53,11 +53,14 @@ router.use((req, res, next) => {
       db.many('SELECT id, title, title_np, notice_date, attachment, created_at FROM notices WHERE is_active = 1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 10'),
     ]);
     // popup_expires_at may hold a BS date typed by the office (nd.daysUntil reads both)
-    return { popups: popups.filter(p => { const d = nd.daysUntil(p.popup_expires_at); return d === null || d >= 0; }).slice(0, 5), latest };
+    const visitors = res.locals.settings.visitor_counter_enabled === '1'
+      ? await db.one(`SELECT COALESCE(sum(visitor_count), 0) AS total, COALESCE(max(visitor_count) FILTER (WHERE visit_date = (now() + interval '345 minutes')::date), 0) AS today FROM visitor_stats`) : null;
+    return { visitors, popups: popups.filter(p => { const d = nd.daysUntil(p.popup_expires_at); return d === null || d >= 0; }).slice(0, 5), latest };
   }).then(data => {
     // never interrupt an application form or the offline page
     res.locals.popups = /^\/(apply|offline|track|verify|attend)(\/|$)/.test(req.path) ? [] : data.popups;
     res.locals.latestNotices = data.latest;
+    if (res.locals.settings.visitor_counter_enabled === '1') res.locals.visitorStats = data.visitors;
     if (!req.member) return next();
     // unread badge on the login menu (one indexed count per page for signed-in members)
     return db.value('SELECT count(*) FROM member_notifications WHERE member_id = $1 AND is_read = 0', [req.member.id])
@@ -461,7 +464,9 @@ router.get('/page/by-id/:id', ah(async (req, res, next) => {
 router.get('/page/:slug', ah(async (req, res, next) => {
   const page = await db.one(`SELECT * FROM pages WHERE slug = $1 AND ${ACTIVE}`, [req.params.slug]);
   if (!page) return next();
-  res.render('public/page', { title: res.locals.f(page, 'title'), html: util.richText(res.locals.f(page, 'content')) });
+  const content = res.locals.f(page, 'content');
+  const tags = String(page.meta_keywords || '').split(/[,،]/).map(x => x.trim()).filter(Boolean).slice(0, 12);
+  res.render('public/page', { title: res.locals.f(page, 'title'), description: util.excerpt(content, 158), ogImage: page.featured_image || null, image: page.featured_image || '', tags, html: util.richText(content) });
 }));
 
 // ---------------------------------------------------------------- site search (PHP had a client-side page list only)

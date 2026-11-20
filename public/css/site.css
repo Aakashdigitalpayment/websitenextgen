@@ -101,3 +101,4 @@
 .search-dialog { border: 0; border-radius: 16px; padding: 18px; width: min(640px, calc(100vw - 32px)); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
 .search-dialog::backdrop { background: rgba(10, 12, 14, .55); }
 .grow { flex: 1; min-width: 0; }
+.footer-about p { margin: 0; } .footer-links a { white-space: nowrap; }

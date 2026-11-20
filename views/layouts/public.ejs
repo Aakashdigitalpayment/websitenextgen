@@ -90,13 +90,14 @@
       <div class="footer-grid">
         <div>
           <a class="brand" href="/">
-            <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>"<%- srcset(settings.logo, '160px') %> alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
+            <% if (siteLogo) { %><img src="<%= mediaUrl(siteLogo) %>"<%- srcset(siteLogo, '160px') %> alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
             <span class="brand-name"><%= siteName %></span>
           </a>
-          <p class="mt-2"><%= util.excerpt(settings.about_short, 200) %></p>
+          <% if (siteTagline) { %><p class="mt-2 small" style="font-weight:500"><%= siteTagline %></p><% } %>
+          <div class="mt-1 footer-about"><%- util.richText(util.excerpt(settings.about_short, 220)) %></div>
           <div class="socials">
-            <% [['facebook_url','facebook'],['youtube_url','youtube'],['instagram_url','instagram']].forEach(([k, ic]) => { if (settings[k]) { %>
-              <a href="<%= settings[k] %>" target="_blank" rel="noopener" aria-label="<%= ic %>"><%- icon(ic) %></a>
+            <% [['facebook_url','facebook'],['youtube_url','youtube'],['instagram_url','instagram'],['twitter_url','globe']].forEach(([k, ic]) => { if (/^https?:\/\/[^\s"'<>]+$/i.test(settings[k] || '')) { %>
+              <a href="<%= settings[k] %>" target="_blank" rel="noopener" aria-label="<%= k === 'twitter_url' ? 'X' : ic %>"><%- icon(ic) %></a>
             <% } }) %>
             <% if (settings.whatsapp_number) { %><a href="https://wa.me/<%= String(settings.whatsapp_number).replace(/\D/g,'') %>" target="_blank" rel="noopener" aria-label="WhatsApp"><%- icon('whatsapp') %></a><% } %>
           </div>
@@ -127,13 +128,18 @@
           <ul>
             <% if (settings.address) { %><li class="flex gap-1"><%- icon('pin') %><span><%= settings.address %></span></li><% } %>
             <% if (settings.phone) { %><li class="flex gap-1"><%- icon('phone') %><a href="tel:<%= settings.phone %>"><%= settings.phone %></a></li><% } %>
+            <% if (settings.mobile) { %><li class="flex gap-1"><%- icon('phone') %><a href="tel:<%= settings.mobile %>"><%= settings.mobile %></a></li><% } %>
             <% if (settings.email) { %><li class="flex gap-1"><%- icon('mail') %><a href="mailto:<%= settings.email %>"><%= settings.email %></a></li><% } %>
           </ul>
         </div>
       </div>
       <div class="footer-bottom">
         <span>© <%= num(new Date().getFullYear()) %> <%= siteName %>. <%= t('सर्वाधिकार सुरक्षित।', 'All rights reserved.') %></span>
-        <span><a href="/sitemap.xml">Sitemap</a> · <a href="/admin">Admin</a></span>
+        <span class="footer-links">
+          <a href="/page/privacy-policy"><%= t('गोपनीयता नीति', 'Privacy policy') %></a> · <a href="/page/terms-of-service"><%= t('सेवाका सर्तहरू', 'Terms of service') %></a> · <a href="/page/cookie-policy"><%= t('कुकी नीति', 'Cookie policy') %></a> · <a href="/sitemap.xml">Sitemap</a> · <a href="/admin">Admin</a>
+        </span>
+        <% if (locals.visitorStats) { %><span class="small faint"><%= t('कुल आगन्तुक ', 'Visitors ') + num(Number(visitorStats.total).toLocaleString('en-IN')) %> · <%= t('आज ', 'Today ') + num(visitorStats.today) %></span><% } %>
+        <% if (settings.supported_name) { %><span class="small faint"><%= t('सहयोग: ', 'Supported by ') %><% if (/^https:\/\/[^\s"'<>]+$/i.test(settings.supported_url || '')) { %><a href="<%= settings.supported_url %>" target="_blank" rel="noopener"><%= settings.supported_name %></a><% } else { %><%= settings.supported_name %><% } %></span><% } %>
       </div>
     </div>
   </footer>

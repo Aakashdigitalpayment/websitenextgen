@@ -335,6 +335,21 @@ test('header: login menu with external links, bell, ticker (can be turned off), 
   r = await get('/search?q=' + encodeURIComponent('100%_x'));
   assert.equal(r.status, 200, 'LIKE wildcards escaped');
   assert.equal((await get('/search.php?q=loan')).headers.location, '/search?q=loan');
+  // ---- P2-3 footer, P2-16 policy pages
+  await setting('supported_name', 'Coop Federation');
+  await setting('supported_url', 'https://fed.example.org');
+  await setting('visitor_counter_enabled', '1');
+  await clearCaches();
+  r = await get('/notices');
+  assert.ok(r.text.includes('/page/privacy-policy') && r.text.includes('/page/cookie-policy'));
+  assert.ok(r.text.includes('Coop Federation') && r.text.includes('https://fed.example.org'));
+  assert.match(r.text, /कुल आगन्तुक/);
+  r = await get('/page/privacy-policy');
+  assert.equal(r.status, 200);
+  assert.ok(r.text.includes('गोपनीयता') && !r.text.includes('आकाश'), 'seeded with neutral wording');
+  await inA(() => db.query("UPDATE pages SET featured_image = 'pages/p.jpg', meta_keywords = 'loan, saving' WHERE slug = 'cookie-policy'"));
+  r = await get('/page/cookie-policy');
+  assert.ok(r.text.includes('pages/p.jpg') && r.text.includes('#saving'));
   await setting('notice_ticker_enabled', '0');
   await clearCaches();
   r = await get('/notices');
