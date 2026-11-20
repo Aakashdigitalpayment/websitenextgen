@@ -131,16 +131,17 @@ function resolveStored(req, stored) {
 }
 
 /** Send a stored file with safe headers (images inline, everything else as a download). */
-function sendStored(req, res, next, stored) {
+function sendStored(req, res, next, stored, { viewOnly = false } = {}) {
   const file = resolveStored(req, stored);
   if (!file || !fs.existsSync(file)) return next();
-  const inline = /\.(jpe?g|png|webp|gif|pdf)$/i.test(file);
+  const inline = viewOnly || /\.(jpe?g|png|webp|gif|pdf)$/i.test(file);
   res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; plugin-types application/pdf" });
   // serve relative to the tenant folder so the dotfile check applies to the stored path only, not to an install
   // directory that happens to contain a dot segment (e.g. /home/x/.apps/site)
   const opts = { root: path.resolve(tenantDir(req)) };
   const rel = path.relative(opts.root, file);
   if (!inline) return res.download(rel, path.basename(file), opts);
+  if (viewOnly) res.set('Content-Disposition', 'inline'); // "view only" publications are never offered as a download
   res.sendFile(rel, opts);
 }
 

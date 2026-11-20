@@ -29,6 +29,9 @@ function normalizeAdDate(raw) {
   return Number.isNaN(Date.parse(v)) ? null : v;
 }
 
+/** A CSS colour from the type masters, or null (hex / rgb() / hsl() / var(--x) / named only: rendered into a style attribute). */
+const safeColor = c => (/^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([\d\s.,%]+\)|var\(--[a-z0-9-]+\)|[a-z]{3,20})$/i.test(String(c || '').trim()) ? String(c).trim() : null);
+
 /** Dynamic option lists (value, label_np, label_en) loaded per tenant. */
 const optionSources = {
   async branches() {
@@ -45,46 +48,50 @@ const optionSources = {
     return rows.length ? rows.map(r => [r.name, r.name_np || r.name, r.name]) :
       [['regular', 'नियमित बचत', 'Regular saving'], ['fixed', 'मुद्दती बचत', 'Fixed deposit'], ['child', 'बाल बचत', 'Child saving'], ['women', 'महिला बचत', 'Women saving']];
   },
-  async welfareTypes() {
-    const rows = await db.many('SELECT slug, name_np, name_en, form_profile, requires_document FROM welfare_claim_types WHERE is_active = 1 ORDER BY display_order, id');
-    return rows.length ? rows.map(r => [r.slug, r.name_np, r.name_en || r.name_np, { profile: r.form_profile || r.slug, requires_document: !!Number(r.requires_document) }]) :
+  // { admin: true }: every row (inactive / closed too) so the inbox, print and CSV show labels for old submissions
+  async welfareTypes({ admin } = {}) {
+    const rows = await db.many(`SELECT slug, name_np, name_en, form_profile, requires_document, color FROM welfare_claim_types ${admin ? '' : 'WHERE is_active = 1'} ORDER BY display_order, id`);
+    return rows.length ? rows.map(r => [r.slug, r.name_np, r.name_en || r.name_np, { profile: r.form_profile || r.slug, requires_document: !!Number(r.requires_document), color: safeColor(r.color) }]) :
       [['medical', 'उपचार सहयोग', 'Medical'], ['death', 'मृत्यु सहयोग', 'Death'], ['maternity', 'सुत्केरी सहयोग', 'Maternity'], ['insurance', 'बीमा दाबी', 'Insurance'], ['disaster', 'प्राकृतिक प्रकोप', 'Disaster'], ['other', 'अन्य', 'Other']].map(o => [...o, { profile: o[0] }]);
   },
-  async digitalTypes() {
-    const rows = await db.many('SELECT slug, name_np, name_en, requires_document FROM digital_service_types WHERE is_active = 1 ORDER BY display_order, id');
+  async digitalTypes({ admin } = {}) {
+    const rows = await db.many(`SELECT slug, name_np, name_en, requires_document FROM digital_service_types ${admin ? '' : 'WHERE is_active = 1'} ORDER BY display_order, id`);
     return rows.length ? rows.map(r => [r.slug, r.name_np, r.name_en || r.name_np, { requires_document: !!Number(r.requires_document) }]) :
       [['mobile_banking', 'मोबाइल बैंकिङ', 'Mobile banking'], ['statement', 'बैंक स्टेटमेन्ट', 'Statement'], ['qr', 'QR भुक्तानी', 'QR payment'], ['sms', 'SMS अलर्ट', 'SMS alert'], ['other', 'अन्य', 'Other']];
   },
-  async honorPrograms() {
-    const rows = await db.many(`SELECT id, title_np, title_en FROM honor_programs WHERE is_active = 1
+  async honorPrograms({ admin } = {}) {
+    const rows = await db.many(admin ? 'SELECT id, title_np, title_en FROM honor_programs ORDER BY id DESC' : `SELECT id, title_np, title_en FROM honor_programs WHERE is_active = 1
                                 AND (opens_at IS NULL OR opens_at <= now()) AND (closes_at IS NULL OR closes_at >= now()) ORDER BY id DESC`);
     return rows.map(r => [String(r.id), r.title_np, r.title_en || r.title_np]);
   },
-  async honorCategories() {
+  async honorCategories({ admin } = {}) {
     // per-programme categories (honor_program_categories): meta.programs lists the programmes that offer it
     const rows = await db.many(`SELECT c.id, c.name_np, c.name_en, c.requires_nominee, c.requires_document,
                                        COALESCE(array_agg(pc.program_id) FILTER (WHERE pc.program_id IS NOT NULL), '{}') AS programs
                                 FROM honor_categories c LEFT JOIN honor_program_categories pc ON pc.category_id = c.id
-                                WHERE c.is_active = 1 GROUP BY c.id ORDER BY c.display_order, c.id`);
+                                ${admin ? '' : 'WHERE c.is_active = 1'} GROUP BY c.id ORDER BY c.display_order, c.id`);
     return rows.map(r => [String(r.id), r.name_np, r.name_en || r.name_np, { requires_nominee: !!Number(r.requires_nominee), requires_document: !!Number(r.requires_document), programs: r.programs.map(String) }]);
   },
-  async careers() {
-    const rows = await db.many(`SELECT id, title, title_np FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND (deadline IS NULL OR deadline >= CURRENT_DATE) ORDER BY id DESC`);
+  async careers({ admin } = {}) {
+    const rows = await db.many(admin ? 'SELECT id, title, title_np FROM careers ORDER BY id DESC LIMIT 500'
+      : `SELECT id, title, title_np FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND (deadline IS NULL OR deadline >= CURRENT_DATE) ORDER BY id DESC`);
     return rows.map(r => [String(r.id), r.title_np || r.title, r.title || r.title_np]);
   },
   async districts() { return DISTRICTS.map(d => [d, d, d]); },
-  async auctions() {
-    const rows = await db.many(`SELECT id, title, title_en FROM auction_notices WHERE is_active = 1 AND status IN ('upcoming','ongoing') ORDER BY auction_date NULLS LAST, id DESC`);
+  // public form: open auctions only; admin: all of them, so bids on completed/cancelled auctions keep their title
+  async auctions({ admin } = {}) {
+    const rows = await db.many(admin ? 'SELECT id, title, title_en FROM auction_notices ORDER BY id DESC LIMIT 1000'
+      : `SELECT id, title, title_en FROM auction_notices WHERE is_active = 1 AND status IN ('upcoming','ongoing') ORDER BY auction_date NULLS LAST, id DESC`);
     return rows.map(r => [String(r.id), r.title, r.title_en || r.title]);
   },
 };
 
 /** Resolve select/radio options for every field of a module. */
-async function resolveOptions(mod) {
+async function resolveOptions(mod, { admin = false } = {}) {
   const out = {};
   for (const f of mod.fields) {
     if (f.options) out[f.name] = f.options;
-    else if (f.optionsFrom) out[f.name] = await optionSources[f.optionsFrom]();
+    else if (f.optionsFrom) out[f.name] = await optionSources[f.optionsFrom]({ admin });
   }
   return out;
 }
@@ -312,7 +319,7 @@ async function statusesFor(table) {
 }
 
 const STATUS_LABELS = {
-  pending: ['प्रक्रियामा पर्खँदै', 'Pending'], processing: ['प्रक्रियामा', 'Processing'], in_progress: ['काम हुँदै', 'In progress'],
+  pending: ['प्रक्रियामा पर्खँदै', 'Pending'], paid: ['भुक्तानी भयो', 'Paid'], processing: ['प्रक्रियामा', 'Processing'], in_progress: ['काम हुँदै', 'In progress'],
   approved: ['स्वीकृत', 'Approved'], rejected: ['अस्वीकृत', 'Rejected'], completed: ['सम्पन्न', 'Completed'], disbursed: ['ऋण प्रवाह', 'Disbursed'],
   confirmed: ['निश्चित', 'Confirmed'], cancelled: ['रद्द', 'Cancelled'], resolved: ['समाधान', 'Resolved'], closed: ['बन्द', 'Closed'],
   reviewed: ['हेरियो', 'Reviewed'], shortlisted: ['छनोट सूचीमा', 'Shortlisted'], interviewed: ['अन्तर्वार्ता', 'Interviewed'],
@@ -321,4 +328,4 @@ const STATUS_LABELS = {
 };
 const statusLabel = (s, lang = 'np') => (STATUS_LABELS[s] ? STATUS_LABELS[s][lang === 'en' ? 1 : 0] : s);
 
-module.exports = { resolveOptions, validate, insertSubmission, statusesFor, statusLabel, optionSources, rowToValues, displayData, composeAddress, addressValid, normalizeAdDate, DISTRICTS };
+module.exports = { safeColor, resolveOptions, validate, insertSubmission, statusesFor, statusLabel, optionSources, rowToValues, displayData, composeAddress, addressValid, normalizeAdDate, DISTRICTS };

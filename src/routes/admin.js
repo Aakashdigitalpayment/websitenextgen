@@ -84,6 +84,7 @@ router.post('/logout', ah(async (req, res) => {
 }));
 
 router.use(requireAdmin('editor'));
+router.use(require('../lib/legacy-admin-urls').adminRedirects); // PHP-era admin/<x>.php links (old SMS / emails / bookmarks)
 
 // a temporary / reset password must be replaced before anything else
 router.use((req, res, next) => {
@@ -288,7 +289,12 @@ router.post('/r/:resource/bulk', getResource, ah(async (req, res) => {
     flash(req, 'error', res.locals.t('कुनै रेकर्ड वा कार्य छानिएन।', 'Select records and an action.'));
     return res.redirect(`/admin/r/${r.key}`);
   }
-  if (action === 'delete') {
+  if (action === 'delete' && (r.beforeDelete || r.afterDelete)) {
+    // guarded resources: each row goes through the same rules as a single delete
+    const tally = { deleted: 0, deactivated: 0, blocked: 0 };
+    for (const id of ids) tally[(await guardedDelete(req, r, id, cols)).outcome]++;
+    if (tally.deactivated || tally.blocked) flash(req, 'warn', res.locals.t(`${tally.deactivated} निष्क्रिय, ${tally.blocked} रोकियो (प्रयोगमा छन्)।`, `${tally.deactivated} deactivated and ${tally.blocked} kept because they are in use.`));
+  } else if (action === 'delete') {
     if (r.softDelete && cols.has('deleted_at')) await db.query(`UPDATE ${r.table} SET deleted_at = now() WHERE id = ANY($1::int[])`, [ids]);
     else for (const row of await db.many(`DELETE FROM ${r.table} WHERE id = ANY($1::int[]) RETURNING *`, [ids])) for (const f of r.fileFields) remove(req, row[f.name]);
   } else if (cols.has('is_active')) {
@@ -313,20 +319,37 @@ router.post('/r/:resource/:id/toggle', getResource, ah(async (req, res) => {
   res.redirect(back);
 }));
 
+/**
+ * Delete one resource row through its rules. beforeDelete(id, {db}) may return [np, en] (block) or
+ * { deactivate: true, message: [np, en] } (data references the row: set is_active = 0 instead, like the PHP app).
+ * afterDelete(id, {db}) removes dependent rows in the same transaction as the delete.
+ */
+async function guardedDelete(req, r, id, cols) {
+  const verdict = r.beforeDelete ? await r.beforeDelete(id, { db }) : null;
+  if (verdict && verdict.deactivate && cols.has('is_active')) {
+    await db.query(`UPDATE ${r.table} SET is_active = 0 WHERE id = $1`, [id]);
+    await auth.audit(req, 'deactivate', r.table, id, `${r.title[1]} #${id} (in use, not deleted)`);
+    return { outcome: 'deactivated', message: verdict.message };
+  }
+  if (verdict) return { outcome: 'blocked', message: Array.isArray(verdict) ? verdict : verdict.message };
+  let row = null;
+  await db.transaction(async () => {
+    if (r.softDelete && cols.has('deleted_at')) return db.query(`UPDATE ${r.table} SET deleted_at = now() WHERE id = $1`, [id]);
+    if (r.afterDelete) await r.afterDelete(id, { db });
+    row = await db.one(`DELETE FROM ${r.table} WHERE id = $1 RETURNING *`, [id]);
+  });
+  if (row) for (const f of r.fileFields) remove(req, row[f.name]);
+  await auth.audit(req, 'delete', r.table, id, `${r.title[1]} #${id}`);
+  return { outcome: 'deleted' };
+}
+
 router.post('/r/:resource/:id/delete', getResource, ah(async (req, res) => {
   const r = req.resource;
-  const id = util.int(req.params.id);
-  const blocked = r.beforeDelete ? await r.beforeDelete(id, { db }) : null;
-  if (blocked) { flash(req, 'error', res.locals.t(...blocked)); return res.redirect(`/admin/r/${r.key}`); }
-  const cols = await db.columns(r.table);
-  if (r.softDelete && cols.has('deleted_at')) await db.query(`UPDATE ${r.table} SET deleted_at = now() WHERE id = $1`, [id]);
-  else {
-    const row = await db.one(`DELETE FROM ${r.table} WHERE id = $1 RETURNING *`, [id]);
-    if (row) for (const f of r.fileFields) remove(req, row[f.name]);
-  }
-  await auth.audit(req, 'delete', r.table, id, `${r.title[1]} #${id}`);
+  const { outcome, message } = await guardedDelete(req, r, util.int(req.params.id), await db.columns(r.table));
   navigation.invalidate();
-  flash(req, 'success', res.locals.t('हटाइयो।', 'Deleted.'));
+  if (outcome === 'blocked') flash(req, 'error', res.locals.t(...message));
+  else if (outcome === 'deactivated') flash(req, 'warn', res.locals.t(...(message || ['प्रयोगमा भएकाले निष्क्रिय गरियो।', 'In use, so it was deactivated instead of deleted.'])));
+  else flash(req, 'success', res.locals.t('हटाइयो।', 'Deleted.'));
   res.redirect(`/admin/r/${r.key}`);
 }));
 

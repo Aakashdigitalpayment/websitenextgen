@@ -19,6 +19,7 @@
     "demo:seed": "node scripts/demo-seed.js",
     "migrate:site": "node scripts/migrate-site.js",
     "images:variants": "node scripts/image-variants.js",
+    "pii": "node scripts/pii.js",
     "yeti": "bash deploy/yeti/remote.sh"
   },
   "dependencies": {

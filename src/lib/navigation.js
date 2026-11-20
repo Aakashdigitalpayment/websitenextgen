@@ -10,10 +10,12 @@ async function build() {
   const hit = cache.get(schema);
   if (hit && Date.now() - hit.at < TTL) return hit.data;
 
-  const [committees, pages, teamMenus] = await Promise.all([
+  const [committees, pages, teamMenus, electionNav] = await Promise.all([
     db.many('SELECT id, name, name_np FROM committee_types WHERE is_active = 1 AND show_in_navbar = 1 ORDER BY display_order, id'),
     db.many(`SELECT slug, title, title_np, title_en, menu_position FROM pages WHERE is_active = 1 AND show_in_menu = 1 ORDER BY menu_order, id`),
     require('./team').navCategories().catch(() => []),
+    // legacy header.php: the Elections item only while a published cycle is marked "show in navbar"
+    db.value('SELECT 1 FROM election_cycles WHERE is_published = 1 AND show_in_navbar = 1 LIMIT 1').catch(() => null),
   ]);
   const pageLinks = pos => pages.filter(p => (p.menu_position || 'more') === pos)
     .map(p => ({ href: '/page/' + encodeURIComponent(p.slug), label: [p.title_np || p.title, p.title_en || p.title] }));
@@ -59,7 +61,7 @@ async function build() {
       { href: '/gallery', label: ['ग्यालरी', 'Gallery'] },
       { href: '/careers', label: ['रोजगारी', 'Careers'] },
       { href: '/auctions', label: ['लिलाम', 'Auctions'] },
-      { href: '/elections', label: ['निर्वाचन', 'Elections'] },
+      ...(electionNav ? [{ href: '/elections', label: ['निर्वाचन', 'Elections'] }] : []),
       { href: '/programs', label: ['कार्यक्रम', 'Programmes'] },
       { href: '/calendar', label: ['सहकारी पात्रो', 'Calendar'] },
       ...pageLinks('more'),

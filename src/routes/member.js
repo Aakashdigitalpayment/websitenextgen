@@ -286,8 +286,9 @@ router.post('/attend', ah(async (req, res) => {
     flash(req, 'error', res.locals.t(...reason)); return res.redirect(back);
   }
   if (Number(found.program.instant_attendance)) {
-    const r = await att.record({ member: req.member, program: found.program, occurrence: found.occurrence, method: 'QR_SCAN', source: 'member_qr', ip: req.ip });
-    flash(req, r.duplicate ? 'info' : 'success', r.duplicate ? res.locals.t('तपाईं पहिले नै उपस्थित हुनुहुन्छ।', 'You are already checked in.') : res.locals.t('उपस्थिति दर्ता भयो। धन्यवाद!', 'You are checked in. Thank you!'));
+    const r = await att.record({ member: req.member, program: found.program, occurrence: found.occurrence, method: 'QR_SCAN', source: 'member_qr', ip: req.ip, checkEligible: true });
+    if (r.ineligible) flash(req, 'error', res.locals.t(r.ineligible[0], r.ineligible[1]));
+    else flash(req, r.duplicate ? 'info' : 'success', r.duplicate ?res.locals.t('तपाईं पहिले नै उपस्थित हुनुहुन्छ।', 'You are already checked in.') : res.locals.t('उपस्थिति दर्ता भयो। धन्यवाद!', 'You are checked in. Thank you!'));
   } else {
     const exists = await db.value("SELECT 1 FROM member_program_attendance_requests WHERE member_id = $1 AND program_id = $2 AND COALESCE(occurrence_id, 0) = $3 AND status = 'pending'", [req.member.id, found.program.id, found.occurrence?.id || 0]);
     if (!exists && !(await att.existing(req.member.id, found.program.id, found.occurrence?.id))) {

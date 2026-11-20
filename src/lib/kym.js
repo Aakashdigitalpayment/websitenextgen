@@ -310,7 +310,56 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
   return { row: saved, updated: true };
 }
 
+/**
+ * memberSsotCompareSharedContact: shared fields that differ between a member row and its KYM
+ * (phone compared as normalised mobile). Returns [{ field: [np, en], member, kyc }].
+ */
+const SHARED_PAIRS = [['name', 'full_name_en', ['नाम (EN)', 'Name (EN)']], ['name_np', 'full_name', ['नाम (नेपाली)', 'Name (Nepali)']], ['phone', 'mobile', ['मोबाइल', 'Mobile']],
+  ['email', 'email', ['इमेल', 'Email']], ['address', 'permanent_address', ['ठेगाना', 'Address']], ['gender', 'gender', ['लिङ्ग', 'Gender']], ['dob', 'dob_ad', ['जन्म मिति', 'Date of birth']]];
+function compareShared(member, kyc) {
+  if (!member || !kyc) return [];
+  const out = [];
+  for (const [mc, kc, label] of SHARED_PAIRS) {
+    let mv = String(member[mc] ?? '').trim(), kv = String(kyc[kc] ?? '').trim();
+    if (mc === 'phone') { mv = normalizeMobile(mv); kv = normalizeMobile(kv); }
+    if (mc === 'email') { mv = mv.toLowerCase(); kv = kv.toLowerCase(); }
+    if (mc === 'dob') { mv = mv.slice(0, 10); kv = kv.slice(0, 10); }
+    if (!mv && !kv) continue;
+    if (mv !== kv) out.push({ field: label, member: mv || '—', kyc: kv || '—' });
+  }
+  return out;
+}
+
+/**
+ * memberSsotEnsureKycStubFromMember: the member's KYM, or a new `incomplete` stub built from the member row;
+ * members.kyc_application_id is linked either way. `extra` (father_name, citizenship_no …) only fills empty KYM fields.
+ * Returns { id, created } or null when the member has no Member ID.
+ */
+async function ensureStubFromMember(memberId, extra = {}) {
+  const m = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [memberId]);
+  const sid = m && normalizeId(m.sadasyata_number);
+  if (!sid) return null;
+  let k = await loadLinkedKyc(m);
+  let created = false;
+  if (!k) {
+    const row = {
+      tracking_id: require('./util').trackingId('KY'), status: 'incomplete', member_id: sid,
+      full_name: m.name_np || m.name, full_name_en: m.name || '', mobile: normalizeMobile(m.phone) || '', email: m.email || null,
+      permanent_address: m.address || null, gender: ['male', 'female', 'other'].includes(m.gender) ? m.gender : null, dob_ad: m.dob || null, created_at: new Date(),
+    };
+    k = await db.insert('kyc_applications', await db.pick('kyc_applications', row));
+    created = true;
+  }
+  if (Number(m.kyc_application_id) !== Number(k.id)) await linkMember(m.id, k.id);
+  const fill = Object.fromEntries(Object.entries(extra).filter(([key, v]) => v != null && String(v).trim() !== '' && String(k[key] ?? '').trim() === ''));
+  if (Object.keys(fill).length) {
+    await db.update('kyc_applications', k.id, await db.pick('kyc_applications', pii.encryptFields('kyc_applications', { ...fill, updated_at: new Date() }, db.currentSchema())));
+  }
+  return { id: k.id, created };
+}
+
 module.exports = {
+  compareShared, ensureStubFromMember,
   normalizeId, normalizeMobile, phonesMatch, findMemberBySadasyata, findKycByMemberId, loadLinkedKyc, requireMemberIdAndMobile,
   mergeFillEmpty, upsertMemberFromKyc, afterKycWrite, issueIdCard, autoIssueIdCard, applyStatus, refreshReviewCycle, markReviewed,
   submit, DOC_KEYS, REVIEW_YEARS,

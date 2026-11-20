@@ -18,11 +18,7 @@ const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(n
 const fmt = v => (v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000).toISOString().slice(0, 16).replace('T', ' ') : '');
 const en = l => l[1];
 
-/** CSV with our own header row; cells are formula-safe (util.csvCell). */
-function sendCsv(res, filename, header, rows) {
-  const body = '﻿' + [header, ...rows].map(r => r.map(util.csvCell).join(',')).join('\r\n');
-  res.type('text/csv; charset=utf-8').attachment(filename).send(body);
-}
+const sendCsv = util.sendCsv; // CSV with our own header row; cells are formula-safe
 
 const REPORTS = [
   ['consolidated', 'समेकित', 'Consolidated'], ['breakdown', 'विश्लेषण', 'Breakdown'], ['location', 'स्थान अनुसार', 'By location'],

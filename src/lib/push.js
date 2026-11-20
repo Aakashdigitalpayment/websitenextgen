@@ -43,6 +43,12 @@ async function sendToAll(payload) {
   return sendTo(subs, payload);
 }
 
+async function sendToMembers(memberIds, payload) {
+  if (!memberIds.length) return { sent: 0, failed: 0 };
+  const subs = await db.many('SELECT * FROM member_push_subscriptions WHERE member_id = ANY($1::int[])', [memberIds]);
+  return sendTo(subs, payload);
+}
+
 // Only real browser push services may be used as endpoints (no SSRF to internal hosts)
 const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^[a-z0-9-]+\.notify\.windows\.com$/, /^web\.push\.apple\.com$/, /^[a-z0-9-]+\.push\.apple\.com$/];
 const MAX_SUBS_PER_MEMBER = 5;
@@ -71,4 +77,4 @@ async function unsubscribe(memberId, endpoint) {
   await db.query('DELETE FROM member_push_subscriptions WHERE member_id = $1 AND endpoint = $2', [memberId, String(endpoint || '')]);
 }
 
-module.exports = { allowedEndpoint, keys, sendToMember, sendToAll, subscribe, unsubscribe };
+module.exports = { allowedEndpoint, keys, sendToMember, sendToMembers, sendToAll, subscribe, unsubscribe };

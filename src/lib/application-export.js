@@ -72,7 +72,7 @@ async function table(mod, rows) {
     }
     return { header: [...KYC_BASE.map(x => x[0]), ...Object.values(AML_LABELS)], values: rows.map(r => kycRow(r, savings)) };
   }
-  const options = await forms.resolveOptions(mod);
+  const options = await forms.resolveOptions(mod, { admin: true });
   const fields = mod.fields.filter(f => !['file', 'image', 'heading', 'family', 'moneyitems', 'address'].includes(f.type) && f.store !== 'none');
   const cols = ['tracking_id', ...fields.map(f => f.name), 'status', mod.remarksCol, mod.noteCol, 'created_at'].filter((c, i, a) => c && a.indexOf(c) === i && (!rows[0] || c in rows[0]));
   const label = c => { const f = fields.find(x => x.name === c); return f ? f.label[1] : c; };

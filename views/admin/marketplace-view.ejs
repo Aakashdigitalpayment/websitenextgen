@@ -1,0 +1,30 @@
+<% const dt = v => v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000).toISOString().slice(11, 16) : ''; %>
+<div class="content-head">
+  <div><div class="crumbs"><a href="/admin/marketplace?status=<%= l.status %>"><%= t('सदस्य बजार', 'Member marketplace') %></a></div><h1><%= l.title %></h1>
+    <div class="small muted"><span class="badge"><%= statusLabel(l.status) %></span> · <%= l.listing_type === 'skill' ? t('सीप', 'Skill') : t('उत्पादन', 'Product') %> · <%= catLabel(l.category) %> · #<%= l.id %></div></div>
+  <% if (l.status === 'approved') { %><a class="btn btn-outline btn-sm" href="/marketplace/<%= l.id %>" target="_blank" rel="noopener"><%- icon('globe') %><%= t('सार्वजनिक पृष्ठ', 'Public page') %></a><% } %>
+</div>
+<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+  <div class="stack">
+    <div class="card">
+      <% if (l.image) { %><a href="<%= mediaUrl(l.image) %>" target="_blank" rel="noopener"><img src="<%= mediaUrl(l.image) %>" alt="" style="max-height:260px;border-radius:10px;border:1px solid var(--line)"></a><% } %>
+      <div class="kv mt-2">
+        <div><%= t('सदस्य', 'Member') %></div><div><% if (l.member_id) { %><a href="/admin/members/<%= l.member_id %>"><%= l.member_name_np || l.member_name || '#' + l.member_id %></a> (<%= l.sadasyata_number || '' %>)<% } %></div>
+        <div><%= t('सम्पर्क', 'Contact') %></div><div><%= l.contact_name || '' %> <% if (l.contact_phone) { %><a href="tel:<%= l.contact_phone %>"><%= l.contact_phone %></a><% } %></div>
+        <div><%= t('स्थान', 'Location') %></div><div><%= l.location || '—' %></div>
+        <div><%= t('मूल्य', 'Price') %></div><div><%= l.price ? 'रु. ' + money(l.price) + (l.unit ? ' / ' + l.unit : '') : '—' %> <span class="faint"><%= l.price_note || '' %></span></div>
+        <% if (l.quantity) { %><div><%= t('परिमाण', 'Quantity') %></div><div><%= l.quantity %></div><% } %>
+        <% if (l.experience_years != null) { %><div><%= t('अनुभव (वर्ष)', 'Experience (years)') %></div><div><%= num(l.experience_years) %></div><% } %>
+        <div><%= t('उपलब्धता', 'Availability') %></div><div><%= l.available_from ? bsDate(l.available_from) : '' %><%= l.available_until ? ' → ' + bsDate(l.available_until) + ' ' + dt(l.available_until) : '' %><%= l.available_time_from ? ' · ' + String(l.available_time_from).slice(0, 5) + '–' + String(l.available_time_to || '').slice(0, 5) : '' %></div>
+        <div><%= t('दर्ता', 'Created') %></div><div><%= bsDate(l.created_at) %><%= l.approved_at ? ' · ' + t('स्वीकृत', 'approved') + ' ' + bsDate(l.approved_at) : '' %></div>
+        <% if (l.admin_note) { %><div><%= t('टिप्पणी', 'Note') %></div><div><%= l.admin_note %></div><% } %>
+      </div>
+      <% if (l.description) { %><p class="mt-2 mb-0" style="white-space:pre-wrap"><%= l.description %></p><% } %>
+    </div>
+    <div class="card"><h3><%= t('सोधपुछ', 'Inquiries') %> (<%= num(inquiries.length) %>)</h3>
+      <% if (!inquiries.length) { %><p class="small muted"><%= t('अहिलेसम्म कुनै सोधपुछ छैन।', 'No inquiries yet.') %></p><% } else { %>
+      <ul class="list small"><% inquiries.forEach(i => { %><li class="list-item" style="flex-direction:column;align-items:flex-start;gap:2px"><div><strong style="font-weight:500"><%= i.inquirer_name %></strong> · <a href="tel:<%= i.inquirer_phone %>"><%= i.inquirer_phone %></a> <span class="faint"><%= bsDate(i.created_at) %> <%= dt(i.created_at) %></span></div><% if (i.message) { %><div style="white-space:pre-wrap"><%= i.message %></div><% } %></li><% }) %></ul><% } %>
+    </div>
+  </div>
+  <div class="card stack"><%- include('../partials/marketplace-actions', { l, back: 'view' }) %></div>
+</div>

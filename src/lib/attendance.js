@@ -40,8 +40,26 @@ async function existing(memberId, programId, occurrenceId) {
   return db.one("SELECT * FROM member_program_attendance WHERE member_id = $1 AND attendance_scope_key = $2 AND attendance_status = 'VALID'", [memberId, scopeKey(programId, occurrenceId)]);
 }
 
-/** Record a VALID check-in. Returns { row } or { duplicate } */
-async function record({ member, program, occurrence = null, method, source, ip = null, staffAdminId = null, deskId = null, note = null }) {
+/**
+ * programValidateMemberEligible: a Member ID, active, and approval_status '' / approved / active / confirmed / renewal_pending.
+ * Returns null when eligible, else [np, en, code].
+ */
+const ELIGIBLE_STATUSES = ['', 'approved', 'active', 'confirmed', 'renewal_pending'];
+function eligibility(member) {
+  if (!member) return ['सदस्य फेला परेन।', 'Member not found.', 'INVALID_MEMBER'];
+  if (!String(member.sadasyata_number || '').trim()) return ['Member ID (सदस्यता नं.) अनुपलब्ध छ।', 'Member ID is missing on record.', 'INVALID_MEMBER'];
+  if (Number(member.is_active) !== 1 || member.deleted_at) return ['सदस्य सक्रिय छैन।', 'Member is not active.', 'INELIGIBLE'];
+  if (!ELIGIBLE_STATUSES.includes(String(member.approval_status ?? '').trim().toLowerCase())) return ['सदस्य अनुमोदित छैन।', 'Member is not approved.', 'INELIGIBLE'];
+  return null;
+}
+
+/** Record a VALID check-in. Returns { row }, { duplicate } or, with checkEligible, { ineligible: [np, en, code] }. */
+async function record({ member, program, occurrence = null, method, source, ip = null, staffAdminId = null, deskId = null, note = null, checkEligible = false }) {
+  const bad = checkEligible ? eligibility(member) : null;
+  if (bad) {
+    await logAttempt(member.id, program, occurrence, method, bad[2], bad[1], null, ip, staffAdminId, deskId);
+    return { ineligible: bad };
+  }
   const prev = await existing(member.id, program.id, occurrence?.id);
   if (prev) {
     await logAttempt(member.id, program, occurrence, method, 'DUPLICATE_BLOCKED', 'already attended', prev.id, ip, staffAdminId, deskId);
@@ -90,4 +108,4 @@ async function findMember(q) {
   return db.one(`SELECT * FROM members WHERE deleted_at IS NULL AND is_active = 1 AND (sadasyata_number = $1 OR member_card_no = $1 OR phone = $1) ORDER BY id LIMIT 1`, [v]);
 }
 
-module.exports = { logAttempt, newToken, scopeKey, byToken, closedReason, record, voidAttendance, findMember, existing };
+module.exports = { eligibility, logAttempt, newToken, scopeKey, byToken, closedReason, record, voidAttendance, findMember, existing };
