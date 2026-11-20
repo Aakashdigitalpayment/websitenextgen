@@ -330,6 +330,29 @@ router.get('/r/:resource', getResource, ah(async (req, res) => {
   res.render('admin/resource-list', { title: res.locals.t(...r.title), r, fields, listFields: fields.filter(f => f.list), rows, pg, q, options, hasActive: cols.has('is_active'), filters, fvals, active, counts });
 }));
 
+// trash for soft-deleted rows: restore (anyone who may edit), purge for good (superadmin; files removed too)
+router.get('/r/:resource/trash', getResource, ah(async (req, res, next) => {
+  const r = req.resource;
+  if (!r.softDelete || !(await db.columns(r.table)).has('deleted_at')) return next();
+  const rows = await db.many(`SELECT * FROM ${r.table} WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 200`);
+  res.render('admin/resource-trash', { title: res.locals.t(...r.title), r, rows, label: (await resourceFields(r)).find(f => f.list && !['image', 'bool'].includes(f.type)) || { name: 'id' }, canPurge: auth.roleLevel(req.admin.role) >= 4 });
+}));
+router.post('/r/:resource/:id/restore', getResource, ah(async (req, res) => {
+  const r = req.resource, id = util.int(req.params.id);
+  if (r.softDelete) await db.query(`UPDATE ${r.table} SET deleted_at = NULL WHERE id = $1`, [id]);
+  await auth.audit(req, 'restore', r.table, id, `${r.title[1]} #${id} restored`);
+  navigation.invalidate();
+  flash(req, 'success', res.locals.t('फिर्ता ल्याइयो।', 'Restored.'));
+  res.redirect(`/admin/r/${r.key}/trash`);
+}));
+router.post('/r/:resource/:id/purge', getResource, requireAdmin('superadmin'), ah(async (req, res) => {
+  const r = req.resource, id = util.int(req.params.id);
+  const row = r.softDelete ? await db.one(`DELETE FROM ${r.table} WHERE id = $1 AND deleted_at IS NOT NULL RETURNING *`, [id]) : null;
+  if (row) { removeRowFiles(req, r, row); await auth.audit(req, 'purge', r.table, id, `${r.title[1]} #${id} deleted permanently`); }
+  flash(req, row ? 'success' : 'error', row ? res.locals.t('स्थायी रूपमा हटाइयो।', 'Deleted permanently.') : res.locals.t('भेटिएन।', 'Not found.'));
+  res.redirect(`/admin/r/${r.key}/trash`);
+}));
+
 router.get('/r/:resource/new', getResource, ah(async (req, res) => {
   const fields = await resourceFields(req.resource);
   const values = Object.fromEntries(fields.filter(f => f.default !== undefined).map(f => [f.name, f.default]));

@@ -1,6 +1,6 @@
 <div class="content-head">
   <h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
-  <div class="flex gap-1 wrap"><% (r.links || []).forEach(([href, ic, np, en]) => { %><a class="btn btn-outline" href="<%= href %>"><%- icon(ic) %><%= t(np, en) %></a><% }) %><a class="btn btn-primary" href="/admin/r/<%= r.key %>/new"><%- icon('plus') %><%= t('नयाँ थप्नुहोस्', 'Add new') %></a></div>
+  <div class="flex gap-1 wrap"><% (r.links || []).forEach(([href, ic, np, en]) => { %><a class="btn btn-outline" href="<%= href %>"><%- icon(ic) %><%= t(np, en) %></a><% }) %><% if (r.softDelete) { %><a class="btn btn-ghost" href="/admin/r/<%= r.key %>/trash"><%- icon('trash') %><%= t('हटाइएका', 'Trash') %></a><% } %><a class="btn btn-primary" href="/admin/r/<%= r.key %>/new"><%- icon('plus') %><%= t('नयाँ थप्नुहोस्', 'Add new') %></a></div>
 </div>
 <% const fl_ = locals.filters || []; const fv = locals.fvals || {}; const keep = extra => { const u = new URLSearchParams(); if (q) u.set('q', q); Object.entries(fv).forEach(([k, v]) => u.set('f_' + k, v)); Object.entries(extra).forEach(([k, v]) => (v === '' ? u.delete(k) : u.set(k, v))); const x = u.toString(); return x ? '?' + x : ''; }; %>
 <% if (locals.counts) { %><div class="list-tabs" role="tablist">

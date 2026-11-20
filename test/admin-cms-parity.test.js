@@ -526,3 +526,35 @@ test('public site: favicon, footer "supported by" credit (https only), history o
   r = await c.get('/about');
   assert.doesNotMatch(r.text, /javascript:alert/);
 });
+
+// ---------------------------------------------------------------- P3: trash, PWA icons
+test('trash: soft-deleted rows can be restored; superadmin purges for good', async () => {
+  const id = await inA(() => db.value("INSERT INTO news (title, title_np, is_active, deleted_at) VALUES ('Gone', 'गयो', 1, now()) RETURNING id"));
+  let r = await admin.get('/admin/r/news/trash');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /गयो/);
+  await admin.form(`/admin/r/news/${id}/restore`, {}, '/admin/r/news/trash');
+  assert.equal(await inA(() => db.value('SELECT deleted_at FROM news WHERE id = $1', [id])), null);
+  await inA(() => db.query('UPDATE news SET deleted_at = now() WHERE id = $1', [id]));
+  const ed = client();
+  await ed.form('/admin/login', { username: 'admin2', password: PW }, '/admin/login');
+  r = await ed.form(`/admin/r/news/${id}/purge`, {}, '/admin/r/news/trash');
+  assert.equal(r.status, 403);
+  await admin.form(`/admin/r/news/${id}/purge`, {}, '/admin/r/news/trash');
+  assert.equal(Number(await inA(() => db.value('SELECT count(*) FROM news WHERE id = $1', [id]))), 0);
+});
+
+test('PWA: manifest lists 192/512 PNG icons rendered from the favicon', async () => {
+  const dir = path.join(config.uploadDir, A, 'settings');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'fav.png'), await pngBuf());
+  await setSetting('site_favicon', 'settings/fav.png');
+  const c = client();
+  const m = JSON.parse((await c.get('/manifest.webmanifest')).text);
+  assert.deepEqual(m.icons.map(i => i.sizes), ['192x192', '512x512']);
+  const r = await c.get('/pwa-icon-192.png').buffer(true);
+  assert.equal(r.status, 200);
+  const meta = await require('sharp')(r.body).metadata();
+  assert.deepEqual([meta.width, meta.height, meta.format], [192, 192, 'png']);
+  assert.equal((await c.get('/pwa-icon-300.png')).status, 404);
+});
