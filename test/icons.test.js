@@ -71,7 +71,7 @@ test('legacy Font Awesome values from the PHP site render as Lucide', () => {
     'fas fa-piggy-bank': 'piggy-bank', 'fa fa-users': 'users', 'fa-solid fa-star': 'star', 'far fa-file-pdf': 'file-text',
     'fas fa-hand-holding-usd': 'hand-coins', 'fas fa-sitemap': 'network', 'fas fa-briefcase': 'briefcase', 'fab fa-facebook-f': 'facebook',
     'fas fa-map-marker-alt': 'map-pin', 'fas fa-mobile-alt fa-2x': 'smartphone', 'fa-envelope': 'mail', 'fas fa-bolt': 'zap',
-    'fas fa-university': 'landmark', 'fas fa-home': 'house', 'fas fa-exclamation-triangle': 'triangle-alert', 'fas fa-cogs': 'settings',
+    'fas fa-university': 'landmark', 'fas fa-home': 'house', 'fas fa-exclamation-triangle': 'triangle-alert', 'fas fa-cogs': 'settings-2', 'fas fa-gauge-high': 'layout-dashboard',
     'FAS FA-USERS': 'users', 'lucide-phone': 'phone',
   };
   for (const [v, want] of Object.entries(cases)) {
