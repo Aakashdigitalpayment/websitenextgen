@@ -21,6 +21,8 @@ Status: **COVERED** = parity or better · **PARTIAL** = exists, named logic miss
 **Totals (rows):** COVERED 210 · PARTIAL 29 · MISSING 1 · NOT-NEEDED 24 (+1 mixed core row). Root 76 rows (59/14/0/3), member/ 35 (29/5/0/1), core 10, config.php groups 28 (25/1/0/2), includes 101 files / 946 functions (80/9/0/12 files), assets/js 15 (11/0/1/3).
 Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs, SM-3 gated upload folders left public after migration (all P1).
 
+**Update (coverage-gaps work, migration 065, tests in `test/coverage-gaps.test.js`):** SM-1 … SM-21 and Part B §7 items 1–3, 5–7, 9–19 are closed (each item below says where). Still open, handled in a separate parallel change: admin help guide (`help-guide.php`), committee / KYC webcam capture, `himal_bg` header image.
+
 ## 1. Repository root `*.php` (+ sw.js, .htaccess, router.php, version.txt)
 
 | PHP file | Node equivalent (route · src · view) | Status | Notes / gap |
@@ -130,7 +132,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | marketplace.php | /member/marketplace | COVERED | |
 | notifications.php | /member/notifications | COVERED | |
 | oauth.php | /member/oauth/google*, /oauth/facebook* | COVERED | |
-| offline.php | /offline | PARTIAL | cached-dashboard offline view deliberately dropped (SM-18) |
+| offline.php | /offline | COVERED (cached dashboard deliberately dropped — docs/parity/README.md) | cached-dashboard offline view deliberately dropped (SM-18) |
 | password-reset-request.php | /member/forgot (+ verify/resend/cancel, office fallback) | COVERED | |
 | profile.php | /member/profile (+ details, phone OTP, kyc-docs, 2FA, OAuth) | COVERED | |
 | push-subscribe.php | /member/push/key, /push/subscribe, /push/unsubscribe | COVERED | |
@@ -586,7 +588,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | smoke-program-concurrency.php | DB unique index `member_program_attendance_uniq_scope_member_status` + sequential duplicate test (parity.test.js:195) + concurrent Promise.all test (test/coverage-gaps.test.js) | COVERED | no concurrent (Promise.all) double check-in test. P3. |
 | smoke-program-ui.php | — | NOT-NEEDED | PHP UI static check. |
 | smoke-public-cache.php | public-parity / parity Cache-Control tests | COVERED | |
-| smoke-pull-to-refresh.php | `public/js/site.js` (feature) — no test | PARTIAL | P3 (public slice). |
+| smoke-pull-to-refresh.php | — | NOT-NEEDED | custom pull-to-refresh deliberately not ported (browser-native; docs/parity/README.md), so there is nothing to smoke-test. |
 | smoke-quarantine-stubs.php | legacy redirect tests | COVERED | |
 | smoke-report-upload.php | app.test.js "POST without CSRF (multipart)" + over-size upload test (test/coverage-gaps.test.js) | COVERED | the over-size upload case (must report "too large", not a false CSRF error) is not tested. P3. |
 | smoke-schema-ensure.php | migration.test.js | COVERED | |
