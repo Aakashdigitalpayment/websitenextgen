@@ -158,8 +158,47 @@ router.get('/', ah(async (req, res) => {
   res.render('member/dashboard', { title: res.locals.t('मेरो खाता', 'My account'), requests: requests.slice(0, 10), notes, card, elections, partnerHistory, partnerSummary });
 }));
 
+const PENDING = ['pending', 'under_review', 'processing', 'in_progress', 'reviewed', 'shortlisted', 'interviewed'];
+const DONE = ['approved', 'completed', 'resolved', 'accepted', 'selected', 'confirmed', 'disbursed', 'paid', 'closed'];
+/** member/tracker.php filters: type, status group, free text over service / tracking number / status. */
+function filterRequests(list, q, lang) {
+  const type = Object.hasOwn(modules, String(q.type || '')) ? String(q.type) : '';
+  const status = ['pending', 'approved', 'rejected'].includes(q.status) ? q.status : '';
+  const text = String(q.q || '').trim().toLowerCase().slice(0, 80);
+  return list.filter(({ mod, row }) => {
+    if (type && mod.key !== type) return false;
+    const s = String(row.status || 'pending');
+    if (status === 'pending' && !PENDING.includes(s)) return false;
+    if (status === 'approved' && !DONE.includes(s)) return false;
+    if (status === 'rejected' && !['rejected', 'cancelled'].includes(s)) return false;
+    if (text) {
+      const hay = [mod.title[0], mod.title[1], row.tracking_id, s, require('../lib/forms').statusLabel(s, lang), row[mod.nameCol]].join(' ').toLowerCase();
+      if (!hay.includes(text)) return false;
+    }
+    return true;
+  });
+}
+
 router.get('/requests', ah(async (req, res) => {
-  res.render('member/requests', { title: res.locals.t('मेरा आवेदन', 'My applications'), requests: await myRequests(req.member) });
+  const all = await myRequests(req.member);
+  const types = [...new Map(all.map(r => [r.mod.key, r.mod])).values()];
+  res.render('member/requests', { title: res.locals.t('मेरा आवेदन', 'My applications'), requests: filterRequests(all, req.query, req.lang), total: all.length, types, filter: { type: String(req.query.type || ''), status: String(req.query.status || ''), q: String(req.query.q || '').slice(0, 80) } });
+}));
+
+/** One application in full (member/tracker.php detail): every non-internal field, stages, status history, office reply. */
+router.get('/requests/:module/:id', ah(async (req, res, next) => {
+  const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
+  if (!m) return next();
+  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  if (!mine) return next();
+  const forms = require('../lib/forms'), submissions = require('../lib/submissions');
+  const options = await forms.resolveOptions(m);
+  const history = await db.many('SELECT * FROM request_status_history WHERE module = $1 AND request_id = $2 ORDER BY created_at', [m.key, mine.row.id]);
+  res.render('member/request-detail', {
+    title: res.locals.t(...m.title), mod: m, row: mine.row, options, history, display: forms.displayData(m, mine.row),
+    steps: m.noStatus ? [] : submissions.stages(m, mine.row.status), details: await submissions.publicDetails(m, mine.row, options, req.lang),
+    label: (f, v) => submissions.optionLabel(f, options, v, req.lang),
+  });
 }));
 
 /** Office reply attachment on one of the member's own applications. */

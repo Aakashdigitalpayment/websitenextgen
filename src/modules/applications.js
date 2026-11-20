@@ -455,6 +455,26 @@ const RULES = {
   appointment: { guestEmail: true }, job: { mobile10: 'strict' }, bid: { mobile10: 'strict' },
 };
 
+/**
+ * Public tracker / member request view (application-tracker.php details grid + stages): `track` = fields shown to the applicant
+ * (never citizenship, NID or documents), `trackCols` = extra office columns, `stages` = the expected path of the request.
+ */
+const TRACK = {
+  loan: { track: ['loan_type', 'loan_amount', 'loan_tenure', 'repayment_method', 'loan_purpose', 'guarantor_name', 'collateral_type', 'branch'], trackCols: [['approved_amount', ['स्वीकृत रकम', 'Approved amount'], 'money']], stages: ['pending', 'processing', 'approved', 'disbursed'] },
+  account: { track: ['account_type', 'initial_deposit', 'branch', 'nominee_name'], stages: ['pending', 'processing', 'approved'] },
+  kyc: { track: ['member_id', 'account_type', 'branch'], stages: ['pending', 'approved'] },
+  grievance: { track: ['category', 'subject'], stages: ['pending', 'in_progress', 'resolved'] },
+  appointment: { track: ['visit_kind', 'purpose', 'preferred_date', 'preferred_time', 'branch'], stages: ['pending', 'confirmed', 'completed'] },
+  feedback: { track: ['type', 'subject'], stages: ['pending', 'reviewed', 'resolved'] },
+  welfare: { track: ['claim_type', 'claim_amount', 'claim_date_bs'], trackCols: [['approved_amount', ['स्वीकृत रकम', 'Approved amount'], 'money'], ['paid_at', ['भुक्तानी मिति', 'Paid on'], 'date']], stages: ['pending', 'under_review', 'approved', 'paid'] },
+  digital: { track: ['service_type', 'account_number', 'statement_from', 'statement_to', 'biller_name', 'bill_reference', 'recharge_number', 'recharge_amount', 'service_amount'], stages: ['pending', 'processing', 'completed'] },
+  vendor: { track: ['company_name', 'business_type', 'pan_no'], stages: ['pending', 'approved'] },
+  membership: { track: ['full_name'], stages: ['pending', 'approved'] },
+  honor: { track: ['program_id', 'category_id', 'nominee_name'], stages: ['pending', 'under_review', 'approved'] },
+  job: { track: ['career_id'], stages: ['pending', 'shortlisted', 'interviewed', 'selected'] },
+  bid: { track: ['auction_id', 'bid_amount'], stages: ['pending', 'accepted'] },
+};
+
 const EXTRA = {
   loan: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'loan_application', memberEvent: 'loan', amountCol: 'loan_amount' },
   account: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'account_application', memberEvent: 'account' },
@@ -471,7 +491,7 @@ const EXTRA = {
 };
 
 for (const [key, m] of Object.entries(modules)) {
-  Object.assign(m, EXTRA[key] || {}, RULES[key] || {});
+  Object.assign(m, EXTRA[key] || {}, RULES[key] || {}, TRACK[key] || {});
   m.key = key;
   if (m.memberGate && !m.memberGate.always) {
     for (const sec of m.sections) sec.fields = sec.fields.map(f => (f.identity && !f.showIf ? { ...f, showIf: { field: 'is_coop_member', ne: 'yes' } } : f));

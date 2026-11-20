@@ -517,3 +517,18 @@ table.table { width: 100%; border-collapse: collapse; font-size: .93rem; }
 .float-panel a { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; color: var(--text); font-size: .9rem; }
 .float-panel a:hover { background: var(--surface-2); text-decoration: none; }
 .turnstile-wrap { margin: 8px 0; min-height: 65px; }
+/* request progress stepper (tracker + member request detail) */
+.stepper { display: flex; list-style: none; padding: 0; margin: 16px 0 4px; gap: 0; overflow-x: auto; }
+.stepper .step { flex: 1 1 0; min-width: 72px; position: relative; text-align: center; font-size: .8rem; color: var(--muted); }
+.stepper .step::before { content: ''; position: absolute; top: 11px; left: -50%; width: 100%; height: 2px; background: var(--line); z-index: 0; }
+.stepper .step:first-child::before { display: none; }
+.stepper .dot { position: relative; z-index: 1; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); }
+.stepper .dot .icon { width: 14px; height: 14px; }
+.stepper .lbl { display: block; margin-top: 4px; }
+.stepper .is-done .dot { background: var(--ok); border-color: var(--ok); color: #fff; }
+.stepper .is-done::before, .stepper .is-current::before { background: var(--ok); }
+.stepper .is-current .dot { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.stepper .is-current { color: var(--text); font-weight: 500; }
+.stepper .is-failed .dot { background: var(--bad); border-color: var(--bad); color: #fff; }
+.stepper .is-failed { color: var(--bad); }
+.filter-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }

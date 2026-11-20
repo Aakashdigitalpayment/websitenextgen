@@ -1,4 +1,17 @@
 <div class="content-head"><h1><%= title %></h1><a class="btn btn-primary" href="/apply"><%- icon('plus') %><%= t('नयाँ आवेदन', 'New application') %></a></div>
-<% if (!requests.length) { %><div class="empty"><%= t('अहिलेसम्म आवेदन छैन।', 'No applications yet.') %></div><% } else { %>
+<% const f = locals.filter || {}; const qs = o => { const p = new URLSearchParams(Object.entries({ ...f, ...o }).filter(([, v]) => v)); const s = p.toString(); return '/member/requests' + (s ? '?' + s : ''); }; %>
+<% if (locals.total) { %>
+<form class="filter-pills" method="get" action="/member/requests" role="search">
+  <a class="tab <%= !f.status ? 'active' : '' %>" href="<%= qs({ status: '' }) %>"><%= t('सबै', 'All') %></a>
+  <a class="tab <%= f.status === 'pending' ? 'active' : '' %>" href="<%= qs({ status: 'pending' }) %>"><%= t('प्रक्रियामा', 'In progress') %></a>
+  <a class="tab <%= f.status === 'approved' ? 'active' : '' %>" href="<%= qs({ status: 'approved' }) %>"><%= t('स्वीकृत', 'Approved') %></a>
+  <a class="tab <%= f.status === 'rejected' ? 'active' : '' %>" href="<%= qs({ status: 'rejected' }) %>"><%= t('अस्वीकृत', 'Rejected') %></a>
+  <input type="hidden" name="status" value="<%= f.status %>">
+  <select class="select" name="type" aria-label="<%= t('सेवा', 'Service') %>" style="width:auto"><option value=""><%= t('सबै सेवा', 'All services') %></option><% (locals.types || []).forEach(m => { %><option value="<%= m.key %>" <%= f.type === m.key ? 'selected' : '' %>><%= t(...m.title) %></option><% }) %></select>
+  <input class="input" name="q" value="<%= f.q %>" placeholder="<%= t('खोज्नुहोस्…', 'Search…') %>" style="width:auto;max-width:200px">
+  <button class="btn btn-outline btn-sm"><%- icon('search') %><%= t('खोज', 'Search') %></button>
+</form>
+<% } %>
+<% if (!requests.length) { %><div class="empty"><%= locals.total ? t('खोजसँग मिल्ने आवेदन छैन।', 'No applications match.') : t('अहिलेसम्म आवेदन छैन।', 'No applications yet.') %></div><% } else { %>
 <div class="table-wrap"><table class="table"><thead><tr><th><%= t('प्रकार', 'Type') %></th><th><%= t('ट्र्याकिङ', 'Tracking') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('टिप्पणी', 'Remarks') %></th></tr></thead><tbody>
 <% requests.forEach(r => { %><%- include('../partials/request-row', r) %><% }) %></tbody></table></div><% } %>

@@ -11,6 +11,8 @@ const nd = require('../lib/nepali-date');
 const modules = require('../modules/applications');
 const portal = require('../lib/member-portal');
 const { isBot } = require('../lib/security');
+const forms = require('../lib/forms');
+const submissions = require('../lib/submissions');
 
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -32,7 +34,7 @@ const last8 = v => String(v || '').replace(/\D/g, '').slice(-8);
 
 const renderTrack = (res, extra) => res.render('public/track', {
   title: res.locals.t('आवेदनको स्थिति', 'Track your application'), id: '', phone: '', email: '', proof: '', result: null, history: [], searched: false,
-  list: null, listError: null, cardLink: null, cardName: null, mode: 'id', ...extra,
+  list: null, listError: null, cardLink: null, cardName: null, mode: 'id', details: [], steps: [], ...extra,
 });
 
 router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, next) : next()), ah(async (req, res) => {
@@ -55,7 +57,9 @@ router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, 
     }
     trackResult(req, !!result);
   } else if (id && phone) searched = true;
-  renderTrack(res, { id, phone, result, history, searched, blocked });
+  const details = result ? await submissions.publicDetails(result.mod, result.row, await forms.resolveOptions(result.mod), req.lang) : [];
+  const steps = result && !result.mod.noStatus ? submissions.stages(result.mod, result.row.status) : [];
+  renderTrack(res, { id, phone, result, history, searched, blocked, details, steps });
 }));
 
 /**

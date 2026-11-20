@@ -179,6 +179,61 @@ async function submit(mod, data, { body = {}, member = null, options = {}, lang 
   return { row };
 }
 
+/** Option label for a stored value: current options, then legacy keys (rows imported from PHP / older versions). */
+function optionLabel(f, options, v, lang) {
+  const o = [...(options[f.name] || f.options || []), ...(f.legacyOptions || [])].find(x => String(x[0]) === String(v));
+  return o ? (lang === 'en' ? o[2] || o[1] : o[1]) : null;
+}
+/** Titles for option lists that only offer open items (auctions, careers, programmes) — old rows still need a name. */
+const LOOKUP = {
+  auctions: ['auction_notices', 'title', 'title_en'], careers: ['careers', 'title_np', 'title'], honorPrograms: ['honor_programs', 'title_np', 'title_en'], honorCategories: ['honor_categories', 'name_np', 'name_en'],
+};
+
+/**
+ * The applicant-facing details grid (application-tracker.php:1065-1130): [[label, value], …] in the visitor's language.
+ * Only the module's `track` fields and `trackCols` — never identity documents or files.
+ */
+async function publicDetails(mod, row, options = {}, lang = 'np') {
+  const nd = require('./nepali-date');
+  const out = [];
+  const L = l => (lang === 'en' ? l[1] : l[0]);
+  const fmtDate = v => { const ad = v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10); return nd.formatBs(nd.adToBs(ad), lang) || ad; };
+  for (const name of mod.track || []) {
+    const f = mod.fields.find(x => x.name === name);
+    if (!f || ['file', 'image'].includes(f.type)) continue;
+    let v = row[name];
+    if (v === null || v === undefined || v === '') continue;
+    let label = optionLabel(f, options, v, lang);
+    if (!label && LOOKUP[f.optionsFrom]) {
+      const [table, np, en] = LOOKUP[f.optionsFrom];
+      const r = await db.one(`SELECT ${np} AS np, ${en} AS en FROM ${table} WHERE id = $1`, [Number(v) || 0]);
+      if (r) label = lang === 'en' ? r.en || r.np : r.np || r.en;
+    }
+    if (label) v = label;
+    else if (f.format === 'money' || ['loan_amount', 'initial_deposit'].includes(name)) v = (lang === 'en' ? 'Rs. ' : 'रु. ') + util.money(v, lang === 'en' ? 'en' : 'np');
+    else if (f.type === 'date') v = fmtDate(v);
+    out.push([L(f.label), String(v).slice(0, 300)]);
+  }
+  for (const [col, label, fmt] of mod.trackCols || []) {
+    const v = row[col];
+    if (v === null || v === undefined || v === '' || (fmt === 'money' && !Number(v))) continue;
+    out.push([L(label), fmt === 'money' ? (lang === 'en' ? 'Rs. ' : 'रु. ') + util.money(v, lang === 'en' ? 'en' : 'np') : fmt === 'date' ? fmtDate(v) : String(v)]);
+  }
+  return out;
+}
+
+/** Progress stepper (T6): each expected stage as done / current / todo; a rejected or cancelled request ends in a red step. */
+function stages(mod, status) {
+  const list = mod.stages || ['pending', 'processing', 'approved'];
+  const s = String(status || 'pending');
+  const failed = ['rejected', 'cancelled', 'withdrawn', 'expired'].includes(s);
+  let idx = list.indexOf(s);
+  if (idx < 0 && !failed) idx = ['completed', 'closed', 'resolved', 'paid', 'disbursed', 'selected', 'accepted'].includes(s) ? list.length - 1 : 0;
+  const steps = list.map((k, i) => ({ key: k, state: failed ? (i === 0 ? 'done' : 'todo') : i < idx ? 'done' : i === idx ? (i === list.length - 1 ? 'done' : 'current') : 'todo' }));
+  if (failed) steps.push({ key: s, state: 'failed' });
+  return steps;
+}
+
 /** "key: value" lines for the admin notification (sendAdminNotification $details). */
 function details(mod, row, options = {}) {
   const lines = {};
@@ -195,4 +250,4 @@ function details(mod, row, options = {}) {
   return lines;
 }
 
-module.exports = { submit, details, hooks, identityMode, applyMemberIdentity };
+module.exports = { submit, details, hooks, identityMode, applyMemberIdentity, publicDetails, stages, optionLabel };

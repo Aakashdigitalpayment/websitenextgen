@@ -348,3 +348,42 @@ test('appointment: 30-minute slots from office hours, PHP purpose keys, server c
   assert.equal(r.status, 302, errs(r));
   assert.equal(await inB(() => db.value("SELECT name FROM appointments WHERE phone = '9841920002'")), 'Sathi Coop');
 });
+
+// ---------------------------------------------------------------- P2-12 / T6 / W3 details grid, stages, member request detail + filters
+test('tracker details grid + stages; welfare approved amount; member request detail page with filters', async () => {
+  const { m } = await seedMember('T-100', '9841930001', { password: 'Member@12345' });
+  await inB(() => db.query(`INSERT INTO members (name, phone, sadasyata_number, approval_status, is_active) VALUES ('x', '9841930001', 'T-100', 'approved', 1)`)); // other tenant: no leak
+  const loan = await inA(() => db.one(`INSERT INTO loan_applications (tracking_id, full_name, mobile, address, loan_type, loan_amount, loan_purpose, citizenship_no, status, repayment_method)
+                                      VALUES ('LN-TRK-0001', 'Track Me', '9841930001', 'Ktm', 'home', 250000, 'House repair', '55-66-777', 'processing', 'monthly') RETURNING id`));
+  await inA(() => db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, created_at) VALUES ('loan', $1, 'pending', 'processing', 'Documents checked', now())`, [loan.id]));
+  await inA(() => db.query(`INSERT INTO member_welfare_claims (tracking_id, member_name, member_id, phone, claim_type, claim_amount, approved_amount, description, status)
+                            VALUES ('WC-TRK-0001', 'Track Me', 'T-100', '9841930001', 'medical', 50000, 30000, 'd', 'approved')`));
+  const pub = client();
+  let r = await pub.get('/track?id=LN-TRK-0001&phone=9841930001');
+  assert.match(r.text, /House repair/);
+  assert.match(r.text, /२,५०,०००|2,50,000/);
+  assert.match(r.text, /Monthly EMI|मासिक किस्ता/, 'legacy option key shown with its label');
+  assert.doesNotMatch(r.text, /55-66-777/, 'citizenship never on the public tracker');
+  assert.match(r.text, /class="stepper"/);
+  assert.match(r.text, /is-current/);
+  r = await pub.get('/track?id=WC-TRK-0001&phone=9841930001');
+  assert.match(r.text, /स्वीकृत रकम/);
+  assert.match(r.text, /३०,०००/);
+
+  const c = await memberClient('9841930001', 'Member@12345');
+  r = await c.get('/member/requests');
+  assert.match(r.text, /LN-TRK-0001/);
+  assert.match(r.text, /WC-TRK-0001/);
+  r = await c.get('/member/requests?type=welfare');
+  assert.doesNotMatch(r.text, /LN-TRK-0001/);
+  r = await c.get('/member/requests?q=lN-trk');
+  assert.match(r.text, /LN-TRK-0001/);
+  assert.doesNotMatch(r.text, /WC-TRK-0001/);
+  r = await c.get('/member/requests/loan/' + loan.id);
+  assert.equal(r.status, 200);
+  assert.match(r.text, /Documents checked/);
+  assert.match(r.text, /55-66-777/, 'the owner sees every field');
+  const other = await inA(() => db.one(`INSERT INTO loan_applications (tracking_id, full_name, mobile, address, loan_type, loan_amount, loan_purpose) VALUES ('LN-TRK-0002', 'Other', '9800000123', 'x', 'home', 5000, 'p') RETURNING id`));
+  assert.equal((await c.get('/member/requests/loan/' + other.id)).status, 404, 'not the member’s request');
+  assert.ok(m.id);
+});
