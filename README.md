@@ -116,6 +116,8 @@ CREDENTIALS_KEY=          # office credential vault, min 32 chars (openssl rand 
 CREDENTIALS_LEGACY_KEY=   # optional: PHP CRED_MASTER_KEY, to open imported credentials
 PLATFORM_HOST=platform.example.com
 PLATFORM_ADMIN_USER= / PLATFORM_ADMIN_PASSWORD=   # bootstrap the first platform operator
+LICENSE_RENEWAL_AMOUNT= / LICENSE_ESEWA_ID= / LICENSE_KHALTI_ID= / LICENSE_BANK_DETAILS=   # shown on the tenant licence pages
+LICENSE_VENDOR_EMAIL=     # gets an email for every renewal payment notice
 ```
 
 ## Development

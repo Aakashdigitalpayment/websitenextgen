@@ -55,7 +55,10 @@ async function adminLogin(req, username, password) {
     return { error: 'प्रयोगकर्ता नाम वा पासवर्ड मिलेन।' };
   }
   if (require('./license').loginBlocked(req.tenant, user)) {
-    return { error: 'वेबसाइट सेवाको म्याद सकिएको छ। सुपर प्रशासकले मात्र लगइन गर्न सक्छन्। (Licence expired — super admin only.)' };
+    // right password, licence expired: no session, but this browser may send a renewal payment notice (legacy site-license-blocked.php)
+    await clearFailures(username, ip);
+    req.session.licenseBlocked = { tenantId: req.tenant.id, at: Date.now(), adminId: user.id, username: user.username };
+    return { error: 'वेबसाइट सेवाको म्याद सकिएको छ। सुपर प्रशासकले मात्र लगइन गर्न सक्छन्। (Licence expired — super admin only.)', licenseBlocked: true };
   }
   await clearFailures(username, ip);
   await regenerate(req);

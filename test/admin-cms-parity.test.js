@@ -480,3 +480,33 @@ test('notifications: one-member push with type, push log, clear old subscription
   await inA(() => notify.adminEvent(require('../src/modules/applications').grievance, { name: 'X' }));
   assert.equal(Number(await inA(() => db.value("SELECT count(*) FROM notification_log WHERE channel = 'email'"))), before);
 });
+
+// ---------------------------------------------------------------- P2-14 licence
+test('licence expired: a non-superadmin with the right password can send a payment notice, not sign in; notices can be withdrawn', async () => {
+  process.env.LICENSE_ESEWA_ID = '98000-PAY';
+  await db.query("UPDATE platform.tenants SET license_valid_until = CURRENT_DATE - 3 WHERE slug = $1", [A]);
+  tenants.clearCache();
+  try {
+    const c = client();
+    let r = await c.form('/admin/login', { username: 'admin2', password: 'wrong-password' }, '/admin/login');
+    assert.equal(r.status, 401);
+    assert.equal((await c.get('/admin/license/blocked')).headers.location, '/admin/login');
+    r = await c.form('/admin/login', { username: 'admin2', password: PW }, '/admin/login');
+    assert.equal(r.headers.location, '/admin/license/blocked');
+    r = await c.get('/admin/license/blocked');
+    assert.equal(r.status, 200);
+    assert.match(r.text, /98000-PAY/);
+    r = await c.form('/admin/license/blocked', { gateway: 'esewa', txn_reference: 'TXN-777', amount: '5000' }, '/admin/license/blocked');
+    assert.equal(r.headers.location, '/admin/license/blocked');
+    assert.equal((await c.get('/admin')).status, 403); // still not signed in (licence page)
+    const n = await inA(() => db.one("SELECT * FROM site_license_renewal_notices WHERE txn_reference = 'TXN-777'"));
+    assert.equal(n.submitted_by_username, 'admin2');
+  } finally {
+    await db.query('UPDATE platform.tenants SET license_valid_until = NULL WHERE slug = $1', [A]);
+    tenants.clearCache();
+    delete process.env.LICENSE_ESEWA_ID;
+  }
+  const id = await inA(() => db.value("SELECT id FROM site_license_renewal_notices WHERE txn_reference = 'TXN-777'"));
+  await admin.form('/admin/license/cancel', { id: String(id) }, '/admin/license');
+  assert.equal(await inA(() => db.value('SELECT status FROM site_license_renewal_notices WHERE id = $1', [id])), 'cancelled');
+});

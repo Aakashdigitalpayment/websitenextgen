@@ -41,7 +41,8 @@ router.get('/login', (req, res) => {
 
 router.post('/login', ah(async (req, res) => {
   const username = String(req.body.username || '').trim();
-  const { error, user, needs2fa } = await auth.adminLogin(req, username, String(req.body.password || ''));
+  const { error, user, needs2fa, licenseBlocked } = await auth.adminLogin(req, username, String(req.body.password || ''));
+  if (licenseBlocked) return res.redirect('/admin/license/blocked');
   if (error) return res.status(401).render('admin/login', { layout: 'auth', title: 'Admin login', error, username });
   if (needs2fa) return res.redirect('/admin/login/2fa' + (req.query.next ? '?next=' + encodeURIComponent(req.query.next) : ''));
   res.redirect(user.must_change_password ? '/admin/password' : auth.safeNext(req.query.next, '/admin'));
@@ -107,6 +108,43 @@ router.post('/login/2fa/ack', ah(async (req, res) => {
   await auth.completeAdminLogin(req, user);
   res.redirect(user.must_change_password ? '/admin/password' : auth.safeNext(req.query.next, '/admin'));
 }));
+
+// ---------------------------------------------------------------- licence expired: renewal notice without a session
+const licenseLimiter = require('express-rate-limit')({ windowMs: 60 * 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false,
+  keyGenerator: req => (req.tenant?.slug || '') + ':' + require('express-rate-limit').ipKeyGenerator(req.ip) });
+const blockedStash = req => { const b = req.session.licenseBlocked; return b && b.tenantId === req.tenant.id && Date.now() - b.at < 30 * 60_000 ? b : null; };
+router.get('/license/blocked', ah(async (req, res) => {
+  const b = blockedStash(req);
+  if (!b) return res.redirect('/admin/login');
+  const st = require('../lib/license').status(req.tenant);
+  const notices = await db.many("SELECT * FROM site_license_renewal_notices WHERE status = 'pending' ORDER BY id DESC LIMIT 5");
+  res.render('admin/license-blocked', { layout: 'auth', title: res.locals.t('सेवा नवीकरण', 'Licence renewal'), st, pay: require('../lib/license').payInfo(), notices, username: b.username });
+}));
+router.post('/license/blocked', licenseLimiter, ah(async (req, res) => {
+  const b = blockedStash(req);
+  if (!b) return res.redirect('/admin/login');
+  await submitLicenseNotice(req, res, { adminId: b.adminId, username: b.username });
+  res.redirect('/admin/license/blocked');
+}));
+
+/** Store a renewal payment notice and tell the vendor (LICENSE_VENDOR_EMAIL). Returns false when invalid. */
+async function submitLicenseNotice(req, res, who) {
+  const b = req.body, t = res.locals.t;
+  const txn = String(b.txn_reference || '').trim().slice(0, 120);
+  if (!txn) { flash(req, 'error', t('कारोबार नम्बर चाहिन्छ।', 'Transaction reference is required.')); return false; }
+  const gateway = ['esewa', 'khalti', 'bank', 'cash', 'other'].includes(b.gateway) ? b.gateway : 'other';
+  const amount = String(b.amount || '').slice(0, 40), note = String(b.note || '').slice(0, 1000) || null;
+  await db.query(`INSERT INTO site_license_renewal_notices (status, gateway, txn_reference, amount_reported, note, submitted_by_admin_id, submitted_by_username, created_at) VALUES ('pending', $1, $2, $3, $4, $5, $6, now())`,
+    [gateway, txn, amount, note, who.adminId, who.username]);
+  await auth.audit(req, 'license_notice', 'site_license_renewal_notices', null, `Renewal notice ${txn}`, { actorId: who.adminId, actorName: who.username });
+  const vendor = require('../lib/license').payInfo().vendorEmail;
+  if (vendor && util.isEmail(vendor)) {
+    notify.later(() => notify.sendEmail('license_notice', vendor, `Licence renewal notice: ${req.tenant.name}`,
+      `Cooperative: ${req.tenant.name} (${req.tenant.slug})\nBy: ${who.username}\nVia: ${gateway}\nReference: ${txn}\nAmount: ${amount}\nNote: ${note || ''}`));
+  }
+  flash(req, 'success', t('भुक्तानी सूचना पठाइयो। प्लेटफर्मले प्रमाणित गरेपछि म्याद थपिनेछ।', 'Payment notice sent. The licence is extended once the platform verifies it.'));
+  return true;
+}
 
 router.post('/logout', ah(async (req, res) => {
   await auth.logout(req);
@@ -866,16 +904,17 @@ router.post('/2fa/disable', ah(async (req, res) => {
 // ---------------------------------------------------------------- site licence (tenant side)
 router.get('/license', requireAdmin('admin'), ah(async (req, res) => {
   const notices = await db.many('SELECT * FROM site_license_renewal_notices ORDER BY id DESC LIMIT 20');
-  res.render('admin/license', { title: res.locals.t('वेबसाइट सेवा नवीकरण', 'Website licence'), notices });
+  res.render('admin/license', { title: res.locals.t('वेबसाइट सेवा नवीकरण', 'Website licence'), notices, pay: require('../lib/license').payInfo() });
+}));
+// withdraw a notice sent by mistake (legacy site-license.php cancel)
+router.post('/license/cancel', requireAdmin('admin'), ah(async (req, res) => {
+  const r = await db.query("UPDATE site_license_renewal_notices SET status = 'cancelled' WHERE status = 'pending' AND id = $1", [util.int(req.body.id)]);
+  if (r.rowCount) await auth.audit(req, 'license_notice_cancel', 'site_license_renewal_notices', util.int(req.body.id), 'Renewal notice withdrawn');
+  flash(req, r.rowCount ? 'success' : 'error', r.rowCount ? res.locals.t('सूचना रद्द गरियो।', 'Notice withdrawn.') : res.locals.t('बाँकी सूचना भेटिएन।', 'No pending notice found.'));
+  res.redirect('/admin/license');
 }));
 router.post('/license', requireAdmin('admin'), ah(async (req, res) => {
-  const b = req.body;
-  const txn = String(b.txn_reference || '').trim().slice(0, 120);
-  if (!txn) { flash(req, 'error', res.locals.t('कारोबार नम्बर चाहिन्छ।', 'Transaction reference is required.')); return res.redirect('/admin/license'); }
-  await db.query(`INSERT INTO site_license_renewal_notices (status, gateway, txn_reference, amount_reported, note, submitted_by_admin_id, submitted_by_username, created_at) VALUES ('pending', $1, $2, $3, $4, $5, $6, now())`,
-    [['esewa', 'khalti', 'bank', 'cash', 'other'].includes(b.gateway) ? b.gateway : 'other', txn, String(b.amount || '').slice(0, 40), String(b.note || '').slice(0, 1000) || null, req.admin.id, req.admin.username]);
-  await auth.audit(req, 'license_notice', 'site_license_renewal_notices', null, `Renewal notice ${txn}`);
-  flash(req, 'success', res.locals.t('भुक्तानी सूचना पठाइयो। प्लेटफर्मले प्रमाणित गरेपछि म्याद थपिनेछ।', 'Payment notice sent. The licence is extended once the platform verifies it.'));
+  await submitLicenseNotice(req, res, { adminId: req.admin.id, username: req.admin.username });
   res.redirect('/admin/license');
 }));
 
