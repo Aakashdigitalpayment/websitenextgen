@@ -132,6 +132,14 @@ router.get('/analytics', requireAdmin('admin'), ah(async (req, res) => {
   res.render('admin/analytics', { title: res.locals.t('विश्लेषण', 'Analytics'), stats, growth, appTypes, monthly, kycStatus, memStatus, welfare, attendance, visitors: visitors.map(v => ({ ...v, value: Number(v.value) })) });
 }));
 
+// ---------------------------------------------------------------- icon picker search (all Lucide icons, server-rendered SVG)
+router.get('/icons', (req, res) => {
+  const icons = require('../lib/icons');
+  const q = String(req.query.q || '').trim().slice(0, 40);
+  res.set('Cache-Control', 'private, max-age=3600');
+  res.json({ icons: icons.search(q, 120).map(name => ({ name, svg: icons.icon(name) })) });
+});
+
 // ---------------------------------------------------------------- quick search (top bar)
 router.get('/quick-search', ah(async (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 80);

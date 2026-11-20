@@ -1,4 +1,4 @@
-/* Admin panel helpers: top-bar quick search, role permission matrix, bulk-select on list pages. No dependencies. */
+/* Admin panel helpers: top-bar quick search, role permission matrix, bulk-select on list pages, icon picker search. No dependencies. */
 (function () {
   'use strict';
   const $ = (s, r = document) => r.querySelector(s);
@@ -112,4 +112,45 @@
     const old = b.textContent;
     navigator.clipboard.writeText(b.dataset.copyText).then(() => { b.textContent = '✓'; setTimeout(() => { b.textContent = old; }, 1200); }, () => {});
   }));
+
+  // ---- icon picker: filter the curated Lucide set by name/keyword, then pull matches from all Lucide icons (GET /admin/icons?q=)
+  $$('[data-icon-search]').forEach(input => {
+    const grid = document.getElementById(input.getAttribute('aria-controls'));
+    if (!grid) return;
+    const name = input.dataset.name;
+    let timer = null, seq = 0;
+    const opts = () => $$('.icon-opt', grid);
+    const filter = q => opts().forEach(l => {
+      const hay = (l.title + ' ' + (l.dataset.tags || '')).toLowerCase();
+      l.hidden = !!q && !hay.includes(q) && !$('input', l).checked;
+    });
+    const more = async q => {
+      const my = ++seq;
+      try {
+        const r = await fetch('/admin/icons?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+        if (!r.ok || my !== seq) return;
+        const have = new Set(opts().map(l => l.title));
+        (await r.json()).icons.filter(it => /^[a-z0-9-]+$/.test(it.name) && !have.has(it.name)).forEach(it => {
+          const label = document.createElement('label');
+          label.className = 'icon-opt'; label.title = it.name; label.dataset.tags = q;
+          const radio = document.createElement('input');
+          radio.type = 'radio'; radio.name = name; radio.value = it.name;
+          const sr = document.createElement('span');
+          sr.className = 'sr-only'; sr.textContent = it.name;
+          label.append(radio);
+          label.insertAdjacentHTML('beforeend', it.svg); // server-rendered Lucide SVG from our own endpoint
+          label.append(sr);
+          grid.append(label);
+        });
+        filter(q);
+      } catch (e) { /* offline */ }
+    };
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      filter(q);
+      clearTimeout(timer);
+      if (q.length >= 2) timer = setTimeout(() => more(q), 250);
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }); // do not submit the form
+  });
 })();

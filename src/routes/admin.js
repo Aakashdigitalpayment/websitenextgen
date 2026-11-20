@@ -28,8 +28,8 @@ router.use((req, res, next) => {
   res.locals.modules = req.admin && auth.roleLevel(req.admin.role) < auth.roleLevel('admin')
     ? Object.fromEntries(Object.entries(modules).filter(([, m]) => !m.adminOnly)) : modules;
   res.locals.roleLevel = auth.roleLevel;
-  res.locals.iconNames = require('../lib/icons').names;
-  res.locals.faToNode = require('../lib/icons').faToNode;
+  const icons = require('../lib/icons');
+  Object.assign(res.locals, { iconNames: icons.names, iconTags: icons.tagsOf, iconName: icons.faToNode, faToNode: icons.faToNode });
   next();
 });
 
