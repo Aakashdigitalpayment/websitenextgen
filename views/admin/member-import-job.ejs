@@ -1,6 +1,15 @@
 <div class="content-head"><div><div class="crumbs"><a href="/admin/members/import"><%= t('सदस्य CSV आयात', 'Import members') %></a></div><h1><%= title %> <span class="badge <%= job.status === 'done' ? 'badge-ok' : 'badge-warn' %>"><%= job.status %></span></h1><div class="small muted"><%= job.filename %> · <%= t('मोड', 'mode') %>: <%= job.mode %></div></div>
   <% if (job.status === 'staged' && counts.pending) { %><form method="post" action="/admin/members/import/<%= job.id %>/commit"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-primary" data-confirm="<%= t(num(counts.pending) + ' row सेभ गर्ने?', 'Save ' + counts.pending + ' rows?') %>"><%- icon('check') %><%= t(num(counts.pending) + ' सदस्य सेभ गर्नुहोस्', 'Import ' + counts.pending + ' members') %></button></form><% } %>
+  <% if (job.status === 'running' && counts.pending) { %><form method="post" action="/admin/members/import/<%= job.id %>/commit"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-primary"><%- icon('right') %><%= t('जारी राख्नुहोस्', 'Continue import') %></button></form><% } %>
+  <% if ((job.status === 'running' || job.status === 'done') && counts.failed) { %><form method="post" action="/admin/members/import/<%= job.id %>/retry"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-outline"><%- icon('right') %><%= t(num(counts.failed) + ' असफल row फेरि प्रयास', 'Retry ' + counts.failed + ' failed rows') %></button></form><% } %>
 </div>
+<% if (job.status === 'running') { const todo = Math.max(0, Number(job.total_rows) - (counts.invalid || 0)); %>
+<div class="card import-progress" data-import-progress="<%= job.id %>" data-csrf="<%= csrfToken %>" aria-live="polite">
+  <label for="import_bar"><%= t('आयात भइरहेको छ…', 'Importing…') %> <span data-import-count><%= num(todo - (counts.pending || 0)) %> / <%= num(todo) %></span></label>
+  <progress id="import_bar" max="<%= todo || 1 %>" value="<%= todo - (counts.pending || 0) %>"></progress>
+  <p class="small muted" data-import-error<%= job.error_message ? '' : ' hidden' %>><%= job.error_message || '' %></p>
+</div>
+<% } %>
 <% if ((counts.invalid || 0) + (counts.failed || 0) > 0) { %><p><a class="btn btn-outline btn-sm" href="/admin/members/import/<%= job.id %>/errors.csv"><%- icon('download') %><%= t('त्रुटि भएका row (CSV)', 'Rows with errors (CSV)') %></a></p><% } %>
 <% if (Number(job.cards_count)) { %><p class="small muted"><%= t('जारी परिचयपत्र', 'ID cards issued') %>: <%= num(job.cards_count) %></p><% } %>
 <div class="tabs"><a class="tab <%= !filter ? 'active' : '' %>" href="?"><%= t('सबै', 'All') %></a><% Object.entries(counts).forEach(([k, n]) => { %><a class="tab <%= filter === k ? 'active' : '' %>" href="?status=<%= k %>"><%= k %> (<%= num(n) %>)</a><% }) %></div>

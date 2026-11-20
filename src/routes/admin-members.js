@@ -204,12 +204,34 @@ router.get('/members/import/:id/errors.csv', requireAdmin('admin'), ah(async (re
   res.type('text/csv; charset=utf-8').attachment(`member-import-${job.id}-errors.csv`).send(util.toCsv(['row_num', 'sadasyata_number', 'full_name', 'mobile', 'status', 'message'], rows));
 }));
 router.post('/members/import/:id/commit', requireAdmin('admin'), ah(async (req, res) => {
+  // one batch of rows per request (member-import.php chunked commit); the job page keeps posting until done
   const id = util.int(req.params.id);
+  const wantsJson = (req.get('accept') || '').includes('application/json');
   try {
-    const r = await memberImport.commit(id, req.admin.id, { tenant: req.tenant });
-    await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${r.ok} ok, ${r.skip} skipped, ${r.fail} failed, ${r.cards} ID cards`);
-    flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${r.ok} सफल, ${r.skip} छोडियो, ${r.fail} असफल, ${r.cards} परिचयपत्र`, `Import done: ${r.ok} saved, ${r.skip} skipped, ${r.fail} failed, ${r.cards} ID cards issued`));
-  } catch (e) { flash(req, 'error', e.message); }
+    const r = await memberImport.commitChunk(id, req.admin.id, { tenant: req.tenant });
+    if (r.done) {
+      const p = await memberImport.progress(id);
+      await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${p.saved} ok, ${p.skipped} skipped, ${p.failed} failed, ${p.cards} ID cards`);
+      if (!wantsJson) flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${p.saved} सफल, ${p.skipped} छोडियो, ${p.failed} असफल, ${p.cards} परिचयपत्र`, `Import done: ${p.saved} saved, ${p.skipped} skipped, ${p.failed} failed, ${p.cards} ID cards issued`));
+    } else if (!wantsJson) flash(req, 'info', res.locals.t(`आयात जारी छ: ${r.remaining} row बाँकी।`, `Import in progress: ${r.remaining} rows left.`));
+    if (wantsJson) return res.json({ ok: true, ...(await memberImport.progress(id)) });
+  } catch (e) {
+    await memberImport.setError(id, e.message).catch(() => {});
+    if (wantsJson) return res.status(409).json({ ok: false, error: e.message });
+    flash(req, 'error', e.message);
+  }
+  res.redirect('/admin/members/import/' + id);
+}));
+router.get('/members/import/:id/status.json', requireAdmin('admin'), ah(async (req, res) => {
+  const p = await memberImport.progress(util.int(req.params.id));
+  if (!p) return res.status(404).json({ ok: false });
+  res.set('Cache-Control', 'no-store').json({ ok: true, ...p });
+}));
+router.post('/members/import/:id/retry', requireAdmin('admin'), ah(async (req, res) => {
+  const id = util.int(req.params.id);
+  const n = await memberImport.retryFailed(id);
+  await auth.audit(req, 'import_retry', 'member_import_jobs', id, `${n} failed rows queued again`);
+  flash(req, n ? 'info' : 'error', n ? res.locals.t(`${n} असफल row फेरि प्रयास गरिँदै।`, `${n} failed rows queued again.`) : res.locals.t('फेरि प्रयास गर्ने row छैन।', 'No failed rows to retry.'));
   res.redirect('/admin/members/import/' + id);
 }));
 

@@ -360,3 +360,43 @@ test('B-16: an over-size admin upload reports "too large", not a CSRF error (smo
   assert.match(r.text, /MB भन्दा ठूलो/);
   assert.doesNotMatch(r.text, /Form expired|फारमको समय सकियो/);
 });
+
+// ---------------------------------------------------------------- B-2 chunked member import commit
+test('B-2: member import commits in batches with progress, resumes, and retries failed rows', async () => {
+  const mi = require('../src/lib/member-import');
+  const c = await adminClient();
+  const lines = ['member_id,full_name,mobile'];
+  for (let i = 0; i < 7; i++) lines.push(`MI-${100 + i},Import ${i},98417${String(10000 + i).slice(-5)}`);
+  const tok = await c.token('/admin/members/import');
+  let r = await c.agent.post('/admin/members/import?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('mode', 'skip').attach('csv', Buffer.from(lines.join('\n') + '\n'), 'm.csv');
+  assert.equal(r.status, 302, r.text.slice(0, 200));
+  const jobId = Number(r.headers.location.split('/').pop());
+  const first = await inA(() => mi.commitChunk(jobId, 1, { limit: 3 }));
+  assert.equal(first.ok, 3);
+  assert.equal(first.remaining, 4);
+  let st = await c.get(`/admin/members/import/${jobId}/status.json`);
+  assert.equal(st.body.status, 'running');
+  assert.equal(st.body.processed, 3);
+  assert.equal(st.body.total, 7);
+  const page = await c.get(`/admin/members/import/${jobId}`);
+  assert.match(page.text, /data-import-progress/);
+  assert.match(page.text, /<progress id="import_bar" max="7" value="3"/);
+  // a row that fails, then is retried after the cause is fixed
+  await inA(() => db.query("INSERT INTO members (name, phone, email, sadasyata_number, approval_status, is_active) VALUES ('Taken', '9800000000', 'x@example.com', 'MI-999', 'approved', 1)"));
+  await inA(() => db.query("UPDATE member_import_rows SET email = 'x@example.com' WHERE job_id = $1 AND sadasyata_number = 'MI-106'", [jobId]));
+  r = await c.agent.post(`/admin/members/import/${jobId}/commit`).set('Host', HA).set('Accept', 'application/json').set('x-csrf-token', await c.token(`/admin/members/import/${jobId}`));
+  assert.equal(r.body.ok, true);
+  assert.equal(r.body.status, 'done');
+  assert.equal(r.body.failed, 1);
+  await inA(() => db.query("UPDATE member_import_rows SET email = '' WHERE job_id = $1 AND sadasyata_number = 'MI-106'", [jobId]));
+  r = await c.form(`/admin/members/import/${jobId}/retry`, {}, `/admin/members/import/${jobId}`);
+  assert.equal(r.status, 302);
+  assert.equal((await inA(() => mi.progress(jobId))).status, 'running');
+  await inA(() => mi.commit(jobId, 1));
+  const p = await inA(() => mi.progress(jobId));
+  assert.equal(p.status, 'done');
+  assert.equal(p.saved, 7);
+  assert.equal(p.failed, 0);
+  assert.equal(Number(await inA(() => db.value("SELECT count(*) FROM members WHERE sadasyata_number LIKE 'MI-1%'"))), 7);
+});

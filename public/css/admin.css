@@ -126,3 +126,7 @@ body.panel { background: var(--bg); }
 .bell-menu a { display: flex; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 8px; color: var(--text); font-size: .88rem; }
 .bell-menu a:hover { background: var(--surface-2); text-decoration: none; }
 .bell-menu a small { margin-left: auto; color: var(--warn); font-weight: 500; }
+
+/* member CSV import progress (member-import-job.ejs) */
+.import-progress { margin: 0 0 1rem; padding: .75rem 1rem; }
+.import-progress progress { display: block; width: 100%; height: .6rem; accent-color: var(--brand); }
