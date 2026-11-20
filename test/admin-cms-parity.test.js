@@ -229,3 +229,50 @@ test('vision / mission / values: English text and stored titles on the English p
   assert.match(r.text, /Our Vision 2090/);
   assert.doesNotMatch(r.text, /नेपाली दृष्टि/);
 });
+
+// ---------------------------------------------------------------- P1-5 audit log
+test('audit log: filters (admin, action, BS/AD dates, text), legacy PHP rows, CSV export', async () => {
+  await inA(async () => {
+    const id = await db.value("SELECT id FROM admin_users WHERE username = 'admin'");
+    await db.query("INSERT INTO admin_activity_log (admin_id, action, target_type, target_id, details, ip, created_at) VALUES ($1, 'php_legacy_edit', 'news', 7, '{\"x\":1}', '1.2.3.4', '2024-01-15 10:00')", [id]);
+    await db.query("INSERT INTO audit_log (actor_type, actor_id, actor_name, action, entity_type, summary, created_at) VALUES ('admin', $1, 'admin', 'zz_old', 'notices', 'very old thing', '2020-05-01')", [id]);
+  });
+  let r = await admin.get('/admin/audit?action=php_legacy_edit');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /php_legacy_edit/);
+  assert.match(r.text, /legacy|पुरानो/);
+  r = await admin.get('/admin/audit?from=2020-04-01&to=2020-05-30');
+  assert.match(r.text, /very old thing/);
+  assert.doesNotMatch(r.text, /php_legacy_edit<\/span>/);
+  r = await admin.get('/admin/audit?from=' + encodeURIComponent('२०८०-०९-३०') + '&to=2080-10-01'); // BS 2080-09-30 = 2024-01-15
+  assert.match(r.text, /php_legacy_edit/);
+  r = await admin.get('/admin/audit?q=very+old');
+  assert.match(r.text, /very old thing/);
+  r = await admin.get('/admin/audit?entity=notices&format=csv');
+  assert.match(r.headers['content-type'], /text\/csv/);
+  assert.match(r.text, /very old thing/);
+});
+
+// ---------------------------------------------------------------- P1-6 institutional profile
+test('institutional profile: new indicators, BS date fills month + AD date, one record per FY and month', async () => {
+  const form = (data, url = '/admin/r/institutional_profile') => admin.form(url, data, '/admin/r/institutional_profile/new');
+  let r = await form({ fiscal_year: '2081/82', report_month: '0', report_date_bs: '२०८१-०५-१५', liquidity_percent: '18.5', npl_percent: '2.25', reserved_fund: '1000', report_note: 'Q note' });
+  assert.equal(r.status, 302);
+  const row = await inA(() => db.one("SELECT * FROM institutional_profile WHERE fiscal_year = '2081/82'"));
+  assert.equal(Number(row.report_month), 5);
+  assert.equal(row.report_date_bs, '2081-05-15');
+  assert.ok(row.report_date_ad);
+  assert.equal(Number(row.liquidity_percent), 18.5);
+  assert.equal(Number(row.npl_percent), 2.25);
+  r = await form({ fiscal_year: '2081/82', report_month: '5' });
+  assert.equal(r.status, 422);
+  assert.match(r.text, /already exists|पहिले नै छ/);
+  r = await form({ fiscal_year: '2081/82', report_month: '6' });
+  assert.equal(r.status, 302);
+  // editing the same record keeps its own FY/month
+  r = await form({ fiscal_year: '2081/82', report_month: '5', liquidity_percent: '19' }, `/admin/r/institutional_profile/${row.id}`);
+  assert.equal(r.status, 302);
+  r = await admin.get('/admin/r/institutional_profile/new');
+  assert.match(r.text, /name="liquidity_percent"/);
+  assert.match(r.text, /<option value="2081\/82"/);
+});

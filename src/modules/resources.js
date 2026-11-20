@@ -51,13 +51,27 @@ const REPORT_TYPES = [['monthly', 'मासिक', 'Monthly'], ['quarterly', '
 const BS_MONTHS = ['बैशाख', 'जेठ', 'असार', 'साउन', 'भदौ', 'असोज', 'कात्तिक', 'मंसिर', 'पुस', 'माघ', 'फागुन', 'चैत']
   .map((np, i) => [np, np, ['Baisakh', 'Jestha', 'Asar', 'Shrawan', 'Bhadra', 'Asoj', 'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'][i]]);
 /** Fiscal years "2082/83" … (Nepali FY starts in Shrawan), current first, plus any value already stored. */
-async function fiscalYearOptions() {
+const fyOptions = (table, col) => async () => {
   const nd = require('../lib/nepali-date');
   const [y, m] = String(nd.todayBs() || '').split('-').map(Number);
   const cur = (y || 2082) - (m && m < 4 ? 1 : 0);
   const years = Array.from({ length: 12 }, (_, i) => `${cur - i}/${String((cur - i + 1) % 100).padStart(2, '0')}`);
-  const stored = (await lazyDb().many("SELECT DISTINCT report_year FROM reports WHERE COALESCE(report_year, '') <> ''")).map(r => r.report_year);
+  const stored = (await lazyDb().many(`SELECT DISTINCT ${col} AS v FROM ${table} WHERE COALESCE(${col}, '') <> ''`)).map(r => r.v);
   return [...new Set([...years, ...stored])].map(v => [v, v, v]);
+};
+const fiscalYearOptions = fyOptions('reports', 'report_year');
+// institutional profile (legacy institutional-profile.php): month 0 = annual; BS report date fills the month and the AD date
+const IP_MONTHS = [['0', 'वार्षिक', 'Annual'], ...BS_MONTHS.map((o, i) => [String(i + 1), o[1], o[2]])];
+async function institutionalBeforeSave(data, { db, existing }) {
+  const nd = require('../lib/nepali-date');
+  const bs = nd.toLatinDigits(String(data.report_date_bs || '').trim());
+  data.report_date_bs = bs;
+  if (bs && !nd.isValidBs(...(nd.parse(bs) || []))) return { report_date_bs: 'वि.सं. YYYY-MM-DD' };
+  if (bs && !Number(data.report_month)) data.report_month = Number(bs.slice(5, 7));
+  if (bs && !data.report_date_ad) data.report_date_ad = nd.bsToAd(bs);
+  data.report_month = Math.min(12, Math.max(0, Number(data.report_month) || 0));
+  const dup = await db.value('SELECT id FROM institutional_profile WHERE fiscal_year = $1 AND COALESCE(report_month, 0) = $2 AND id <> $3', [data.fiscal_year, data.report_month, existing ? existing.id : 0]);
+  return dup ? { fiscal_year: 'यो आ.व./महिनाको प्रोफाइल पहिले नै छ / a profile for this fiscal year and month already exists' } : {};
 }
 // information room categories (legacy irCategories()); values stored before stay selectable
 const IR_CATEGORIES = [['board_decision', 'बोर्ड निर्णय', 'Board decision'], ['policy', 'नीति', 'Policy'], ['karyabidhi', 'कार्यविधि', 'Procedure'], ['biniyam', 'बिनियम', 'Bylaws'],
@@ -190,14 +204,22 @@ const resources = {
   designations: { group: 'org', icon: 'id', title: ['पद/दर्जा', 'Designations'], order: 'display_order, id', fields: [
     T('title_np', 'पद (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'पद (English)', 'Title (English)'), T('category', 'समूह', 'Category', { list: true }), ORDER, ACTIVE] },
   institutional_profile: { group: 'org', icon: 'chart', title: ['संस्थागत विवरण', 'Institutional profile'], order: 'fiscal_year DESC, report_month DESC NULLS LAST', fields: [
-    T('fiscal_year', 'आर्थिक वर्ष', 'Fiscal year', { required: true, list: true, hint: '2082/83' }), N('report_month', 'महिना (१–१२)', 'Month (1–12)', { list: true }),
-    N('total_members', 'कुल सदस्य', 'Members', { list: true }), N('share_capital', 'शेयर पुँजी', 'Share capital'), N('deposit', 'कुल बचत', 'Deposits', { list: true }), N('loan', 'कुल ऋण', 'Loans', { list: true }),
-    N('total_loan_members', 'ऋणी सदस्य', 'Borrowers'), N('total_assets', 'कुल सम्पत्ति', 'Total assets'), N('other_fund', 'अन्य कोष', 'Other funds'), N('bank_cash_balance', 'बैंक/नगद', 'Bank & cash'),
-    N('fixed_assets', 'स्थिर सम्पत्ति', 'Fixed assets'), N('npa_percent', 'NPA %', 'NPA %', { step: '0.01' }), N('profit_loss', 'नाफा/नोक्सान', 'Profit / loss'),
+    SEL('fiscal_year', 'आर्थिक वर्ष', 'Fiscal year', [], { required: true, list: true, optionsFn: fyOptions('institutional_profile', 'fiscal_year') }),
+    SEL('report_month', 'महिना (० = वार्षिक)', 'Month (0 = annual)', IP_MONTHS, { list: true, default: '0' }),
+    T('report_date_bs', 'प्रतिवेदन मिति (वि.सं.)', 'Report date (BS)', { hint: 'YYYY-MM-DD — महिना र AD मिति आफैं भरिन्छ / fills the month and AD date' }), D('report_date_ad', 'प्रतिवेदन मिति (AD)', 'Report date (AD)'),
+    N('total_members', 'कुल सदस्य', 'Members', { list: true }), N('total_balance_member', 'बचत भएका सदस्य', 'Members with savings'), N('total_loan_members', 'ऋणी सदस्य', 'Borrowers'),
+    N('share_capital', 'शेयर पुँजी', 'Share capital'), N('share_capital_percent', 'शेयर पुँजी %', 'Share capital %', { step: '0.01' }),
+    N('reserved_fund', 'जगेडा कोष', 'Reserve fund'), N('reserved_fund_percent', 'जगेडा कोष %', 'Reserve fund %', { step: '0.01' }),
+    N('other_fund', 'अन्य कोष', 'Other funds'), N('bank_cash_balance', 'बैंक/नगद', 'Bank & cash'), N('fixed_assets', 'स्थिर सम्पत्ति', 'Fixed assets'), N('total_assets', 'कुल सम्पत्ति', 'Total assets'),
+    N('deposit', 'कुल बचत', 'Deposits', { list: true }), N('deposit_percent', 'बचत %', 'Deposits %', { step: '0.01' }),
+    N('loan', 'कुल ऋण', 'Loans', { list: true }), N('loan_percent', 'ऋण %', 'Loans %', { step: '0.01' }),
+    N('total_loan_reserve_fund', 'कर्जा नोक्सानी व्यवस्था', 'Loan loss provision'), N('total_loan_reserve_percent', 'कर्जा नोक्सानी व्यवस्था %', 'Loan loss provision %', { step: '0.01' }),
+    N('npa_percent', 'NPA %', 'NPA %', { step: '0.01' }), N('npl_percent', 'NPL %', 'NPL %', { step: '0.01' }), N('liquidity_percent', 'तरलता %', 'Liquidity %', { step: '0.01' }),
+    N('profit_loss', 'नाफा/नोक्सान', 'Profit / loss'), TA('report_note', 'टिप्पणी', 'Note'),
     SEL('access_level', 'पहुँच', 'Access', [['none', 'सबै', 'Public'], ['member', 'सदस्य मात्र', 'Members only']], { default: 'none' }),
     FILE('attachment_path', 'प्रतिवेदन फाइल', 'Report file', { hint: '/institutional-profile/:id/file बाट मात्र खुल्छ (पहुँच अनुसार) / served only through the gated link' }), ACTIVE],
   // attachments are private: members-only reports must not be reachable under /uploads (legacy institutional-profile-file.php)
-  privateFiles: true },
+  privateFiles: true, beforeSave: institutionalBeforeSave },
   why_choose_features: { group: 'org', icon: 'check', title: ['हाम्रो विशेषता', 'Why choose us'], order: 'sort_order, id', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), TA('desc_np', 'विवरण (नेपाली)', 'Description (Nepali)'), TA('desc_en', 'विवरण (English)', 'Description (English)'),
     N('sort_order', 'क्रम', 'Order', { default: 0 }), ACTIVE] },

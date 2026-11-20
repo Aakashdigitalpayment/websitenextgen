@@ -710,11 +710,45 @@ router.post('/license', requireAdmin('admin'), ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- audit log
+// legacy PHP admin_activity_log rows (imported) are shown with the new audit_log rows (negative ids)
+const AUDIT_SRC = `(SELECT id, created_at, actor_type, actor_id, actor_name, action, entity_type, entity_id, summary, ip_address, old_values::text AS old_values, new_values::text AS new_values FROM audit_log
+  UNION ALL SELECT -l.id, l.created_at, 'admin', l.admin_id, u.username, l.action, COALESCE(l.target_type, 'legacy'), l.target_id, left(COALESCE(l.details::text, ''), 255), l.ip, NULL, NULL
+  FROM admin_activity_log l LEFT JOIN admin_users u ON u.id = l.admin_id) a`;
+/** 'YYYY-MM-DD' in BS (year ≥ 2050) or AD → AD, else null. */
+const anyDateToAd = v => {
+  const x = nd.toLatinDigits(String(v || '').trim());
+  if (!/^\d{4}-\d{1,2}-\d{1,2}$/.test(x)) return null;
+  return Number(x.slice(0, 4)) >= 2050 ? nd.bsToAd(x) : x;
+};
 router.get('/audit', requireAdmin('admin'), ah(async (req, res) => {
-  const total = await db.value('SELECT count(*) FROM audit_log');
-  const pg = util.paginate(total, util.int(req.query.page, 1), 50);
-  const rows = await db.many(`SELECT * FROM audit_log ORDER BY id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`);
-  res.render('admin/audit', { title: res.locals.t('अडिट लग', 'Audit log'), rows, pg });
+  const f = { actor: util.int(req.query.actor, 0), action: String(req.query.action || '').slice(0, 64), entity: String(req.query.entity || '').slice(0, 64),
+    from: String(req.query.from || '').slice(0, 12), to: String(req.query.to || '').slice(0, 12), q: String(req.query.q || '').trim().slice(0, 100) };
+  const where = [], params = [];
+  const add = (sql, v) => { params.push(v); const n = '$' + params.length; where.push(sql.replace(/\?/g, () => n)); }; // every ? = this one value
+  if (f.actor) add('a.actor_id = ? AND a.actor_type IN (\'admin\', \'superadmin\')', f.actor);
+  if (f.action) add('a.action = ?', f.action);
+  if (f.entity) add('a.entity_type = ?', f.entity);
+  const from = anyDateToAd(f.from), to = anyDateToAd(f.to);
+  if (from) add('a.created_at >= ?::date', from);
+  if (to) add('a.created_at < ?::date + 1', to);
+  if (f.q) add('(a.summary ILIKE ? OR a.actor_name ILIKE ?)', '%' + f.q + '%');
+  const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  if (req.query.format === 'csv') {
+    const rows = await db.many(`SELECT * FROM ${AUDIT_SRC} ${w} ORDER BY a.created_at DESC, a.id DESC LIMIT 50000`, params);
+    await auth.audit(req, 'export', 'audit_log', null, `Audit log CSV (${rows.length} rows)`);
+    return util.sendCsv(res, 'audit-log.csv', ['time', 'actor', 'actor_type', 'action', 'entity', 'entity_id', 'summary', 'ip', 'old', 'new'],
+      rows.map(r => [r.created_at, r.actor_name, r.actor_type, r.action, r.entity_type, r.entity_id, r.summary, r.ip_address, r.old_values, r.new_values]));
+  }
+  const total = await db.value(`SELECT count(*) FROM ${AUDIT_SRC} ${w}`, params);
+  const pg = util.paginate(total, util.int(req.query.page, 1), 30);
+  const [rows, actors, actions, entities] = await Promise.all([
+    db.many(`SELECT * FROM ${AUDIT_SRC} ${w} ORDER BY a.created_at DESC, a.id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params),
+    db.many(`SELECT DISTINCT actor_id, actor_name FROM ${AUDIT_SRC} WHERE actor_type IN ('admin', 'superadmin') AND actor_id IS NOT NULL ORDER BY actor_name LIMIT 300`),
+    db.many(`SELECT DISTINCT action FROM ${AUDIT_SRC} ORDER BY 1 LIMIT 200`),
+    db.many(`SELECT DISTINCT entity_type FROM ${AUDIT_SRC} ORDER BY 1 LIMIT 200`),
+  ]);
+  const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v).map(([k, v]) => [k, String(v)])).toString();
+  res.render('admin/audit', { title: res.locals.t('अडिट लग', 'Audit log'), rows, pg, f, actors, actions: actions.map(r => r.action), entities: entities.map(r => r.entity_type), qs });
 }));
 
 module.exports = router;

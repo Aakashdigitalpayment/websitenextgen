@@ -176,3 +176,27 @@ JOIN site_settings s ON s.setting_key = v.php AND COALESCE(s.setting_value, '') 
 ORDER BY v.node, v.php DESC
 ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value
   WHERE site_settings.setting_value IS NULL OR site_settings.setting_value = '';
+
+-- ---------------------------------------------------------------- institutional profile: full indicator set (P1-6, legacy institutional-profile.php)
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS report_date_bs VARCHAR(60) DEFAULT '';
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS report_date_ad DATE NULL;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS report_note TEXT NULL;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS total_balance_member INTEGER DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS total_loan_reserve_fund NUMERIC(15,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS total_loan_reserve_percent NUMERIC(8,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS share_capital_percent NUMERIC(8,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS reserved_fund NUMERIC(18,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS reserved_fund_percent NUMERIC(8,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS deposit_percent NUMERIC(8,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS loan_percent NUMERIC(8,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS liquidity_percent NUMERIC(8,2) DEFAULT 0;
+ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS npl_percent NUMERIC(5,2) DEFAULT 0;
+-- one record per fiscal year + month (0 = annual): unique when the existing data allows it, else the form check alone
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM institutional_profile GROUP BY fiscal_year, COALESCE(report_month, 0) HAVING count(*) > 1) THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS institutional_profile_fy_month_uq ON institutional_profile (fiscal_year, (COALESCE(report_month, 0)));
+  ELSE
+    CREATE INDEX IF NOT EXISTS institutional_profile_fy_month_idx ON institutional_profile (fiscal_year, (COALESCE(report_month, 0)));
+  END IF;
+END $$;
