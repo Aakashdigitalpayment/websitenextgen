@@ -27,7 +27,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm ci --omit=optional
+      - run: npm ci
       - name: Schema converter output is up to date
         run: node scripts/convert-mysql-schema.js db/legacy/install.sql | diff -q - db/schema.sql
       - run: npm run db:migrate
