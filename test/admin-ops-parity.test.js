@@ -316,3 +316,31 @@ test('KYC inbox: member link filter + badge, divergence alert, member ↔ KYM li
   assert.match(t, /City Clinic — Checkup/);
   assert.ok(m3);
 });
+
+// ---------------------------------------------------------------- b-7 members: KYC filter, stats, audience notify
+test('members list: KYM filter, stats strip, audience bulk notification', async () => {
+  // after the KYC test: M-1 linked + password, M-2 linked without password, M-3 / M-4 not linked
+  let t = (await admin.get('/admin/members?kyc=linked')).text;
+  assert.match(t, />राम</); assert.doesNotMatch(t, />(सीता|हरि)</);
+  t = (await admin.get('/admin/members?kyc=no_password')).text;
+  assert.match(t, />सीता</); assert.doesNotMatch(t, />राम</);
+  t = (await admin.get('/admin/members?kyc=unlinked')).text;
+  assert.match(t, />हरि</); assert.doesNotMatch(t, />राम</);
+  t = (await admin.get('/admin/members')).text;
+  assert.match(t, /href="\/admin\/members\?kyc=linked">[^<]*<b>(1|१)<\/b>/);
+  assert.match(t, /href="\/admin\/members\?status=pending">[^<]*<b>(1|१)<\/b>/);
+  const csv = await admin.get('/admin/members/export?kyc=linked');
+  assert.match(csv.text, /M-1/); assert.doesNotMatch(csv.text, /M-3/);
+
+  const before = await inA(() => db.value('SELECT count(*) FROM member_notifications'));
+  let r = await admin.form('/admin/members/notify-bulk', { audience: 'pending', title: 'AGM soon', message: 'Come', type: 'info' }, '/admin/members');
+  assert.equal(r.status, 302);
+  const sent = await inA(() => db.many('SELECT m.sadasyata_number FROM member_notifications n JOIN members m ON m.id = n.member_id WHERE n.title = $1', ['AGM soon']));
+  assert.deepEqual(sent.map(x => x.sadasyata_number), ['M-3']);
+  r = await admin.form('/admin/members/notify-bulk', { audience: 'all_active', title: 'Everyone' }, '/admin/members');
+  const all = await inA(() => db.value("SELECT count(*) FROM member_notifications WHERE title = 'Everyone'"));
+  assert.equal(all, 3); // M-4 is inactive
+  r = await admin.form('/admin/members/notify-bulk', { audience: 'active', title: '' }, '/admin/members');
+  assert.equal(await inA(() => db.value('SELECT count(*) FROM member_notifications')), before + 4);
+  assert.equal(await inA(() => db.value("SELECT count(*) FROM audit_log WHERE action = 'notify_bulk'")), 2);
+});

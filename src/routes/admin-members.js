@@ -29,7 +29,7 @@ const memberById = id => db.one('SELECT * FROM members WHERE id = $1 AND deleted
 // ---------------------------------------------------------------- list, filters, export, archive
 function memberFilter(req) {
   const q = String(req.query.q || '').trim().slice(0, 100);
-  const st = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
+  const st = ['pending', 'approved', 'rejected', 'renewal_pending'].includes(req.query.status) ? req.query.status : '';
   const ms = ['1', '0', 'unset'].includes(req.query.ms) ? req.query.ms : '';
   const view = req.query.view === 'arch' ? 'arch' : 'live';
   const where = [view === 'arch' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'], params = [];
@@ -41,8 +41,26 @@ function memberFilter(req) {
   if (st) { params.push(st); where.push(`approval_status = $${params.length}`); }
   if (ms === 'unset') where.push('monthly_saving_regular IS NULL');
   else if (ms) { params.push(Number(ms)); where.push(`monthly_saving_regular = $${params.length}`); }
-  return { q, st, ms, view, w: 'WHERE ' + where.join(' AND '), params };
+  // KYM link (legacy members.php kyc filter)
+  const kyc = Object.hasOwn(KYC_FILTER, req.query.kyc) ? req.query.kyc : '';
+  if (kyc) where.push(KYC_FILTER[kyc]);
+  const active = ['1', '0'].includes(req.query.active) ? req.query.active : '';
+  if (active) where.push(active === '1' ? 'is_active = 1' : 'COALESCE(is_active, 0) = 0');
+  return { q, st, ms, kyc, active, view, w: 'WHERE ' + where.join(' AND '), params };
 }
+const HAS_PW = "COALESCE(password_hash, '') <> ''";
+const KYC_FILTER = {
+  linked: `COALESCE(kyc_application_id, 0) <> 0 AND ${HAS_PW}`,
+  unlinked: 'COALESCE(kyc_application_id, 0) = 0',
+  no_password: `NOT (${HAS_PW})`,
+};
+// audience for the bulk notification (members.php notif_audience); always live members only
+const AUDIENCE = {
+  active: "is_active = 1 AND approval_status IN ('approved', 'active')",
+  pending: "approval_status = 'pending'",
+  kyc_linked: 'is_active = 1 AND COALESCE(kyc_application_id, 0) <> 0',
+  all_active: 'is_active = 1',
+};
 
 router.get('/members', requireAdmin('staff'), ah(async (req, res) => {
   const f = memberFilter(req);
@@ -50,8 +68,13 @@ router.get('/members', requireAdmin('staff'), ah(async (req, res) => {
   const pg = util.paginate(total, util.int(req.query.page, 1), 30);
   const rows = await db.many(`SELECT * FROM members ${f.w} ORDER BY ${f.view === 'arch' ? 'deleted_at DESC' : 'id DESC'} LIMIT ${pg.perPage} OFFSET ${pg.offset}`, f.params);
   const counts = await db.one('SELECT count(*) FILTER (WHERE deleted_at IS NULL) AS live, count(*) FILTER (WHERE deleted_at IS NOT NULL) AS arch FROM members');
-  const qs = new URLSearchParams(Object.entries({ q: f.q, status: f.st, ms: f.ms, view: f.view === 'arch' ? 'arch' : '' }).filter(([, v]) => v)).toString();
-  res.render('admin/members', { title: res.locals.t('सदस्यहरू', 'Members'), rows, pg, q: f.q, st: f.st, ms: f.ms, view: f.view, counts, qs });
+  const stats = await db.one(`SELECT count(*) AS total, count(*) FILTER (WHERE is_active = 1) AS active, count(*) FILTER (WHERE approval_status = 'pending') AS pending,
+      count(*) FILTER (WHERE approval_status = 'renewal_pending') AS renewal_pending, count(*) FILTER (WHERE ${KYC_FILTER.linked}) AS kyc_linked,
+      count(*) FILTER (WHERE COALESCE(google_id, '') <> '') AS google, count(*) FILTER (WHERE COALESCE(facebook_id, '') <> '') AS facebook
+    FROM members WHERE deleted_at IS NULL`);
+  const audience = await db.one(`SELECT ${Object.entries(AUDIENCE).map(([k, w]) => `count(*) FILTER (WHERE ${w}) AS ${k}`).join(', ')} FROM members WHERE deleted_at IS NULL`);
+  const qs = new URLSearchParams(Object.entries({ q: f.q, status: f.st, ms: f.ms, kyc: f.kyc, active: f.active, view: f.view === 'arch' ? 'arch' : '' }).filter(([, v]) => v)).toString();
+  res.render('admin/members', { title: res.locals.t('सदस्यहरू', 'Members'), rows, pg, q: f.q, st: f.st, ms: f.ms, kyc: f.kyc, view: f.view, counts, qs, stats, audience });
 }));
 
 const EXPORT_COLS = [
@@ -262,6 +285,42 @@ async function saveMember(req, res, item) {
     throw e;
   }
 }
+/**
+ * Notify an audience of members at once (legacy members.php notif_target=all): portal notification for every
+ * member (one set-wise INSERT), optional web push; SMS / email are admin-only and go through the daily caps.
+ */
+router.post('/members/notify-bulk', requireAdmin('staff'), ah(async (req, res) => {
+  const t = res.locals.t;
+  const audience = Object.hasOwn(AUDIENCE, req.body.audience) ? req.body.audience : 'active';
+  const title = String(req.body.title || '').trim().slice(0, 200);
+  const message = String(req.body.message || '').trim().slice(0, 2000);
+  const type = ['info', 'success', 'warning', 'error'].includes(req.body.type) ? req.body.type : 'info';
+  if (!title) { flash(req, 'error', t('शीर्षक राख्नुहोस्।', 'Enter a title.')); return res.redirect('/admin/members#notify-all'); }
+  const where = `deleted_at IS NULL AND ${AUDIENCE[audience]}`;
+  const ids = (await db.many(`INSERT INTO member_notifications (member_id, title, message, type, link, is_read, created_at)
+                              SELECT id, $1, $2, $3, '/member/notifications', 0, now() FROM members WHERE ${where} RETURNING member_id`, [title, message || null, type])).map(r => r.member_id);
+  const channels = ['portal'];
+  const isAdmin = auth.roleLevel(req.admin.role) >= auth.roleLevel('admin');
+  if (req.body.push === '1' && ids.length) { channels.push('push'); notify.later(() => require('../lib/push').sendToMembers(ids, { title, body: message, url: '/member/notifications' })); }
+  const wantSms = isAdmin && req.body.sms === '1', wantEmail = isAdmin && req.body.email === '1';
+  if ((wantSms || wantEmail) && ids.length) {
+    if (wantSms) channels.push('sms');
+    if (wantEmail) channels.push('email');
+    const site = res.locals.siteName || '';
+    // sequential, after the response; notify.sendSms / sendEmail stop at the tenant's daily limits
+    notify.later(async () => {
+      const rows = await db.many('SELECT phone, email FROM members WHERE id = ANY($1::int[])', [ids]);
+      for (const m of rows) {
+        if (wantSms && m.phone) await notify.sendSms('member_notice', m.phone, `${site}: ${title}${message ? ' — ' + message : ''}`.slice(0, 300));
+        if (wantEmail && m.email) await notify.sendEmail('member_notice', m.email, `${title} — ${site}`, message || title);
+      }
+    });
+  }
+  await auth.audit(req, 'notify_bulk', 'members', null, `Bulk notification "${title}" → ${ids.length} members (${audience}; ${channels.join('+')})`);
+  flash(req, 'success', t(`${ids.length} सदस्यलाई सूचना पठाइयो (${channels.join(', ')})।`, `Notification sent to ${ids.length} members (${channels.join(', ')}).`));
+  res.redirect('/admin/members');
+}));
+
 router.post('/members', requireAdmin('staff'), ah((req, res) => saveMember(req, res, null)));
 router.post('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
   const item = await memberById(req.params.id);
