@@ -64,20 +64,31 @@
 
   // popup notices: public/js/site.js (carousel on every page)
 
-  // EMI calculator (live)
+  // EMI calculator (live): number inputs, range sliders, rate presets, principal/interest bar
   const emi = $('[data-emi]');
   if (emi) {
     const fmt = n => Math.round(n).toLocaleString('en-IN');
+    const tenureEl = $('[data-emi-tenure]', emi);
     const calc = () => {
       const P = parseFloat($('[name=amount]', emi).value) || 0;
       const r = (parseFloat($('[name=rate]', emi).value) || 0) / 1200;
-      const n = parseInt($('[name=months]', emi).value, 10) || 0;
+      const t = parseInt(tenureEl.value, 10) || 0;
+      const n = tenureEl.dataset.unit === 'years' ? t * 12 : t;
       if (!P || !n) return;
       const m = r ? P * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1) : P / n;
       $('[data-emi-monthly]').textContent = 'Rs. ' + fmt(m);
       $('[data-emi-interest]').textContent = 'Rs. ' + fmt(m * n - P);
       $('[data-emi-total]').textContent = 'Rs. ' + fmt(m * n);
+      const pct = Math.round(P / (m * n) * 100), bar = $('[data-emi-bar]'), lbl = $('[data-emi-pct]');
+      if (bar) bar.style.width = pct + '%';
+      if (lbl) lbl.textContent = pct;
     };
+    $$('input[type=range][data-sync]', emi).forEach(range => {
+      const box = range.dataset.sync === 'tenure' ? tenureEl : $('[name=' + range.dataset.sync + ']', emi);
+      range.addEventListener('input', () => { box.value = range.value; calc(); });
+      box.addEventListener('input', () => { range.value = box.value; });
+    });
+    $$('[data-emi-rate]', emi).forEach(a => a.addEventListener('click', e => { e.preventDefault(); $('[name=rate]', emi).value = a.dataset.emiRate; const rr = $('[data-sync=rate]', emi); if (rr) rr.value = a.dataset.emiRate; calc(); }));
     $$('input', emi).forEach(i => i.addEventListener('input', calc));
   }
 

@@ -439,6 +439,20 @@ test('committees: org chart for the current tenure, past committees, team_member
   assert.ok(r.text.includes('Fallback Person'));
 });
 
+// ---------------------------------------------------------------- P2-9 EMI
+test('EMI: loan-rate presets, years unit, yearly summary with BS months, input bounds', async () => {
+  await inA(() => db.query("INSERT INTO interest_rates (category, name, name_np, rate, is_active) VALUES ('loan', 'Gold loan', 'सुन ऋण', 11.25, 1)"));
+  let r = await get('/emi-calculator?amount=100000&rate=12&unit=years&years=2&view=yearly');
+  assert.equal(r.status, 200);
+  assert.ok(r.text.includes('सुन ऋण') && r.text.includes('data-emi-rate="11.25"'));
+  assert.equal((r.text.match(/<tr><td>/g) || []).length, 2, 'two yearly rows');
+  assert.ok(nd.MONTHS_NP.some(m => r.text.includes(m)), 'BS month labels');
+  assert.ok(r.text.includes('Rs. 4,707'), 'EMI for 1 lakh, 12%, 24 months');
+  r = await get('/emi-calculator?months=99999&amount=-5');
+  assert.equal(r.status, 200);
+  assert.equal((r.text.match(/<tr><td>/g) || []).length, 360, 'tenure capped at 360');
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');

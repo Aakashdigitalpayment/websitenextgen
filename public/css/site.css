@@ -118,3 +118,11 @@
 .steps-3 li { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .featured-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
 .featured-strip .tab { white-space: nowrap; }
+
+.emi-layout { grid-template-columns: 380px 1fr; }
+@media (max-width: 900px) { .emi-layout { grid-template-columns: 1fr; } }
+.emi-layout input[type=range] { width: 100%; accent-color: var(--brand); margin-top: 6px; }
+.emi-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--warn); }
+.emi-bar-p { background: var(--brand); }
+.emi-table { max-height: 480px; overflow: auto; }
+@media print { .emi-table { max-height: none; overflow: visible; } }

@@ -633,19 +633,40 @@ router.get('/elections/:id', ah(async (req, res, next) => {
 }));
 
 // ---------------------------------------------------------------- tools
-router.get('/emi-calculator', (req, res) => {
-  const amount = Number(req.query.amount) || 500000, rate = Number(req.query.rate) || 12, months = util.int(req.query.months, 60);
+// emi-calculator.php: loan-type presets (from the loan rates), years / months, yearly summary, BS month per instalment
+const EMI_PRESETS = [['व्यक्तिगत ऋण', 'Personal loan', 14], ['घर ऋण', 'Home loan', 11], ['व्यवसाय ऋण', 'Business loan', 13], ['सवारी ऋण', 'Vehicle loan', 12.5], ['शैक्षिक ऋण', 'Education loan', 10]];
+router.get('/emi-calculator', ah(async (req, res) => {
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const unit = req.query.unit === 'years' ? 'years' : 'months';
+  const amount = clamp(Number(nd.toLatinDigits(req.query.amount || '')) || 500000, 1000, 1e9);
+  const rate = clamp(Number(nd.toLatinDigits(req.query.rate || '')) || 12, 0, 60);
+  const tenure = unit === 'years' ? clamp(util.int(req.query.years, 5), 1, 30) : clamp(util.int(req.query.months, 60), 1, 360);
+  const months = unit === 'years' ? tenure * 12 : tenure;
   const r = rate / 1200;
-  const emi = months > 0 ? (r ? amount * r * (1 + r) ** months / ((1 + r) ** months - 1) : amount / months) : 0;
+  const emi = r ? amount * r * (1 + r) ** months / ((1 + r) ** months - 1) : amount / months;
+  // instalments start the next BS month
+  const [by, bm] = nd.todayBs().split('-').map(Number);
+  const MONTHS = req.lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP;
   const schedule = [];
   let bal = amount;
-  for (let i = 1; i <= Math.min(months, 360); i++) {
-    const interest = bal * r, principal = emi - interest;
+  for (let i = 1; i <= months; i++) {
+    const interest = bal * r, principal = Math.min(bal, emi - interest);
     bal = Math.max(0, bal - principal);
-    schedule.push({ i, emi, interest, principal, bal });
+    const k = bm - 1 + i, y = by + Math.floor(k / 12);
+    schedule.push({ i, emi, interest, principal, bal, label: MONTHS[k % 12] + ' ' + (req.lang === 'en' ? y : nd.toNepaliDigits(y)) });
   }
-  res.render('public/emi', { title: res.locals.t('EMI क्याल्कुलेटर', 'EMI calculator'), amount, rate, months, emi, total: emi * months, schedule });
-});
+  const view = req.query.view === 'yearly' ? 'yearly' : 'monthly';
+  const yearly = [];
+  for (let i = 0; i < schedule.length; i += 12) {
+    const part = schedule.slice(i, i + 12);
+    yearly.push({ i: i / 12 + 1, emi: part.reduce((a, x) => a + x.emi, 0), principal: part.reduce((a, x) => a + x.principal, 0), interest: part.reduce((a, x) => a + x.interest, 0), bal: part[part.length - 1].bal, label: part[0].label + ' – ' + part[part.length - 1].label });
+  }
+  const loanRates = await db.many(`SELECT name, name_np, rate FROM interest_rates WHERE ${ACTIVE} AND category = 'loan' ORDER BY display_order, id LIMIT 8`);
+  const presets = loanRates.length ? loanRates.map(x => [x.name_np || x.name, x.name || x.name_np, Number(x.rate)]) : EMI_PRESETS;
+  const total = emi * months;
+  res.render('public/emi', { title: res.locals.t('EMI क्याल्कुलेटर', 'EMI calculator'), amount, rate, months, tenure, unit, emi, total, schedule, yearly, view, presets,
+    principalPct: total ? Math.round(amount / total * 100) : 100 });
+}));
 
 router.get('/date-converter', (req, res) => {
   const out = {};
