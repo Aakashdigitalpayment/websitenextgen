@@ -37,7 +37,7 @@
         <% } else { %><%- icon('file') %><a href="<%= mediaUrl(val) %>" target="_blank" rel="noopener"><%= String(val).split('/').pop() %></a><% } %>
         <label class="choice" style="padding:4px 10px"><input type="checkbox" name="remove_<%= fl.name %>" value="1"> <%= t('हटाउने', 'Remove') %></label>
       </div><% } %>
-      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" <%- fl.type === 'image' ? 'accept="image/jpeg,image/png,image/webp,image/gif"' : fl.kind === 'doc' ? 'accept=".pdf,.doc,.docx"' : '' %>>
+      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" <%- fl.type === 'image' ? 'accept="image/jpeg,image/png,image/webp,image/gif"' : fl.kind === 'doc' ? 'accept=".pdf,.doc,.docx"' : '' %><% if (fl.type === 'image' && fl.capture) { %> data-capture-field="<%= fl.name %>" data-capture-file data-facing="<%= fl.capture %>" data-aspect="<%= fl.aspect || '' %>"<% } %>>
       <% if (fl.type === 'image') { %><div class="field-hint"><%= t('JPG/PNG/WebP, ८K (7680×4320) सम्म। सबै स्क्रिनका लागि साना-ठूला आकार (AVIF/WebP) आफैं बन्छन्। ब्यानर/स्लाइडका लागि कम्तीमा 1920px चौडा, उत्कृष्टका लागि 3840–7680px।', 'JPG/PNG/WebP up to 8K (7680×4320). Smaller sizes for every screen (AVIF/WebP) are made automatically. Banners/slides: at least 1920 px wide, best 3840–7680 px.') %></div><% } %>
     <% } else { %>
       <input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>"

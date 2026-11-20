@@ -202,7 +202,7 @@ const resources = {
   team_members: { group: 'org', icon: 'users', title: ['टिम/कर्मचारी', 'Team'], order: "CASE category WHEN 'board' THEN 1 WHEN 'management' THEN 2 ELSE 3 END, display_order, id", afterSave: teamExclusiveFlags,
     filters: [{ name: 'category', type: 'select' }], beforeSave: async data => { data.position_np = data.position || null; return {}; },
     links: [['/admin/r/team_staff_groups', 'layers', 'कर्मचारी समूह', 'Staff groups'], ['/admin/r/team_menu_categories', 'menu', 'मेनु श्रेणी', 'Menu categories']], fields: [
-    IMG('photo', 'फोटो', 'Photo', { list: true }), T('name', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
+    IMG('photo', 'फोटो', 'Photo', { list: true, capture: 'user', aspect: 0.8 }), T('name', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
     T('position', 'पद (नेपाली)', 'Position (Nepali)', { list: true }), T('position_en', 'पद (English)', 'Position (English)'),
     SEL('category', 'समूह', 'Group', null, { required: true, list: true, optionsFn: teamCategoryOptions }),
     SEL('chart_row', 'संगठन चार्ट पङ्क्ति', 'Org-chart row', [['0', 'स्वतः (पदबाट)', 'Auto (from title)'], ['1', '१', '1'], ['2', '२', '2'], ['3', '३', '3'], ['4', '४', '4'], ['5', '५', '5']], { default: '0' }),
@@ -232,7 +232,7 @@ const resources = {
     D('start_date', 'सुरु', 'Start'), D('end_date', 'अन्त्य', 'End'), B('is_current', 'हालको', 'Current', { list: true }), ACTIVE],
   beforeDelete: blockIfUsed('SELECT count(*) FROM committee_members WHERE tenure_id = $1', 'यो कार्यकालमा सदस्य छन् — मेटाउन मिलेन।', 'This tenure has members, so it cannot be deleted.') },
   committee_members: { group: 'org', icon: 'user', title: ['समिति सदस्य', 'Committee members'], order: 'tenure_id DESC, display_order, id', filters: [{ name: 'tenure_id', type: 'ref' }], fields: [
-    REF('tenure_id', 'कार्यकाल', 'Tenure', 'committee_tenures', 'tenure_name', { required: true, list: true }), IMG('photo', 'फोटो', 'Photo', { list: true }),
+    REF('tenure_id', 'कार्यकाल', 'Tenure', 'committee_tenures', 'tenure_name', { required: true, list: true }), IMG('photo', 'फोटो', 'Photo', { list: true, capture: 'user', aspect: 0.8 }),
     T('name', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'), T('position', 'पद', 'Position', { list: true }), T('position_en', 'पद (English)', 'Position (English)'),
     T('phone', 'फोन', 'Phone'), T('email', 'इमेल', 'Email'), TA('address', 'ठेगाना', 'Address'), ORDER, ACTIVE] },
   designations: { group: 'org', icon: 'id', title: ['पद/दर्जा', 'Designations'], order: 'display_order, id', fields: [
@@ -400,7 +400,7 @@ const resources = {
   afterDelete: async (id, { db }) => db.query('DELETE FROM election_candidates WHERE position_id = $1', [id]) },
   election_candidates: { minRole: 'admin', group: 'engage', icon: 'user', title: ['उम्मेदवार', 'Candidates'], order: 'cycle_id DESC, position_id, display_order', fields: [
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true }), REF('position_id', 'पद', 'Position', 'election_positions', 'title_np', { required: true, list: true }),
-    IMG('photo', 'फोटो', 'Photo', { list: true }), T('name', 'नाम', 'Name', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'), T('symbol_no', 'चिन्ह नं.', 'Symbol no.'),
+    IMG('photo', 'फोटो', 'Photo', { list: true, capture: 'user', aspect: 0.8 }), T('name', 'नाम', 'Name', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'), T('symbol_no', 'चिन्ह नं.', 'Symbol no.'),
     T('phone', 'फोन', 'Phone'), T('email', 'इमेल', 'Email', { type: 'email' }), T('address', 'ठेगाना', 'Address'), TA('bio_np', 'परिचय', 'Bio'), TA('bio_en', 'परिचय (English)', 'Bio (English)'), ORDER, ACTIVE],
   beforeDelete: async (id, { db }) => deactivateIf(await db.value('SELECT count(*) FROM election_votes WHERE candidate_id = $1', [id])) },
   election_milestones: { minRole: 'admin', group: 'engage', icon: 'calendar', title: ['निर्वाचन कार्यतालिका', 'Election schedule'], order: 'cycle_id DESC, event_date', fields: [

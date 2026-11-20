@@ -1,10 +1,12 @@
 /* KYM capture tools (assets/js/kyc-capture.js in the PHP site): camera with crop / zoom / rotate, signature pad and a photo
    quality score. The result is posted as <field>_data (a data: URL); the server checks type, size and magic bytes again.
-   Progressive enhancement: the normal file inputs keep working without JavaScript or a camera. */
+   Progressive enhancement: the normal file inputs keep working without JavaScript or a camera.
+   Admin forms (form[data-capture-form]) reuse the camera: inputs marked data-capture-file get the photo put into the file
+   input itself (DataTransfer), so the normal multipart upload path and its checks apply. */
 (function () {
   'use strict';
-  const form = document.querySelector('form[data-app-form]');
-  if (!form) return;
+  document.querySelectorAll('form[data-app-form], form[data-capture-form]').forEach(init);
+  function init(form) {
   const np = (form.dataset.lang || '') !== 'en';
   const T = (a, b) => (np ? a : b);
   const toNp = s => String(s).replace(/[0-9]/g, d => '०१२३४५६७८९'[d]);
@@ -18,6 +20,20 @@
 
   // ------------------------------------------------------------ result: hidden <field>_data + preview
   function setData(input, dataUrl) {
+    if (input.hasAttribute('data-capture-file') && typeof DataTransfer === 'function') {
+      const [head, b64] = dataUrl.split(',');
+      const mime = (/^data:([^;]+)/.exec(head) || [])[1] || 'image/jpeg';
+      const bin = atob(b64), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], 'camera-' + Date.now() + (mime === 'image/png' ? '.png' : '.jpg'), { type: mime }));
+      input.files = dt.files;
+      let pv = input.parentElement.querySelector('img.file-preview');
+      if (!pv) { pv = el('img', { class: 'file-preview', alt: '' }); input.insertAdjacentElement('afterend', pv); }
+      pv.src = dataUrl;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
     let hidden = form.querySelector(`input[type=hidden][name="${input.name}_data"]`);
     if (!hidden) { hidden = el('input', { type: 'hidden', name: input.name + '_data' }); input.insertAdjacentElement('afterend', hidden); }
     hidden.value = dataUrl;
@@ -235,4 +251,5 @@
     }
     if (tools.children.length) input.insertAdjacentElement('afterend', tools);
   });
+  }
 })();

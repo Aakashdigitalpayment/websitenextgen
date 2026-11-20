@@ -13,7 +13,7 @@
     <% if (isAdmin) { %><form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('पक्का हटाउने?', 'Delete?') %>"><%- icon('trash') %></button></form><% } %>
   </div>
 </div>
-<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+<div class="grid detail-layout">
   <div class="stack">
     <% m.sections.forEach(sec => { const items = sec.fields.filter(fl => fl.type !== 'heading' && fl.store !== 'none'); %>
       <%
@@ -125,6 +125,7 @@
         </div></div>
     <% } %>
     <% } %>
+    <% if (m.key === 'kyc') { %><%- include('../partials/photo-capture', { action: '/admin/inbox/kyc/' + row.id + '/photo', photo: row.photo || '' }) %><% } %>
     <% if (m.key === 'kyc' && isAdmin) { %>
       <details class="card" id="profile"><summary style="cursor:pointer;font-weight:600"><%= t('KYM विवरण सच्याउनुहोस् (सदस्यमा sync)', 'Correct KYM details (syncs to member)') %></summary>
         <form method="post" action="/admin/inbox/kyc/<%= row.id %>/profile" class="mt-2">

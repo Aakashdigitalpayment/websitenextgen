@@ -144,3 +144,6 @@ body.panel { background: var(--bg); }
 .help-tip { margin-bottom: 12px; }
 .help-tip p { margin: 0 0 4px; } .help-tip p:last-child { margin: 0; }
 @media (max-width: 640px) { .help-body { padding-left: 16px; } }
+.photo-current { display: block; width: 120px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); }
+.detail-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 760px) { .detail-layout { grid-template-columns: 1fr; } }

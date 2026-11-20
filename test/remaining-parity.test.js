@@ -233,3 +233,48 @@ test('public extras: WhatsApp float (validated), bottom nav, header background, 
   assert.match(r.text, /class="how-steps/);
   assert.equal((r.text.match(/<li class="card card-flat"><h3>/g) || []).length, 4);
 });
+
+// ---------------------------------------------------------------- admin photo capture (member / KYM / committee)
+test('admin photo capture: member and KYM photo upload (camera fills the file input), portrait resource fields get the camera', async () => {
+  const jpg = await require('sharp')({ create: { width: 40, height: 50, channels: 3, background: '#8899aa' } }).jpeg().toBuffer();
+  const agent = await adminAgent();
+  const mem = await inA(() => db.one("INSERT INTO members (name, name_np, sadasyata_number, phone, approval_status, is_active) VALUES ('Photo Member', 'फोटो सदस्य', 'PH-001', '9811111111', 'approved', 1) RETURNING id"));
+
+  let page = await get('/admin/members/' + mem.id, agent);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /data-capture-form/);
+  assert.match(page.text, /name="photo"[^>]*data-capture-file/);
+  assert.match(page.text, /\/static\/js\/kyc-capture\.js/);
+  const tok = csrfOf(page.text);
+  let r = await agent.post(`/admin/members/${mem.id}/photo?_csrf=${encodeURIComponent(tok)}`).set('Host', HA).field('_csrf', tok).attach('photo', jpg, 'camera-1.jpg');
+  assert.equal(r.status, 302);
+  const k = await inA(() => db.one("SELECT k.id, k.photo FROM kyc_applications k JOIN members m ON m.kyc_application_id = k.id WHERE m.id = $1", [mem.id]));
+  assert.ok(k && /^_private\/kyc\/[0-9a-f]{32}\.jpg$/.test(k.photo), 'photo stored privately on the KYM (SSOT)');
+  assert.ok(fs.existsSync(path.join(config.uploadDir, A, k.photo)));
+  assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'member_photo_update'")));
+
+  // KYM page: replace again, the old file is removed; a non-image is refused
+  page = await get('/admin/inbox/kyc/' + k.id, agent);
+  assert.match(page.text, new RegExp(`action="/admin/inbox/kyc/${k.id}/photo\\?_csrf=`));
+  r = await agent.post(`/admin/inbox/kyc/${k.id}/photo?_csrf=${encodeURIComponent(tok)}`).set('Host', HA).field('_csrf', tok).attach('photo', jpg, 'b.jpg');
+  assert.equal(r.status, 302);
+  const k2 = await inA(() => db.one('SELECT photo FROM kyc_applications WHERE id = $1', [k.id]));
+  assert.notEqual(k2.photo, k.photo);
+  assert.ok(!fs.existsSync(path.join(config.uploadDir, A, k.photo)), 'old photo deleted');
+  r = await agent.post(`/admin/inbox/kyc/${k.id}/photo?_csrf=${encodeURIComponent(tok)}`).set('Host', HA).field('_csrf', tok).attach('photo', Buffer.from('<?php echo 1; ?>'), 'x.jpg');
+  assert.equal(r.status, 302);
+  assert.equal((await inA(() => db.one('SELECT photo FROM kyc_applications WHERE id = $1', [k.id]))).photo, k2.photo, 'bad file ignored');
+  // CSRF still required on the multipart route
+  r = await agent.post(`/admin/inbox/kyc/${k.id}/photo`).set('Host', HA).attach('photo', jpg, 'c.jpg');
+  assert.equal(r.status, 403);
+
+  // committee member form: camera on the photo field
+  page = await get('/admin/r/committee_members/new', agent);
+  assert.match(page.text, /data-capture-form/);
+  assert.match(page.text, /name="photo"[^>]*data-capture-field="photo" data-capture-file data-facing="user" data-aspect="0\.8"/);
+  page = await get('/admin/r/news/new', agent);
+  assert.ok(!/kyc-capture\.js/.test(page.text), 'no camera script where not needed');
+  const js = fs.readFileSync(path.join(__dirname, '../public/js/kyc-capture.js'), 'utf8');
+  assert.match(js, /form\[data-capture-form\]/);
+  assert.match(js, /new DataTransfer\(\)/);
+});

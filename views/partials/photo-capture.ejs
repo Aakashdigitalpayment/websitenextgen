@@ -1,0 +1,18 @@
+<% /* Admin photo upload / webcam capture (PHP members.php / committees.php webcam_photo). The camera result is put into the
+      file input (public/js/kyc-capture.js data-capture-file), so the normal multipart upload and its checks apply.
+      locals: action (POST url), photo (stored path or ''), note ([np, en]) */ %>
+<div class="card" id="photo">
+  <h3><%= t('फोटो', 'Photo') %></h3>
+  <% if (photo) { %><img class="photo-current" src="<%= mediaUrl(photo) %>" alt="<%= t('हालको फोटो', 'Current photo') %>"><% } else { %><p class="small muted"><%= t('फोटो छैन।', 'No photo yet.') %></p><% } %>
+  <form method="post" action="<%= action %>?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data" class="mt-2" data-capture-form data-lang="<%= lang %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="field">
+      <label for="photo_file"><%= photo ? t('नयाँ फोटो', 'New photo') : t('फोटो थप्नुहोस्', 'Add a photo') %></label>
+      <input class="input" type="file" id="photo_file" name="photo" accept="image/jpeg,image/png,image/webp" required data-capture-field="photo" data-capture-file data-facing="user" data-aspect="0.8">
+      <div class="field-hint"><%= t('फाइल छान्नुहोस् वा "क्यामेराबाट खिच्नुहोस्" — अनुहार सिधा, दुवै आँखा र कान देखिने गरी।', 'Choose a file or "Use the camera" — face straight on, both eyes and ears visible.') %><% if (locals.note) { %> <%= t(...note) %><% } %></div>
+    </div>
+    <button class="btn btn-primary btn-sm"><%- icon('check') %><%= t('फोटो सुरक्षित गर्नुहोस्', 'Save photo') %></button>
+  </form>
+</div>
+<link rel="stylesheet" href="/static/css/forms.css">
+<script src="/static/js/kyc-capture.js" defer></script>

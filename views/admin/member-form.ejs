@@ -9,7 +9,7 @@
   <div class="alert alert-warn"><%- icon('alert') %><span><%= t('यो सदस्यको पोर्टल खाता स्वीकृत हुन बाँकी छ।', 'This member portal account is waiting for approval.') %></span>
     <form method="post" action="/admin/members/<%= item.id %>/approve" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="back" value="/admin/members/<%= item.id %>"><button class="btn btn-primary btn-sm"><%- icon('check') %><%= t('स्वीकृत', 'Approve') %></button></form></div>
 <% } %>
-<div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
+<div class="grid detail-layout">
 <div>
 <form class="form-card" method="post" action="/admin/members<%= item ? '/' + item.id : '' %>" novalidate>
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -54,7 +54,8 @@
 </div>
 
 <% if (item) { %><div>
-  <div class="card"><h3><%= t('पोर्टल खाता', 'Portal account') %></h3>
+  <%- include('../partials/photo-capture', { action: '/admin/members/' + item.id + '/photo', photo: locals.kycPhoto || '', note: ['फोटो सदस्यको KYM मा रहन्छ (परिचयपत्रमा पनि यही)।', 'The photo is kept on the member\'s KYM (the ID card uses it too).'] }) %>
+  <div class="card mt-2"><h3><%= t('पोर्टल खाता', 'Portal account') %></h3>
     <div class="kv small">
       <div><%= t('लगइन', 'Login') %></div><div><%= item.password_hash ? t('पासवर्ड सेट छ', 'Password set') : t('पासवर्ड छैन', 'No password') %><%= item.google_id ? ' · Google' : '' %><%= item.facebook_id ? ' · Facebook' : '' %></div>
       <div>2FA</div><div><%= Number(item.twofa_enabled) ? t('सुरु', 'On') : t('बन्द', 'Off') %></div>
