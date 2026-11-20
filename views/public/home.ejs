@@ -3,8 +3,8 @@
     <div class="hero-grid">
       <div>
         <div class="eyebrow"><%= settings.established_year ? t('स्थापना ' + num(settings.established_year), 'Since ' + settings.established_year) : t('सहकारी संस्था', 'Cooperative') %></div>
-        <h1><%= siteName %></h1>
-        <p class="lead"><%= settings.about_short ? util.excerpt(settings.about_short, 220) : t('बचत, ऋण र डिजिटल सेवा — सदस्यको हितमा, समुदायको साथमा।', 'Savings, loans and digital services — for our members and community.') %></p>
+        <h1><%= (!sliders.length && settings.hero_title) || siteName %></h1>
+        <p class="lead"><%= !sliders.length && settings.hero_subtitle ? settings.hero_subtitle : settings.about_short ? util.excerpt(settings.about_short, 220) : t('बचत, ऋण र डिजिटल सेवा — सदस्यको हितमा, समुदायको साथमा।', 'Savings, loans and digital services — for our members and community.') %></p>
         <div class="hero-actions" <%- locals.plan && !plan.has('applications') ? 'hidden' : '' %>>
           <a class="btn btn-primary btn-lg" href="/apply/account"><%= t('खाता खोल्नुहोस्', 'Open an account') %><%- icon('right') %></a>
           <a class="btn btn-outline btn-lg" href="/apply/loan"><%= t('ऋण आवेदन', 'Apply for a loan') %></a>
@@ -16,7 +16,7 @@
             <% sliders.forEach((s, i) => { %>
               <div class="slide <%= i === 0 ? 'active' : '' %>">
                 <picture><%- avifSource(s.image, '100vw') %><img src="<%= mediaUrl(s.image) %>"<%- srcset(s.image, '100vw') %> alt="<%= s.title || '' %>" <%= i ? 'loading=lazy' : 'fetchpriority=high' %> decoding="async"></picture>
-                <% if (s.title) { %><div class="slide-caption"><strong style="font-weight:500"><%= s.title %></strong><% if (s.subtitle) { %><div class="muted small"><%= s.subtitle %></div><% } %></div><% } %>
+                <% if (s.title || s.ctaText) { %><div class="slide-caption"><% if (s.title) { %><strong style="font-weight:500"><%= s.title %></strong><% } %><% if (s.subtitle) { %><div class="muted small"><%= s.subtitle %></div><% } %><% if (s.ctaText) { %><a class="btn btn-primary btn-sm mt-1" href="<%= s.ctaHref %>"<%- /^https?:/i.test(s.ctaHref) ? ' target="_blank" rel="noopener"' : '' %>><%= s.ctaText %><%- icon('right') %></a><% } %></div><% } %>
               </div>
             <% }) %>
             <% if (sliders.length > 1) { %><div class="slider-dots"><% sliders.forEach((s, i) => { %><button class="<%= i === 0 ? 'active' : '' %>" aria-label="Slide <%= i + 1 %>"></button><% }) %></div><% } %>
@@ -38,6 +38,14 @@
         <% statList.forEach(s => { %><div class="stat"><div class="stat-value"><%= typeof s[0] === 'number' ? num(s[0].toLocaleString('en-IN')) : s[0] %></div><div class="stat-label"><%= s[1] %></div></div><% }) %>
       </div>
     <% } %>
+    <div class="profile-bar">
+      <% if (profile) { %><span class="small muted"><%= t('आ.व. ', 'FY ') + num(profile.fiscal_year) %><%= Number(profile.report_month) ? ' · ' + (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[profile.report_month - 1] : '' %></span><% } %>
+      <a class="tab" href="/institutional-profile"><%- icon('chart') %> <%= t('संस्थागत प्रोफाइल', 'Institutional profile') %></a>
+      <a class="tab" href="/reports?type=monthly"><%= t('मासिक प्रतिवेदन', 'Monthly reports') %><% if (hasMonthly) { %> <span class="badge badge-ok"><%= t('नयाँ', 'Latest') %></span><% } %></a>
+      <a class="tab" href="/reports?type=annual"><%= t('वार्षिक प्रतिवेदन', 'Annual reports') %><% if (hasAnnual) { %> <span class="badge badge-ok"><%= t('नयाँ', 'Latest') %></span><% } %></a>
+      <a class="tab" href="/reports"><%= t('सबै प्रतिवेदन', 'All reports') %></a>
+      <% if (profile) { %><a class="small" href="/institutional-profile#charts"><%= t('चार्ट र पूरा विवरण हेर्नुहोस् →', 'View charts & full profile →') %></a><% } %>
+    </div>
   </div>
 </section>
 
@@ -51,6 +59,14 @@
         ['/interest-rates', 'percent', t('ब्याजदर', 'Interest rates')],
         ['/apply/appointment', 'calendar', t('भेटघाट', 'Appointment')],
         ['/track', 'search', t('आवेदन ट्र्याक', 'Track')],
+        ['/apply/kyc', 'id', t('अनलाइन केवाइएम', 'Online KYM')],
+        ['/apply/grievance', 'message', t('गुनासो', 'Grievance')],
+        ['/apply/welfare', 'heart', t('कल्याण दाबी', 'Welfare claim')],
+        ['/digital-services', 'phone', t('डिजिटल सेवा', 'Digital services')],
+        ['/exchange-rate', 'globe', t('विनिमय दर', 'Exchange rates')],
+        ['/date-converter', 'calendar', t('मिति परिवर्तन', 'Date converter')],
+        ['/downloads', 'download', t('डाउनलोड', 'Downloads')],
+        ['/auctions', 'gavel', t('लिलाम', 'Auctions')],
       ].filter(q => !locals.plan || plan.allows(q[0])).forEach(q => { %>
         <a class="quick-link" href="<%= q[0] %>"><span class="icon-tile"><%- icon(q[1]) %></span><%= q[2] %></a>
       <% }) %>
@@ -68,7 +84,7 @@
     <div class="grid grid-3">
       <% services.forEach(s => { %>
         <a class="card card-link" href="/services/<%= s.id %>">
-          <span class="icon-tile"><%- icon(/loan|ऋण/i.test(s.title || '') ? 'banknote' : /digital|mobile/i.test(s.title || '') ? 'phone' : 'wallet') %></span>
+          <span class="icon-tile"><%- icon(iconFor(s.icon, /loan|ऋण/i.test(s.title || '') ? 'banknote' : /digital|mobile/i.test(s.title || '') ? 'phone' : 'wallet')) %></span>
           <h3><%= f(s, 'title') %></h3>
           <p class="muted"><%= util.excerpt(f(s, 'description'), 120) %></p>
         </a>
@@ -117,11 +133,107 @@
     <div class="grid grid-3">
       <% features.forEach(fe => { %>
         <div>
-          <span class="icon-tile"><%- icon('check') %></span>
+          <span class="icon-tile"><%- icon(iconFor(fe.icon, 'check')) %></span>
           <h3><%= f(fe, 'title') %></h3>
           <p class="muted"><%= lang === 'en' ? (fe.desc_en || fe.desc_np) : (fe.desc_np || fe.desc_en) %></p>
         </div>
       <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<% if (chairman || ceo || infoOfficer || grievanceOfficer) { %>
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="section-head"><div><div class="eyebrow"><%= t('नेतृत्व', 'Leadership') %></div><h2><%= t('हाम्रो नेतृत्व र सम्पर्क अधिकारी', 'Our leadership & contact officers') %></h2></div><a class="btn btn-ghost" href="/team"><%= t('पूरा टिम', 'Full team') %><%- icon('right') %></a></div>
+    <div class="grid grid-4">
+      <% [chairman, ceo].filter(Boolean).forEach(l => { %>
+        <div class="card person">
+          <div class="person-photo"><% if (l.photo) { %><img src="<%= mediaUrl(l.photo) %>"<%- srcset(l.photo, '240px') %> alt="<%= l.name %>" loading="lazy"><% } else { %><%= (l.name || l.designation).charAt(0) %><% } %></div>
+          <div class="person-name"><%= l.name || l.designation %></div>
+          <div class="person-role"><%= l.designation %></div>
+          <% if (l.message) { %><a class="btn btn-soft btn-sm mt-1" href="<%= l.href %>"><%= t('सन्देश पढ्नुहोस्', 'Read message') %></a><% } %>
+        </div>
+      <% }) %>
+      <% [[infoOfficer, t('सूचना अधिकारी', 'Information officer'), '/team#contact-officers', t('थप विवरण', 'Details')], [grievanceOfficer, t('गुनासो सुन्ने अधिकारी', 'Grievance officer'), '/apply/grievance', t('गुनासो दर्ता', 'File a grievance')]].filter(o => o[0]).forEach(([p, role, href, cta]) => { %>
+        <div class="card person">
+          <div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>"<%- srcset(p.photo, '240px') %> alt="<%= f(p, 'name') %>" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
+          <div class="person-name"><%= f(p, 'name') %></div>
+          <div class="person-role"><%= role %></div>
+          <% if (p.phone) { %><div class="small mt-1"><a href="tel:<%= p.phone %>"><%= p.phone %></a></div><% } %>
+          <% if (p.email) { %><div class="small"><a href="mailto:<%= p.email %>"><%= p.email %></a></div><% } %>
+          <a class="btn btn-soft btn-sm mt-1" href="<%= href %>"><%= cta %></a>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<% if (playStore || appStore) { %>
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="card app-promo">
+      <div>
+        <div class="eyebrow"><%= t('मोबाइल एप', 'Mobile app') %></div>
+        <h2><%= t('आफ्नो डिजिटल भुक्तानी व्यवस्थापन गर्नुहोस्', 'Manage your digital payments') %></h2>
+        <p class="muted"><%= t('ब्यालेन्स हेर्नुहोस्, रकम पठाउनुहोस्, बिल तिर्नुहोस् — जहाँ पनि, जुनसुकै बेला।', 'Check balances, send money and pay bills — anywhere, any time.') %></p>
+        <div class="flex gap-1 wrap mt-2">
+          <% if (playStore) { %><a class="btn btn-primary" href="<%= playStore %>" target="_blank" rel="noopener"><%- icon('phone') %>Google Play</a><% } %>
+          <% if (appStore) { %><a class="btn btn-outline" href="<%= appStore %>" target="_blank" rel="noopener"><%- icon('phone') %>App Store</a><% } %>
+        </div>
+      </div>
+      <% if (settings.mobile_app_photo) { %><img src="<%= mediaUrl(settings.mobile_app_photo) %>"<%- srcset(settings.mobile_app_photo, '320px') %> alt="<%= t('मोबाइल एप', 'Mobile app') %>" loading="lazy" decoding="async"><% } %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<% if (appFeatures.length) { const featureCard = a => { %>
+  <details class="card card-flat app-feature"><summary><span class="icon-tile"><%- icon(iconFor(a.icon, 'phone')) %></span><b style="font-weight:500"><%= f(a, 'title') %></b><% if (Number(a.is_new)) { %> <span class="badge badge-info"><%= t('नयाँ', 'New') %></span><% } %></summary>
+    <% if (f(a, 'description')) { %><p class="muted small mt-1"><%= f(a, 'description') %></p><% } %></details>
+<% }; %>
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="section-head"><div><div class="eyebrow"><%= t('डिजिटल सेवा', 'Digital services') %></div><h2><%= t('एपका सुविधाहरू', 'App features') %></h2></div><a class="btn btn-ghost" href="/digital-services"><%= t('सबै सेवाहरू', 'All services') %><%- icon('right') %></a></div>
+    <div class="grid grid-4"><% appFeatures.slice(0, 8).forEach(featureCard) %></div>
+    <% if (appFeatures.length > 8) { %><details class="mt-2"><summary class="btn btn-ghost btn-sm"><%= t('थप हेर्नुहोस्', 'Show more') %> (<%= num(appFeatures.length - 8) %>)</summary><div class="grid grid-4 mt-2"><% appFeatures.slice(8).forEach(featureCard) %></div></details><% } %>
+  </div>
+</section>
+<% } %>
+
+<% if (awards.length) { %>
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="section-head"><div><div class="eyebrow"><%= t('सम्मान', 'Recognition') %></div><h2><%= t('सम्मान तथा पुरस्कार', 'Awards & honours') %></h2></div><% if (awardCount > 3) { %><a class="btn btn-ghost" href="/awards"><%= t('सबै पुरस्कार', 'View all awards') %><%- icon('right') %></a><% } %></div>
+    <div class="grid grid-3">
+      <% awards.forEach(a => { %>
+        <a class="card card-link" href="/awards/<%= a.id %>">
+          <% if (a.image) { %><div class="card-media"><img src="<%= mediaUrl(a.image) %>"<%- srcset(a.image, '(max-width: 600px) 100vw, 380px') %> alt="" loading="lazy" decoding="async"></div><% } else { %><span class="icon-tile"><%- icon('award') %></span><% } %>
+          <div class="card-meta"><%= [f(a, 'awarded_by'), a.award_date ? bsDate(a.award_date) : ''].filter(Boolean).join(' · ') %></div>
+          <h3><%= f(a, 'title') %></h3>
+          <% if (f(a, 'description')) { %><p class="muted small"><%= util.excerpt(f(a, 'description'), 110) %> <span class="faint"><%= t('थप पढ्नुहोस्', 'Read more') %></span></p><% } %>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+</section>
+<% } %>
+
+<% if (spotlight) { const sp = spotlight; %>
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="card spotlight">
+      <div class="person-photo"><% if (sp.photo) { %><img src="<%= mediaUrl(sp.photo) %>"<%- srcset(sp.photo, '240px') %> alt="<%= lang === 'en' ? sp.member_name_en || sp.member_name : sp.member_name %>" loading="lazy"><% } else { %><%- icon('award', 'icon-lg') %><% } %></div>
+      <div>
+        <span class="badge badge-brand"><%= t('वर्षको सदस्य', 'Member of the year') %> <%= num(sp.spotlight_year) %></span>
+        <h2 class="mt-1"><%= lang === 'en' ? sp.member_name_en || sp.member_name : sp.member_name %></h2>
+        <div class="small muted"><%= [sp.member_id && t('सदस्य नं. ', 'Member no. ') + num(sp.member_id), sp.member_since && t('सदस्य बनेको ', 'Member since ') + num(sp.member_since)].filter(Boolean).join(' · ') %></div>
+        <% const ach = lang === 'en' ? sp.achievement_en || sp.achievement : sp.achievement || sp.achievement_en; if (ach) { %><p class="mt-1"><%= ach %></p><% } %>
+        <% const quote = lang === 'en' ? sp.quote_en || sp.quote : sp.quote || sp.quote_en; if (quote) { %><blockquote class="muted">“<%= quote %>”</blockquote><% } %>
+        <a class="small" href="/awards"><%= t('सम्मान तथा पुरस्कार हेर्नुहोस् →', 'See awards & honours →') %></a>
+      </div>
     </div>
   </div>
 </section>

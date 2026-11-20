@@ -86,21 +86,44 @@ const submitLimiter = rateLimit({
 });
 
 // ---------------------------------------------------------------- home
+// index.php: data cached per tenant for 60 s (PHP cached 900 s); admin saves flush it (navigation.invalidate)
+const safeHref = u => { const v = String(u || '').trim(); return /^https?:\/\/[^\s"'<>]+$/i.test(v) || /^\/(?!\/)[^\s"'<>]*$/.test(v) ? v : ''; };
 router.get('/', ah(async (req, res) => {
-  const [sliders, services, notices, news, rates, stats, features, popup, programs, profile, links] = await Promise.all([
-    db.many(`SELECT * FROM sliders WHERE ${ACTIVE} ORDER BY display_order, id LIMIT 6`),
-    db.many(`SELECT * FROM services WHERE ${ACTIVE} ORDER BY display_order, id LIMIT 6`),
-    db.many(`SELECT * FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 5`),
-    db.many(`SELECT * FROM news WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY created_at DESC LIMIT 3`),
-    db.many(`SELECT * FROM interest_rates WHERE ${ACTIVE} ORDER BY category DESC, display_order, id LIMIT 8`),
-    db.many('SELECT stat_key, stat_value FROM site_stats'),
-    db.many(`SELECT * FROM why_choose_features WHERE ${ACTIVE} ORDER BY sort_order, id LIMIT 6`),
-    db.one(`SELECT * FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} AND is_popup = 1 AND (popup_expires_at IS NULL OR popup_expires_at >= CURRENT_DATE) ORDER BY id DESC LIMIT 1`),
-    db.many(`SELECT * FROM upcoming_programs WHERE ${ACTIVE} AND event_date >= CURRENT_DATE AND parent_program_id IS NULL ORDER BY event_date LIMIT 3`),
-    db.one(`SELECT * FROM institutional_profile WHERE ${ACTIVE} AND access_level = 'none' ORDER BY fiscal_year DESC, report_month DESC NULLS LAST, id DESC LIMIT 1`),
-    db.many(`SELECT * FROM satisfaction_links WHERE ${ACTIVE} ORDER BY display_order, id LIMIT 4`),
+  const data = await pcache.cached('home', 60_000, async () => {
+    const adYear = String(new Date().getFullYear()), bsYear = String(nd.todayBs() || '').slice(0, 4);
+    const [sliders, services, notices, news, rates, stats, features, programs, profile, officers, appFeatures, awards, awardCount, spotlight, monthly, annual, serviceCount] = await Promise.all([
+      db.many(`SELECT * FROM sliders WHERE ${ACTIVE} ORDER BY display_order, id LIMIT 12`),
+      db.many(`SELECT * FROM services WHERE ${ACTIVE} ORDER BY display_order, id LIMIT 6`),
+      db.many(`SELECT * FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 5`),
+      db.many(`SELECT * FROM news WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY created_at DESC LIMIT 3`),
+      db.many(`SELECT * FROM interest_rates WHERE ${ACTIVE} ORDER BY category DESC, display_order, id LIMIT 8`),
+      db.many('SELECT stat_key, stat_value FROM site_stats'),
+      db.many(`SELECT * FROM why_choose_features WHERE ${ACTIVE} ORDER BY sort_order, id LIMIT 6`),
+      db.many(`SELECT * FROM upcoming_programs WHERE ${ACTIVE} AND event_date >= CURRENT_DATE AND parent_program_id IS NULL ORDER BY event_date LIMIT 3`),
+      db.one(`SELECT * FROM institutional_profile WHERE ${ACTIVE} AND access_level = 'none' ORDER BY fiscal_year DESC, report_month DESC NULLS LAST, id DESC LIMIT 1`),
+      db.many(`SELECT * FROM team_members WHERE ${ACTIVE} AND (is_information_officer = 1 OR is_grievance_officer = 1 OR is_chairman = 1 OR is_ceo = 1) ORDER BY display_order, id LIMIT 8`),
+      db.many(`SELECT * FROM app_features WHERE ${ACTIVE} ORDER BY sort_order, id LIMIT 24`),
+      db.many(`SELECT * FROM awards WHERE ${ACTIVE} ORDER BY display_order, award_date DESC NULLS LAST LIMIT 3`),
+      db.value(`SELECT count(*) FROM awards WHERE ${ACTIVE}`),
+      // PHP matched the AD year only; many co-ops type the BS year
+      db.one(`SELECT * FROM member_of_year WHERE ${ACTIVE} AND trim(spotlight_year) IN ($1, $2) ORDER BY spotlight_year DESC, id DESC LIMIT 1`, [adYear, bsYear]),
+      db.one(`SELECT id FROM reports WHERE ${ACTIVE} AND access_level = 'none' AND lower(report_type) = 'monthly' LIMIT 1`),
+      db.one(`SELECT id FROM reports WHERE ${ACTIVE} AND access_level = 'none' AND lower(report_type) IN ('annual', 'annual report') LIMIT 1`),
+      db.value(`SELECT count(*) FROM services WHERE ${ACTIVE}`),
+    ]);
+    for (const s of sliders) { s.ctaText = String(s.button_text || '').trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, ''); s.ctaHref = safeHref(s.button_url) || (s.ctaText ? '#' : ''); }
+    return { sliders, services, notices, news, rates, stats: Object.fromEntries(stats.map(s => [s.stat_key, s.stat_value])), features, programs, profile,
+      officers, appFeatures, awards, awardCount, spotlight, hasMonthly: !!monthly, hasAnnual: !!annual, serviceCount };
+  });
+  const s = res.locals.settings;
+  const [chairman, ceo] = await Promise.all([
+    teamLib.leader('chairman', s, req.lang, data.officers.find(p => Number(p.is_chairman)) || null),
+    teamLib.leader('ceo', s, req.lang, data.officers.find(p => Number(p.is_ceo)) || null),
   ]);
-  res.render('public/home', { sliders, services, notices, news, rates, stats: Object.fromEntries(stats.map(s => [s.stat_key, s.stat_value])), features, popup, programs, profile, links });
+  const infoOfficer = data.officers.find(p => Number(p.is_information_officer)) || null;
+  const grievanceOfficer = data.officers.find(p => Number(p.is_grievance_officer)) || null;
+  res.render('public/home', { ...data, chairman: chairman.message || chairman.name ? chairman : null, ceo: ceo.message || ceo.name ? ceo : null, infoOfficer, grievanceOfficer,
+    playStore: safeHref(s.play_store_url), appStore: safeHref(s.app_store_url) });
 }));
 
 // ---------------------------------------------------------------- about
@@ -401,7 +424,7 @@ router.get('/institutional-profile', ah(async (req, res) => {
 router.get('/institutional-profile/:id/file', ah(async (req, res, next) => {
   const row = await db.one('SELECT id, fiscal_year, attachment_path, access_level, is_active FROM institutional_profile WHERE id = $1', [util.int(req.params.id)]);
   if (!row || !row.attachment_path || (!Number(row.is_active) && !req.admin)) return next();
-  if (!memberAccess.canOpen(req, row.access_level) && !memberAccess.checkFileToken(req, 'profile', row.id, req.query.t)) return res.redirect('/institutional-profile#unlock');
+  if (!memberAccess.canOpen(req, row.access_level) && !memberAccess.checkFileToken(req, 'profile', row.id, req.query.t)) return res.redirect('/member/login?next=' + encodeURIComponent(req.originalUrl));
   require('../lib/uploads').sendStored(req, res, next, row.attachment_path);
 }));
 

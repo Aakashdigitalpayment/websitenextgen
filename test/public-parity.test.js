@@ -221,3 +221,31 @@ test('about: body from pages(slug about), history, default values, board chart; 
   r = await get('/success-stories');
   assert.ok(r.text.includes('ऋणले सहयोग गर्‍यो') && r.text.includes('२०७०'));
 });
+
+// ---------------------------------------------------------------- P1-9 home sections
+test('home: slide CTA (sanitised), leadership, mobile app, app features, awards, member of the year, profile bar', async () => {
+  const bsYear = nd.todayBs().slice(0, 4);
+  await inA(async () => {
+    await db.query(`INSERT INTO sliders (title, image, button_text, button_url, is_active) VALUES ('S1', 'x.jpg', '"Open now"', '/apply/account', 1), ('S2', 'y.jpg', 'Bad', 'javascript:alert(1)', 1)`);
+    await db.query("INSERT INTO team_members (name, position, category, is_active, is_grievance_officer, phone) VALUES ('Gita Officer', 'Officer', 'staff', 1, 1, '9800000001')");
+    await db.query("INSERT INTO app_features (title, title_np, is_new, is_active, sort_order) SELECT 'F' || g, 'सुविधा ' || g, CASE WHEN g = 1 THEN 1 ELSE 0 END, 1, g FROM generate_series(1, 10) g");
+    await db.query("INSERT INTO awards (title, description, is_active) VALUES ('Best Coop', 'Long description of the award', 1)");
+    await db.query("INSERT INTO member_of_year (spotlight_year, member_name, quote, is_active) VALUES ($1, 'Ram Spotlight', 'Saving changed my life', 1)", [bsYear]);
+  });
+  await setting('chairman_message_np', 'अध्यक्षको सन्देश');
+  await setting('chairman_name', 'हरि अध्यक्ष');
+  await setting('play_store_url', 'https://play.google.com/store/apps/details?id=x');
+  await clearCaches();
+  const r = await get('/');
+  assert.equal(r.status, 200);
+  assert.ok(r.text.includes('href="/apply/account"') && r.text.includes('>Open now<'), 'CTA without the quotes');
+  assert.ok(!r.text.includes('javascript:alert'), 'unsafe CTA url dropped');
+  assert.ok(r.text.includes('हरि अध्यक्ष') && r.text.includes('/message/chairman'));
+  assert.ok(r.text.includes('Gita Officer') && r.text.includes('/apply/grievance'));
+  assert.ok(r.text.includes('Google Play'));
+  assert.ok(r.text.includes('सुविधा 9'), 'features beyond 8 behind "show more"');
+  assert.ok(r.text.includes('/awards/') && r.text.includes('Best Coop'));
+  assert.ok(r.text.includes('Ram Spotlight') && r.text.includes('Saving changed my life'), 'BS-year spotlight');
+  assert.ok(r.text.includes('/reports?type=monthly') && r.text.includes('/reports?type=annual'));
+  assert.ok(r.text.includes('/exchange-rate'), 'extra quick links');
+});

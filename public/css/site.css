@@ -41,3 +41,17 @@
 .chart-table summary { cursor: pointer; }
 .hbars { display: grid; gap: 8px; }
 .about-img { width: 100%; border-radius: var(--radius); margin-bottom: 20px; }
+
+/* home: institutional profile bar, mobile app, app features, member of the year */
+.profile-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
+.profile-bar .tab { display: inline-flex; gap: 6px; align-items: center; }
+.app-promo { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+.app-promo img { max-height: 260px; width: auto; border-radius: 12px; }
+@media (max-width: 700px) { .app-promo { grid-template-columns: 1fr; } .app-promo img { max-height: 200px; justify-self: center; } }
+.app-feature summary { display: flex; gap: 10px; align-items: center; cursor: pointer; list-style: none; }
+.app-feature summary::-webkit-details-marker { display: none; }
+.app-feature .icon-tile { margin: 0; flex: none; }
+.spotlight { display: grid; grid-template-columns: 140px 1fr; gap: 24px; align-items: center; }
+.spotlight .person-photo { width: 140px; height: 140px; margin: 0; }
+.spotlight blockquote { border-left: 3px solid var(--brand); margin: 10px 0; padding-left: 12px; }
+@media (max-width: 600px) { .spotlight { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
