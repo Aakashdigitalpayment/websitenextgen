@@ -84,6 +84,7 @@ router.post('/logout', ah(async (req, res) => {
 }));
 
 router.use(requireAdmin('editor'));
+router.use(require('../lib/legacy-admin-urls').adminRedirects); // PHP-era admin/<x>.php links (old SMS / emails / bookmarks)
 
 // a temporary / reset password must be replaced before anything else
 router.use((req, res, next) => {

@@ -531,3 +531,38 @@ test('P3: Elections menu follows show_in_navbar, view-only reports open inline, 
   }
   assert.match((await admin.get('/admin/r/information_room_items/new')).text, /value="board_decision"/);
 });
+
+// ---------------------------------------------------------------- b-10 marketplace detail / b-19 legacy admin URLs
+test('marketplace admin detail with inquiries + all tab; legacy admin .php links redirect', async () => {
+  const m1 = await memberId('M-1');
+  const lid = await inA(async () => {
+    const l = await db.value("INSERT INTO member_marketplace_listings (member_id, listing_type, category, title, description, status) VALUES ($1, 'product', 'other', 'Organic Honey', 'Pure', 'approved') RETURNING id", [m1]);
+    await db.query("INSERT INTO member_marketplace_inquiries (listing_id, inquirer_name, inquirer_phone, message) VALUES ($1, 'Buyer Bob', '9800000077', 'How much?')", [l]);
+    return l;
+  });
+  let page = await admin.get('/admin/marketplace/' + lid);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Buyer Bob/);
+  assert.match(page.text, /How much\?/);
+  page = await admin.get('/admin/marketplace?status=all');
+  assert.match(page.text, new RegExp(`href="/admin/marketplace/${lid}"`));
+  const r = await admin.form(`/admin/marketplace/${lid}?back=view`, { action: 'expire' }, '/admin/marketplace/' + lid);
+  assert.equal(r.headers.location, '/admin/marketplace/' + lid);
+  assert.equal(await inA(() => db.value('SELECT status FROM member_marketplace_listings WHERE id = $1', [lid])), 'expired');
+
+  const go = async url => { const x = await admin.get(url); return [x.status, x.headers.location]; };
+  assert.deepEqual(await go('/admin/loan-applications.php?view=12'), [301, '/admin/inbox/loan/12']);
+  assert.deepEqual(await go('/admin/welfare-claims.php?action=view&id=7'), [301, '/admin/inbox/welfare/7']);
+  assert.deepEqual(await go('/admin/auction-bids.php?auction_id=3'), [301, '/admin/inbox/bid?auction=3']);
+  assert.deepEqual(await go('/admin/members.php?view=5'), [301, '/admin/members/5']);
+  assert.deepEqual(await go('/admin/print-form.php?type=kyc&id=9'), [301, '/admin/inbox/kyc/9/print']);
+  assert.deepEqual(await go('/admin/print-form.php?type=evil&id=9'), [301, '/admin']);
+  assert.deepEqual(await go('/admin/members/view.php?id=4'), [301, '/admin/members/4']);
+  assert.deepEqual(await go('/admin/program-reports-absent.php'), [301, '/admin/programs/reports/absent']);
+  assert.deepEqual(await go('/admin/loan-applications.php?view=1%27'), [301, '/admin/inbox/loan']);
+  // signed out: the login page comes first
+  const anon = client();
+  const x = await anon.get('/admin/loan-applications.php?view=12');
+  assert.equal(x.status, 302);
+  assert.match(x.headers.location, /\/admin\/login/);
+});
