@@ -580,3 +580,31 @@ test('SM-16 / SM-17: unmapped PHP entry points and dropped query params', () => 
   assert.equal(PUBLIC['news.php']({ page: '2' }), '/news?page=2');
   assert.equal(PUBLIC['notices.php']({ page: '3' }), '/notices?page=3');
 });
+
+// ---------------------------------------------------------------- B-13 / B-17 help_topics → chatbot answers; PHP VAPID keys
+test('B-13 / B-17: help topics become assistant answers once; the PHP Web Push key pair is read and checked', async () => {
+  const mig = require('../src/lib/site-migration');
+  await inA(() => db.query(`INSERT INTO help_topics (title, title_np, content, content_np, category, is_active) VALUES
+    ('How to open an account', 'खाता कसरी खोल्ने', 'Bring citizenship.', 'नागरिकता ल्याउनुहोस्।', 'accounts', 1),
+    ('Hidden', 'लुकेको', 'x', 'x', 'general', 0)`));
+  assert.equal(await inA(() => mig.importHelpTopics()), 1);
+  assert.equal(await inA(() => mig.importHelpTopics()), 0, 'only once');
+  const faq = await inA(() => db.one("SELECT * FROM chatbot_faqs WHERE question = 'खाता कसरी खोल्ने'"));
+  assert.equal(faq.question_en, 'How to open an account');
+  assert.equal(faq.answer, 'नागरिकता ल्याउनुहोस्।');
+  // VAPID: generate a pair, write it the way push-vapid.local.php does
+  const crypto = require('crypto');
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const pem = privateKey.export({ type: 'sec1', format: 'pem' }).trim();
+  const jwk = privateKey.export({ format: 'jwk' });
+  const pub = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]).toString('base64url');
+  const php = `<?php\ndefine('COOP_VAPID_PUBLIC_KEY', '${pub}');\ndefine(\n  'COOP_VAPID_PRIVATE_PEM',\n  ` + pem.split('\n').map(l => `"${l}\\n"`).join(' .\n  ') + `\n);\n`;
+  const root = fs.mkdtempSync(path.join(require('os').tmpdir(), 'phpsite-'));
+  try {
+    fs.mkdirSync(path.join(root, 'includes'));
+    fs.writeFileSync(path.join(root, 'includes/push-vapid.local.php'), php);
+    const site = mig.readPhpSite(root);
+    assert.deepEqual(site.vapid, { publicKey: pub, privateKey: jwk.d });
+    assert.equal(mig.parseVapid(php.replace(pub, pub.slice(0, -4) + 'AAAA')), null, 'mismatched pair rejected');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

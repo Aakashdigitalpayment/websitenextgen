@@ -86,7 +86,7 @@ async function confirm(q) {
   }
 
   const report = tenant
-    ? await mig.migrate({ tenant: a.tenant, mysqlUrl, uploads, credKey, piiKey, dryRun: !!a['dry-run'], mode: a.mode === 'incremental' ? 'incremental' : 'fresh', log: s => console.log(s) })
+    ? await mig.migrate({ tenant: a.tenant, mysqlUrl, uploads, credKey, piiKey, vapid: src.vapid || null, dryRun: !!a['dry-run'], mode: a.mode === 'incremental' ? 'incremental' : 'fresh', log: s => console.log(s) })
     : { tenant: a.tenant, dry_run: true, steps: [], warnings: ['tenant does not exist yet — run without --dry-run and with --create'], errors: [], tables: [], files: {}, verify: {}, started_at: new Date().toISOString(), finished_at: new Date().toISOString(), mode: 'fresh', source: mig.redact(mysqlUrl) };
 
   const out = a.report || path.join('reports', `migration-${a.tenant}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.html`);

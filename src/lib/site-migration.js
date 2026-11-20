@@ -41,7 +41,47 @@ function readPhpSite(root) {
   const piiFile = path.join(r, 'includes/.pii-master.key');
   if (!out.piiKey && fs.existsSync(piiFile)) out.piiKey = fs.readFileSync(piiFile, 'utf8').trim();
   if (out.piiKey && !/^[0-9a-f]{64}$/i.test(out.piiKey)) { out.notes.push('PII key found but it is not 64 hex characters — ignored'); out.piiKey = null; }
+  // Web Push keys of this install (includes/push-vapid.local.php), so member push subscriptions keep working
+  const vapidFile = path.join(r, 'includes/push-vapid.local.php');
+  if (fs.existsSync(vapidFile)) {
+    out.vapid = parseVapid(fs.readFileSync(vapidFile, 'utf8'));
+    out.notes.push(out.vapid ? 'Web Push keys read from includes/push-vapid.local.php' : 'includes/push-vapid.local.php found but the keys could not be read');
+  }
   return out;
+}
+
+/**
+ * VAPID pair from the PHP push-vapid.local.php (COOP_VAPID_PUBLIC_KEY + COOP_VAPID_PRIVATE_PEM) → web-push format
+ * (base64url public key, base64url 32-byte private key). null unless the private key really belongs to the public key.
+ */
+function parseVapid(php) {
+  try {
+    const pub = (String(php).match(/define\(\s*['"]COOP_VAPID_PUBLIC_KEY['"]\s*,\s*['"]([A-Za-z0-9_-]{40,120})['"]/) || [])[1];
+    const body = (String(php).match(/define\(\s*['"]COOP_VAPID_PRIVATE_PEM['"]\s*,([\s\S]*?)\);/) || [])[1];
+    if (!pub || !body) return null;
+    const pem = [...body.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'/g)].map(m => (m[1] !== undefined ? m[1].replace(/\\n/g, '\n') : m[2])).join('');
+    if (!/BEGIN EC PRIVATE KEY|BEGIN PRIVATE KEY/.test(pem)) return null;
+    const jwk = crypto.createPrivateKey(pem).export({ format: 'jwk' });
+    const derived = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]).toString('base64url');
+    return derived === pub ? { publicKey: pub, privateKey: jwk.d } : null;
+  } catch { return null; }
+}
+
+/**
+ * help_topics rows (read by the PHP assistant as context, includes/ai-chat-context.php) become chatbot answers once:
+ * question = title (NP / EN), answer = content (NP / EN). Rows already present (same question) are skipped.
+ */
+async function importHelpTopics() {
+  const rows = await db.many("SELECT * FROM help_topics WHERE COALESCE(is_active, 1) = 1 AND COALESCE(content_np, content, '') <> '' ORDER BY display_order, id").catch(() => []);
+  let added = 0;
+  for (const h of rows) {
+    const q = String(h.title_np || h.title || '').slice(0, 255);
+    if (!q || await db.value('SELECT 1 FROM chatbot_faqs WHERE question = $1 LIMIT 1', [q])) continue;
+    await db.query(`INSERT INTO chatbot_faqs (question, question_en, answer, answer_en, category, display_order, is_active, created_at) VALUES ($1, $2, $3, $4, $5, $6, 1, now())`,
+      [q, h.title ? String(h.title).slice(0, 255) : null, h.content_np || h.content, h.content || null, String(h.category || 'help').slice(0, 50), Number(h.display_order) || 0]);
+    added++;
+  }
+  return added;
 }
 
 const redact = url => String(url || '').replace(/\/\/([^:@/]+):([^@]*)@/, '//$1:***@');
@@ -213,7 +253,7 @@ async function mysqlSource(url) {
 
 // ---------------------------------------------------------------- main
 /**
- * @param {object} o  { tenant, source | mysqlUrl, uploads, credKey, piiKey, dryRun, mode: 'fresh'|'incremental', log }
+ * @param {object} o  { tenant, source | mysqlUrl, uploads, credKey, piiKey, vapid, dryRun, mode: 'fresh'|'incremental', log }
  * @returns report object
  */
 async function migrate(o) {
@@ -383,6 +423,20 @@ async function migrate(o) {
     step('settings', 'ok', `${mapped.length} PHP setting names mapped${mapped.length ? ` (${mapped.slice(0, 8).join(', ')}${mapped.length > 8 ? '…' : ''})` : ''}; admin 2FA required as on the PHP site (Admin → Security policy to change)`);
   });
 
+  // ---- help_topics (PHP assistant context) → chatbot answers; the PHP install's Web Push keys
+  await db.withSchema(tenant.schema_name, async () => {
+    const n = await importHelpTopics();
+    step('help topics', n ? 'ok' : 'skip', n ? `${n} help topics added as assistant answers (Admin → Chatbot answers)` : 'none to add');
+    if (o.vapid) {
+      const st = require('./settings');
+      await st.set('push_vapid_public', o.vapid.publicKey, { group: 'push', label: 'VAPID public key' });
+      await st.set('push_vapid_private', o.vapid.privateKey, { group: 'push', label: 'VAPID private key' });
+      step('push keys', 'ok', 'Web Push keys of the old site kept, so members stay subscribed');
+    } else if (await db.value('SELECT 1 FROM member_push_subscriptions LIMIT 1').catch(() => null)) {
+      warn('the old site\'s Web Push keys were not found (includes/push-vapid.local.php) — members must turn push notifications on again');
+    }
+  });
+
   // ---- PII (citizenship numbers): PHP pii1:/pii2: → decrypt with the old key → new pii3: format
   await db.withSchema(tenant.schema_name, () => convertPii(o.piiKey, step, warn));
 
@@ -482,4 +536,4 @@ async function convertPii(oldKey, step = () => {}, warn = () => {}) {
   return { ok, bad, found };
 }
 
-module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii, protectGatedUploads, privatiseFileColumns };
+module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii, protectGatedUploads, privatiseFileColumns, parseVapid, importHelpTopics };
