@@ -95,7 +95,7 @@ test('application submit → tracking id → tracker needs matching phone', asyn
   const c = client(HOST_A);
   const tok = await c.token('/apply/grievance');
   const r = await c.post(`/apply/grievance?_csrf=${encodeURIComponent(tok)}`)
-    .field('_csrf', tok).field('name', 'राम').field('phone', '9841000001').field('subject', 'ढिलाइ').field('description', 'विवरण').field('category', 'service');
+    .field('_csrf', tok).field('name', 'राम').field('phone', '9841000001').field('email', 'ram@example.com').field('subject', 'ढिलाइ').field('description', 'विवरण').field('category', 'service');
   assert.equal(r.status, 302, r.text.slice(0, 300));
   const done = await c.get('/apply/grievance/done');
   const id = done.text.match(/tracking-id">([^<]+)/)[1];

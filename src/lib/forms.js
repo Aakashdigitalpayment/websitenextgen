@@ -127,7 +127,7 @@ function validate(mod, body, uploaded, options, lang = 'np', opts = {}) {
     if (c.in) return c.in.includes(cur);
     return c.eq !== undefined ? cur === c.eq : c.ne !== undefined ? cur !== c.ne : !!cur;
   };
-  const isRequired = f => !!(f.required || (f.requiredWhenShown && f.showIf) || (f.requiredIf && metaOf(f.requiredIf.field, f.requiredIf.meta)));
+  const isRequired = f => !!((f.required && !(f.requiredUnless && body[f.requiredUnless])) || (f.requiredWhenShown && f.showIf) || (f.requiredIf && metaOf(f.requiredIf.field, f.requiredIf.meta)));
   for (const f of mod.fields) {
     const label = lang === 'en' ? f.label[1] : f.label[0];
     if (f.type === 'heading') continue;
@@ -215,7 +215,13 @@ function validate(mod, body, uploaded, options, lang = 'np', opts = {}) {
         if (!isEmail(v)) errors[f.name] = msg('इमेल मिलेन', 'Invalid email');
         break;
       case 'tel':
-        if (!isPhone(v)) errors[f.name] = msg('फोन नम्बर मिलेन', 'Invalid phone number');
+        if (mod.mobile10 && f.name === mod.phoneCol) {
+          // loan / account / grievance / welfare / digital / job / bid: a 10-digit mobile, stored normalised
+          let d = v.replace(/\D+/g, '');
+          if (d.length > 10 && d.startsWith('977')) d = d.slice(-10);
+          if (!(mod.mobile10 === 'strict' ? /^9\d{9}$/ : /^\d{10}$/).test(d)) errors[f.name] = msg('कृपया १० अंकको मोबाइल नम्बर राख्नुहोस्।', 'Please enter a valid 10-digit mobile number.');
+          else v = d;
+        } else if (!isPhone(v)) errors[f.name] = msg('फोन नम्बर मिलेन', 'Invalid phone number');
         break;
       case 'number': case 'rating': {
         const n = Number(v.replace(/,/g, ''));

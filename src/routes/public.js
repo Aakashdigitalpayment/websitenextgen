@@ -536,7 +536,7 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
   res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...(mod.memberGate ? {} : prefillFromMember(req.member, mod)), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number,
-    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked });
+    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked, guestEmailRequired: !!(mod.guestEmail && !req.member) });
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {
@@ -545,7 +545,9 @@ router.get('/apply/:key', ah(async (req, res, next) => {
   await renderForm(req, res, mod);
 }));
 
-const SPAM_SCAN = ['grievance', 'feedback', 'appointment', 'survey'];
+/** Free-text fields scanned for links / promo spam on every form (contact-spam-guard.php); KYM AML fields are skipped (addresses look like domains). */
+const SPAM_NAMES = ['subject', 'message', 'loan_purpose', 'collateral_description', 'other_income', 'description', 'request_details', 'cover_letter', 'purpose_detail', 'suggestions', 'remarks', 'business_note'];
+const spamParts = (mod, body) => mod.fields.filter(f => f.store !== 'aml' && (f.type === 'textarea' || SPAM_NAMES.includes(f.name))).map(f => body[f.name]);
 router.post('/apply/:key', submitLimiter, (req, res, next) => {
   const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   if (!mod || mod.key === 'contact') return next();
@@ -563,7 +565,7 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
       const k = await kymLocked(gate);
       req.body = lockedBody(req.body, k.stored, k.locked);
     }
-    const scan = SPAM_SCAN.includes(mod.key) ? mod.fields.filter(f => f.type === 'textarea' || f.name === 'subject').map(f => req.body[f.name]) : [];
+    const scan = spamParts(mod, req.body);
     const block = await antispam.check(req, res.locals.settings, scan);
     if (block && block.silent) return res.redirect('/');
     const options = await forms.resolveOptions(mod);

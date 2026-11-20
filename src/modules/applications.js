@@ -225,7 +225,7 @@ const modules = {
     intro: ['तपाईंको गुनासो गोप्य राखिनेछ। ट्र्याकिङ नम्बरबाट स्थिति हेर्न सक्नुहुन्छ।', 'Your grievance is kept confidential. Use the tracking number to follow it.'],
     sections: [{ fields: [
       MEMBER_Q, MEMBER_NO,
-      { name: 'name', label: ['नाम', 'Name'], required: true, show: true, identity: true },
+      { name: 'name', label: ['नाम', 'Name'], required: true, requiredUnless: 'is_anonymous', show: true, identity: true, hint: ['गोप्य राख्ने भए खाली छोड्न सकिन्छ', 'May be left empty when you keep your name confidential'] },
       { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
       { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
       { name: 'category', label: ['विषय क्षेत्र', 'Category'], type: 'select', show: true, options: [['service', 'सेवा', 'Service'], ['staff', 'कर्मचारी', 'Staff'], ['loan', 'ऋण', 'Loan'], ['account', 'खाता', 'Account'], ['branch', 'शाखा', 'Branch'], ['other', 'अन्य', 'Other']] },
@@ -442,6 +442,13 @@ const modules = {
   },
 };
 
+/** mobile10: the phone must be a 10-digit mobile ('strict' = 9XXXXXXXXX, as job and bid in PHP); guestEmail: email required for visitors. */
+const RULES = {
+  loan: { mobile10: true, guestEmail: true }, account: { mobile10: true, guestEmail: true }, grievance: { mobile10: true, guestEmail: true },
+  welfare: { mobile10: true }, digital: { mobile10: true, guestEmail: true }, honor: { mobile10: true }, feedback: { mobile10: true },
+  appointment: { guestEmail: true }, job: { mobile10: 'strict' }, bid: { mobile10: 'strict' },
+};
+
 const EXTRA = {
   loan: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'loan_application', memberEvent: 'loan', amountCol: 'loan_amount' },
   account: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'account_application', memberEvent: 'account' },
@@ -458,7 +465,7 @@ const EXTRA = {
 };
 
 for (const [key, m] of Object.entries(modules)) {
-  Object.assign(m, EXTRA[key] || {});
+  Object.assign(m, EXTRA[key] || {}, RULES[key] || {});
   m.key = key;
   if (m.memberGate && !m.memberGate.always) {
     for (const sec of m.sections) sec.fields = sec.fields.map(f => (f.identity && !f.showIf ? { ...f, showIf: { field: 'is_coop_member', ne: 'yes' } } : f));

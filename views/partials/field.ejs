@@ -4,7 +4,7 @@
   const wide = ['textarea', 'radio', 'rating', 'checkbox', 'address', 'family', 'moneyitems', 'heading'].includes(fl.type) || fl.wide;
   const opts = (locals.options && options[fl.name]) || fl.options || [];
   const docs = locals.existingDocs || {};
-  const req = fl.required || (fl.newRequired && !docs[fl.name]);
+  const req = fl.required || (fl.newRequired && !docs[fl.name]) || (fl.name === 'email' && locals.guestEmailRequired);
   const sc = fl.showIf;
   const showAttrs = sc ? `data-show-field="${sc.field}"${sc.eq !== undefined ? ` data-show-eq="${sc.eq}"` : ''}${sc.ne !== undefined ? ` data-show-ne="${sc.ne}"` : ''}${sc.in ? ` data-show-in="${sc.in.join(',')}"` : ''}${sc.meta ? ` data-show-meta="${sc.meta}"` : ''}` : '';
   const reqAttrs = fl.requiredIf ? `data-req-field="${fl.requiredIf.field}" data-req-meta="${fl.requiredIf.meta}"` : '';

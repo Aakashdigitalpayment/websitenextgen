@@ -255,3 +255,20 @@ test('card verify: name + Member ID + mobile (Devanagari or English name), photo
   assert.match(r.text, /LOCK/);
   assert.ok(await inA(() => db.value("SELECT locked_at FROM member_id_cards WHERE card_no = 'V-100-AAA'")));
 });
+
+// ---------------------------------------------------------------- P2-2 / P2-3 / G1 spam scan, 10-digit mobile, guest email
+test('every form: link spam scanned, 10-digit mobile, guest email required, anonymous grievance without a name', async () => {
+  const c = client();
+  const g = { phone: '9841900001', email: 'g@example.com', subject: 'S', description: 'D', category: 'service' };
+  let r = await c.form('/apply/grievance', { ...g, name: 'A', email: '' });
+  assert.equal(r.status, 422, 'email required for visitors');
+  r = await c.form('/apply/grievance', { ...g, name: 'A', phone: '01-4412345' });
+  assert.equal(r.status, 422, 'landline is not a 10-digit mobile');
+  r = await c.form('/apply/grievance', { ...g, is_anonymous: '1', phone: '+977 9841900001' });
+  assert.equal(r.status, 302, errs(r));
+  const row = await inA(() => db.one("SELECT * FROM grievances WHERE phone = '9841900001' ORDER BY id DESC LIMIT 1"));
+  assert.equal(row.name, 'गोप्य');
+  const loanType = (await inA(() => forms.optionSources.loanTypes()))[0][0];
+  r = await c.form('/apply/loan', { full_name: 'L', mobile: '9841900002', email: 'l@example.com', address: 'a', loan_type: loanType, loan_amount: '5000', loan_purpose: 'visit https://spam.example now' });
+  assert.equal(r.status, 422, 'links in the loan purpose are blocked');
+});

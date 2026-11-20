@@ -49,6 +49,12 @@ const hooks = {
     return null;
   },
 
+  /** grievance.php: an anonymous grievance may leave the name empty (mobile and email stay required). */
+  async grievance(ctx) {
+    if (!ctx.data.name) ctx.data.name = 'गोप्य';
+    return null;
+  },
+
   /** welfare-claims-submit-helper.php: Nepali type label, portal member id. */
   async welfare(ctx) {
     const opt = (ctx.options.claim_type || []).find(o => String(o[0]) === String(ctx.data.claim_type));
@@ -137,6 +143,7 @@ async function applyMemberIdentity(ctx) {
     owner = v.member;
   } else {
     if (mod.memberCol) data[mod.memberCol] = null; // unverified Member IDs are never stored
+    if (mod.guestEmail && !data.email && mod.key !== 'appointment') return fail(ctx.lang, ['इमेल ठेगाना अनिवार्य छ।', 'Email address is required.'], 'email');
     return null;
   }
   const idn = kym.identityFrom(kyc, owner);
