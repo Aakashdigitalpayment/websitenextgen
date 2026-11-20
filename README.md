@@ -97,7 +97,7 @@ Tested against the legacy `install.sql` loaded into MariaDB.
 | Module | Where | Notes |
 |---|---|---|
 | **SMS / email / web push** | Admin → SMS / email / push; Settings → SMS / email | Sparrow, Aakash or a custom webhook for SMS; SMTP for email; editable templates (`{{name}} {{tracking_id}} {{module}} {{status}} {{remarks}} {{site}}`); delivery log; test send. The applicant and office are notified on submit, and the applicant on status change. Members can turn on browser push (VAPID keys per tenant); admins can broadcast to all members. Webhook URLs must be public https. |
-| **Admin 2FA** | Admin → 2-step login | TOTP (Google/Microsoft Authenticator, Authy) with 8 single-use backup codes. Compatible with 2FA secrets imported from the PHP site; superadmins can reset another user's 2FA. |
+| **Admin 2FA** | Admin → 2-step login | TOTP (Google/Microsoft Authenticator, Authy) with 8 single-use backup codes. Compatible with 2FA secrets imported from the PHP site; superadmins can reset another user's 2FA. **Policy** (Admin → Security policy, superadmin): `admin_2fa_required` = optional (default for new tenants, so a fresh install can sign in at once) or required for every admin including superadmins — admins without an authenticator then scan a QR code at their next sign-in, see their backup codes once, and cannot turn 2FA off; already signed-in admins are sent to enrol first. Sites moved from PHP get `required`, as on the PHP app. |
 | **Member CSV import** | Admin → Members → Import CSV | Validate and preview first, then commit. Modes: update or skip existing members (matched by member number, else mobile). Use `dob_bs` / `dob_ad` columns for dates of birth. A sample CSV is provided. |
 | **Programmes & QR attendance** | Admin → Programme attendance; member `/member/programs` | A QR code per programme or per location, with open/close times. Check-in is instant or needs approval. The registration desk can check in by member number, card or phone. Also: void, pre-registration, CSV export, and one valid check-in per member, enforced by the database. |
 | **Member marketplace** | `/marketplace`, `/member/marketplace`, Admin → Marketplace | Products and skills; the office approves listings (and re-approves after edits); public inquiries notify the seller. |
@@ -116,6 +116,8 @@ CREDENTIALS_KEY=          # office credential vault, min 32 chars (openssl rand 
 CREDENTIALS_LEGACY_KEY=   # optional: PHP CRED_MASTER_KEY, to open imported credentials
 PLATFORM_HOST=platform.example.com
 PLATFORM_ADMIN_USER= / PLATFORM_ADMIN_PASSWORD=   # bootstrap the first platform operator
+LICENSE_RENEWAL_AMOUNT= / LICENSE_ESEWA_ID= / LICENSE_KHALTI_ID= / LICENSE_BANK_DETAILS=   # shown on the tenant licence pages
+LICENSE_VENDOR_EMAIL=     # gets an email for every renewal payment notice
 ```
 
 ## Development

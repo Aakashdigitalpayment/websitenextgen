@@ -59,9 +59,28 @@ const P = {
   alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.01"/>',
 };
 
+// Font Awesome classes stored by the PHP admin ("fas fa-hand-holding-usd") → the nearest icon here
+const FA = {
+  'phone-alt': 'phone', mobile: 'phone', 'mobile-alt': 'phone', 'mobile-screen': 'phone', laptop: 'phone', envelope: 'mail', 'map-marker': 'pin', 'map-marker-alt': 'pin', 'location-dot': 'pin',
+  'user-tie': 'user', 'user-circle': 'user', 'users-cog': 'users', 'user-friends': 'users', 'people-group': 'users', 'money-bill': 'banknote', 'money-bill-wave': 'banknote', coins: 'banknote',
+  'hand-holding-usd': 'wallet', 'piggy-bank': 'wallet', 'credit-card': 'wallet', 'id-card': 'id', 'address-card': 'id', comments: 'message', comment: 'message', 'calendar-alt': 'calendar',
+  'heartbeat': 'heart', 'hand-holding-heart': 'heart', gift: 'heart', 'briefcase-medical': 'briefcase', trophy: 'award', medal: 'award', 'file-alt': 'file', 'file-pdf': 'file', 'file-lines': 'file',
+  newspaper: 'news', images: 'image', 'chart-line': 'chart', 'chart-bar': 'chart', 'chart-pie': 'chart', 'shield-alt': 'shield', lock: 'shield', 'user-shield': 'shield', cog: 'settings', cogs: 'settings',
+  'check-circle': 'check', 'thumbs-up': 'check', university: 'building', landmark: 'building', 'building-columns': 'building', school: 'building', graduation: 'award', 'graduation-cap': 'award',
+  'external-link-alt': 'link', 'globe-asia': 'globe', 'exclamation-triangle': 'alert', 'info-circle': 'info', 'question-circle': 'info', handshake: 'users', seedling: 'heart', leaf: 'heart',
+  'shopping-cart': 'store', shop: 'store', 'qrcode': 'qr', 'bell-concierge': 'bell', 'percentage': 'percent', calculator: 'calculator', 'star-half-alt': 'star',
+};
+/** "fas fa-star" / "fa-solid fa-users" / "star" → an icon name that exists here (unknown → info). */
+function faToNode(cls) {
+  const s = String(cls || '').trim();
+  if (P[s]) return s;
+  const name = (s.match(/fa-(?!solid|regular|brands|light)([a-z0-9-]+)/) || [])[1] || s;
+  return P[name] ? name : FA[name] || 'info';
+}
+
 function icon(name, cls = '') {
-  const body = P[name] || P.info;
+  const body = P[name] || P[faToNode(name)] || P.info;
   return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
 }
 
-module.exports = { icon, names: Object.keys(P) };
+module.exports = { icon, faToNode, names: Object.keys(P) };

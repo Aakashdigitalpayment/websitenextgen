@@ -55,23 +55,39 @@ async function adminLogin(req, username, password) {
     return { error: 'प्रयोगकर्ता नाम वा पासवर्ड मिलेन।' };
   }
   if (require('./license').loginBlocked(req.tenant, user)) {
-    return { error: 'वेबसाइट सेवाको म्याद सकिएको छ। सुपर प्रशासकले मात्र लगइन गर्न सक्छन्। (Licence expired — super admin only.)' };
+    // right password, licence expired: no session, but this browser may send a renewal payment notice (legacy site-license-blocked.php)
+    await clearFailures(username, ip);
+    req.session.licenseBlocked = { tenantId: req.tenant.id, at: Date.now(), adminId: user.id, username: user.username };
+    return { error: 'वेबसाइट सेवाको म्याद सकिएको छ। सुपर प्रशासकले मात्र लगइन गर्न सक्छन्। (Licence expired — super admin only.)', licenseBlocked: true };
   }
   await clearFailures(username, ip);
   await regenerate(req);
   req.session.tenantId = req.tenant.id;
-  if (user.twofa_enabled && user.twofa_secret) {
-    // password ok — second factor still required (bound to this tenant)
-    req.session.pending2fa = { id: user.id, tenantId: req.tenant.id, at: Date.now() };
-    return { user, needs2fa: true };
+  const mode = await admin2faMode(user);
+  if (mode) {
+    // password ok — second factor still required (bound to this tenant); 'setup' = the policy forces enrolment now
+    req.session.pending2fa = { id: user.id, tenantId: req.tenant.id, at: Date.now(), mode, secret: mode === 'setup' ? require('./totp').generateSecret() : null };
+    return { user, needs2fa: mode };
   }
   return completeAdminLogin(req, user);
 }
+
+/** Tenant policy (Admin → Security): '1' = every admin, superadmins included, must use an authenticator (legacy PHP behaviour). */
+const admin2faRequired = async () => (await require('./settings').get('admin_2fa_required', '0')) === '1';
+/** 'verify' when the admin has an authenticator, 'setup' when the policy requires one, else null. */
+async function admin2faMode(user) {
+  if (Number(user.twofa_enabled) && user.twofa_secret) return 'verify';
+  return (await admin2faRequired()) ? 'setup' : null;
+}
+
+const uaHash = req => require('crypto').createHash('sha256').update(String(req.get('user-agent') || '')).digest('hex').slice(0, 16);
 
 async function completeAdminLogin(req, user) {
   delete req.session.pending2fa;
   req.session.adminId = user.id;
   req.session.adminVer = user.session_version || 1;
+  req.session.adminSeen = Date.now();
+  req.session.adminUa = uaHash(req);
   await db.query('UPDATE admin_users SET last_login = now() WHERE id = $1', [user.id]);
   await audit(req, 'login', 'admin_users', user.id, `Admin login: ${user.username}`, { actorId: user.id, actorName: user.username });
   return { user };
@@ -137,10 +153,22 @@ async function loadUsers(req, res, next) {
       req.session.tenantId = req.tenant.id;
     }
     if (req.session.adminId) {
-      req.admin = await db.one(`SELECT id, username, full_name, email, role, is_active, must_change_password, session_version, theme_pref FROM admin_users
+      req.admin = await db.one(`SELECT id, username, full_name, email, role, is_active, must_change_password, session_version, theme_pref, twofa_enabled FROM admin_users
                                 WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL`, [req.session.adminId]);
       // credentials changed since this session signed in → session is no longer valid
       if (!req.admin || (req.admin.session_version || 1) !== (req.session.adminVer || 1)) { req.admin = null; delete req.session.adminId; }
+      // idle sign-out (Admin → Security policy, default 30 min) and browser binding (legacy config.php isAdminLoggedIn)
+      else {
+        const idleMs = Math.max(5, Number(await require('./settings').get('admin_idle_minutes', '30')) || 30) * 60_000;
+        const ua = uaHash(req);
+        if ((req.session.adminUa && req.session.adminUa !== ua) || (req.session.adminSeen && Date.now() - req.session.adminSeen > idleMs)) {
+          req.admin = null; delete req.session.adminId; delete req.session.adminSeen; delete req.session.adminUa;
+          (req.session.flash = req.session.flash || []).push({ type: 'warn', message: 'सत्र समाप्त भयो — फेरि लगइन गर्नुहोस्। / Your session expired — please sign in again.' });
+        } else {
+          req.session.adminSeen = Date.now();
+          req.session.adminUa = req.session.adminUa || ua;
+        }
+      }
     }
     if (req.session.memberId) {
       req.member = await db.one(`SELECT * FROM members WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL`, [req.session.memberId]);
@@ -201,5 +229,5 @@ function logout(req) {
 
 module.exports = {
   checkPassword, hashPassword, roleLevel, adminLogin, completeAdminLogin, recordFailure, tooManyAttempts, clearFailures, bumpSessionVersion, logout, memberLogin, loadUsers,
-  member2faMode, startMemberSession, completeMemberLogin, requireAdmin, requireMember, audit, safeNext, regenerate,
+  admin2faMode, admin2faRequired, member2faMode, startMemberSession, completeMemberLogin, requireAdmin, requireMember, audit, safeNext, regenerate,
 };

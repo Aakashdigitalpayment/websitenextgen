@@ -242,6 +242,32 @@ router.post('/gallery/video', requireAdmin('editor'), ah(async (req, res) => {
   res.redirect('/admin/gallery/upload');
 }));
 
+// ---------------------------------------------------------------- security policy (superadmin; legacy admin/security-settings.php)
+router.get('/security', requireAdmin('superadmin'), ah(async (req, res) => {
+  const s = await settings.all();
+  const coverage = await db.one("SELECT count(*) FILTER (WHERE COALESCE(twofa_enabled, 0) = 1) AS on, count(*) AS total FROM admin_users WHERE deleted_at IS NULL AND is_active = 1");
+  res.render('admin/security', { title: res.locals.t('सुरक्षा नीति', 'Security policy'), s, coverage });
+}));
+router.post('/security', requireAdmin('superadmin'), ah(async (req, res) => {
+  const b = req.body, t = res.locals.t;
+  const me = await db.one('SELECT password FROM admin_users WHERE id = $1', [req.admin.id]);
+  if (!(await auth.checkPassword(b.confirm_password, me.password))) { flash(req, 'error', t('पासवर्ड मिलेन।', 'Password is wrong.')); return res.redirect('/admin/security'); }
+  const meta = { group: 'security' };
+  await settings.set('admin_2fa_required', b.admin_2fa_required === '1' ? '1' : '0', { ...meta, label: 'Require 2FA for every admin (1 = yes)' });
+  await settings.set('member_2fa_required', b.member_2fa_required === '1' ? '1' : '0', { group: 'members', label: 'Member 2FA (authenticator app) required for every member (1 = yes)' });
+  const idle = Math.min(720, Math.max(5, util.int(b.admin_idle_minutes, 30)));
+  await settings.set('admin_idle_minutes', String(idle), { ...meta, label: 'Admin idle sign-out (minutes)' });
+  const site = String(b.turnstile_site_key || '').trim();
+  if (/^[A-Za-z0-9_-]{0,100}$/.test(site)) await settings.set('turnstile_site_key', site, { ...meta, label: 'Cloudflare Turnstile site key' });
+  const secret = String(b.turnstile_secret_key || '').trim();
+  if (b.turnstile_clear_secret === '1') await settings.set('turnstile_secret_key', '', { ...meta, label: 'Cloudflare Turnstile secret key' });
+  else if (secret && /^[A-Za-z0-9_.-]{1,200}$/.test(secret)) await settings.set('turnstile_secret_key', secret, { ...meta, label: 'Cloudflare Turnstile secret key' });
+  const now = await settings.all();
+  await auth.audit(req, 'security_settings_update', 'site_settings', null, `Security policy: admin_2fa=${now.admin_2fa_required} member_2fa=${now.member_2fa_required} idle=${idle}m turnstile=${now.turnstile_site_key ? 'on' : 'off'}`);
+  flash(req, 'success', t('सुरक्षा नीति सुरक्षित भयो।', 'Security policy saved.'));
+  res.redirect('/admin/security');
+}));
+
 // ---------------------------------------------------------------- satisfaction widget
 router.get('/satisfaction', requireAdmin('admin'), ah(async (req, res) => {
   const links = await db.many('SELECT * FROM satisfaction_links ORDER BY display_order, id');

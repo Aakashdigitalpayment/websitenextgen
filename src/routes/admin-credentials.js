@@ -1,5 +1,8 @@
 'use strict';
-/** Office credential manager (superadmin only). Mounted at /admin/credentials. Every reveal/copy is logged. */
+/**
+ * Office credential manager. Mounted at /admin/credentials. Every reveal/copy is logged.
+ * Legacy credentials.php: staff and above view / reveal / copy; admins and above add, edit and delete.
+ */
 const express = require('express');
 const db = require('../db');
 const auth = require('../lib/auth');
@@ -9,7 +12,10 @@ const { flash } = require('../lib/security');
 
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-router.use(auth.requireAdmin('superadmin'));
+router.use(auth.requireAdmin('staff'));
+const manage = auth.requireAdmin('admin');
+const LIST = 'SELECT id, site_name, site_url, site_logo, username, category, notes, is_active, password_tag IS NULL AS legacy, updated_at FROM office_credentials WHERE is_active = 1 ORDER BY category, sort_order, site_name';
+const canManage = req => auth.roleLevel(req.admin.role) >= auth.roleLevel('admin');
 
 async function logAction(req, id, action) {
   await db.query(`INSERT INTO office_credentials_log (credential_id, admin_id, admin_username, action, ip_address, user_agent, created_at) VALUES ($1, $2, $3, $4, $5, $6, now())`,
@@ -17,19 +23,26 @@ async function logAction(req, id, action) {
 }
 
 router.get('/', ah(async (req, res) => {
-  const rows = await db.many('SELECT id, site_name, site_url, username, category, notes, is_active, password_tag IS NULL AS legacy, updated_at FROM office_credentials WHERE is_active = 1 ORDER BY category, sort_order, site_name');
-  const logs = await db.many(`SELECT l.*, c.site_name FROM office_credentials_log l LEFT JOIN office_credentials c ON c.id = l.credential_id ORDER BY l.id DESC LIMIT 30`);
-  res.render('admin/credentials', { title: res.locals.t('कार्यालय पासवर्ड व्यवस्थापन', 'Office credentials'), rows, logs, enabled: vault.enabled(), edit: null, errors: {} });
+  const rows = await db.many(LIST);
+  const logs = canManage(req) ? await db.many(`SELECT l.*, c.site_name FROM office_credentials_log l LEFT JOIN office_credentials c ON c.id = l.credential_id ORDER BY l.id DESC LIMIT 30`) : [];
+  res.render('admin/credentials', { title: res.locals.t('कार्यालय पासवर्ड व्यवस्थापन', 'Office credentials'), rows, logs, enabled: vault.enabled(), edit: null, errors: {}, canManage: canManage(req), logFor: null });
 }));
 
-router.get('/:id/edit', ah(async (req, res, next) => {
-  const edit = await db.one('SELECT id, site_name, site_url, username, category, notes FROM office_credentials WHERE id = $1', [util.int(req.params.id)]);
+// access log of one entry (legacy credentials.php?ajax=log)
+router.get('/:id/log', manage, ah(async (req, res, next) => {
+  const logFor = await db.one('SELECT id, site_name FROM office_credentials WHERE id = $1', [util.int(req.params.id)]);
+  if (!logFor) return next();
+  const logs = await db.many('SELECT l.*, $2::text AS site_name FROM office_credentials_log l WHERE l.credential_id = $1 ORDER BY l.id DESC LIMIT 200', [logFor.id, logFor.site_name]);
+  res.render('admin/credentials', { title: res.locals.t('कार्यालय पासवर्ड व्यवस्थापन', 'Office credentials'), rows: await db.many(LIST), logs, enabled: vault.enabled(), edit: null, errors: {}, canManage: true, logFor });
+}));
+
+router.get('/:id/edit', manage, ah(async (req, res, next) => {
+  const edit = await db.one('SELECT id, site_name, site_url, site_logo, username, category, notes FROM office_credentials WHERE id = $1', [util.int(req.params.id)]);
   if (!edit) return next();
-  const rows = await db.many('SELECT id, site_name, site_url, username, category, notes, is_active, password_tag IS NULL AS legacy, updated_at FROM office_credentials WHERE is_active = 1 ORDER BY category, sort_order, site_name');
-  res.render('admin/credentials', { title: res.locals.t('कार्यालय पासवर्ड व्यवस्थापन', 'Office credentials'), rows, logs: [], enabled: vault.enabled(), edit, errors: {} });
+  res.render('admin/credentials', { title: res.locals.t('कार्यालय पासवर्ड व्यवस्थापन', 'Office credentials'), rows: await db.many(LIST), logs: [], enabled: vault.enabled(), edit, errors: {}, canManage: true, logFor: null });
 }));
 
-router.post('/', ah(async (req, res) => {
+router.post('/', manage, ah(async (req, res) => {
   if (!vault.enabled()) { flash(req, 'error', 'CREDENTIALS_KEY is not configured on the server.'); return res.redirect('/admin/credentials'); }
   const b = req.body;
   const id = util.int(b.id, 0);
@@ -37,8 +50,9 @@ router.post('/', ah(async (req, res) => {
     site_name: String(b.site_name || '').trim().slice(0, 120), site_url: String(b.site_url || '').trim().slice(0, 500),
     username: String(b.username || '').trim().slice(0, 255), category: String(b.category || 'general').trim().slice(0, 60) || 'general',
     notes: String(b.notes || '').trim().slice(0, 2000) || null, updated_by: req.admin.id,
+    site_logo: String(b.site_logo || '').trim().slice(0, 255) || null, // blank = <site>/favicon.ico
   };
-  if (!data.site_name || !data.username || (data.site_url && !/^https?:\/\//i.test(data.site_url))) {
+  if (!data.site_name || !data.username || (data.site_url && !/^https?:\/\//i.test(data.site_url)) || (data.site_logo && !/^https:\/\/[^\s"<>]+$/i.test(data.site_logo))) {
     flash(req, 'error', res.locals.t('नाम, प्रयोगकर्ता र सही URL (https://) चाहिन्छ।', 'Name, username and a valid URL (https://) are required.'));
     return res.redirect('/admin/credentials' + (id ? `/${id}/edit` : ''));
   }
@@ -69,7 +83,7 @@ router.post('/:id/reveal', ah(async (req, res) => {
   }
 }));
 
-router.post('/:id/delete', ah(async (req, res) => {
+router.post('/:id/delete', manage, ah(async (req, res) => {
   await db.query('UPDATE office_credentials SET is_active = 0, password_enc = $1, password_iv = $1, password_tag = NULL WHERE id = $2', ['', util.int(req.params.id)]);
   await logAction(req, util.int(req.params.id), 'delete');
   flash(req, 'success', res.locals.t('हटाइयो।', 'Deleted.'));

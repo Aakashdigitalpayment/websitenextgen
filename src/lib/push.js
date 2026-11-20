@@ -33,9 +33,9 @@ async function sendTo(subs, payload, notifId = null) {
   return { sent, failed };
 }
 
-async function sendToMember(memberId, payload) {
+async function sendToMember(memberId, payload, notifId = null) {
   const subs = await db.many('SELECT * FROM member_push_subscriptions WHERE member_id = $1', [memberId]);
-  return sendTo(subs, payload);
+  return sendTo(subs, payload, notifId);
 }
 
 async function sendToAll(payload) {

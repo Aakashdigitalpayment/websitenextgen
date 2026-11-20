@@ -20,7 +20,7 @@
         <% if (settings.working_hours) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('clock') %><%= settings.working_hours %></li><% } %>
       </ul>
     </div>
-    <% if (settings.map_embed_url && /^https:\/\/(www\.)?google\.com\/maps\/embed/.test(settings.map_embed_url)) { %>
+    <% if (settings.map_embed_url && /^https:\/\/(www\.)?google\.com\/maps(\/embed|\?)/.test(settings.map_embed_url)) { %>
       <iframe src="<%= settings.map_embed_url %>" style="width:100%;height:240px;border:0;border-radius:var(--radius)" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map"></iframe>
     <% } %>
     <% if (centers.length > 1) { %><a class="btn btn-outline btn-block" href="/service-centers"><%= t('सबै शाखा हेर्नुहोस्', 'See all branches') %></a><% } %>

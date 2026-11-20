@@ -26,7 +26,7 @@ function guard(req, res, next) {
   const p = req.path;
   if (p.startsWith('/static') || p.startsWith('/uploads') || p === '/robots.txt' || p === '/healthz') return next();
   if (p.startsWith('/admin')) {
-    if (p === '/admin/login' || p.startsWith('/admin/login/') || p === '/admin/logout') return next();
+    if (p === '/admin/login' || p.startsWith('/admin/login/') || p === '/admin/logout' || p === '/admin/license/blocked') return next();
     if (req.admin && isSuper(req.admin.role)) return next();
     if (req.admin) { delete req.session.adminId; }
     return res.status(403).render('public/license-expired', { layout: false, st, adminBlocked: true });
@@ -34,9 +34,15 @@ function guard(req, res, next) {
   return res.status(503).render('public/license-expired', { layout: false, st, adminBlocked: false });
 }
 
+/** Where to pay (shown to the tenant; same vendor for the whole platform): LICENSE_RENEWAL_AMOUNT, LICENSE_ESEWA_ID, LICENSE_KHALTI_ID, LICENSE_VENDOR_EMAIL. */
+function payInfo() {
+  const e = k => String(process.env[k] || '').trim().slice(0, 120);
+  return { amount: e('LICENSE_RENEWAL_AMOUNT'), esewa: e('LICENSE_ESEWA_ID'), khalti: e('LICENSE_KHALTI_ID'), bank: e('LICENSE_BANK_DETAILS'), vendorEmail: e('LICENSE_VENDOR_EMAIL') };
+}
+
 /** Block non-super-admin logins while expired (called from the login route). */
 function loginBlocked(tenant, user) {
   return status(tenant).expired && !isSuper(user.role);
 }
 
-module.exports = { status, guard, loginBlocked, todayKathmandu };
+module.exports = { status, guard, loginBlocked, todayKathmandu, payInfo };
