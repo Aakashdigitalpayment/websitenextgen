@@ -471,3 +471,33 @@ test('programmes: QR default window + clear, occurrence edit, desk lookup / elig
   const pcsv = await admin.get(`/admin/programs/${pid}/attendance.csv`);
   assert.match(pcsv.text, /Father/);
 });
+
+// ---------------------------------------------------------------- b-18 PII CLI
+test('pii CLI: status, migrate (dry run, guarded, round trip) and decrypt rollback', async () => {
+  const cli = require('../scripts/pii');
+  const schema = 'tenant_' + A;
+  await inA(() => db.query("INSERT INTO membership_applications (tracking_id, full_name, mobile, citizenship_no) VALUES ('MB-PII', 'Pii Test', '9841000099', '12-34-5678')"));
+  const raw = () => db.pool.query(`SELECT citizenship_no FROM ${schema}.membership_applications WHERE tracking_id = 'MB-PII'`).then(r => r.rows[0].citizenship_no);
+  const before = process.env.PII_KEY;
+  try {
+    delete process.env.PII_KEY;
+    await assert.rejects(() => cli.convert(schema, 'migrate'), /PII_KEY/);
+    let st = (await cli.status(schema)).find(r => r.table === 'membership_applications');
+    assert.ok(st.plaintext >= 1);
+    process.env.PII_KEY = require('crypto').randomBytes(32).toString('hex');
+    const dry = (await cli.convert(schema, 'migrate', { dryRun: true })).find(r => r.table === 'membership_applications');
+    assert.ok(dry.changed >= 1);
+    assert.equal(await raw(), '12-34-5678', 'dry run writes nothing');
+    await cli.convert(schema, 'migrate');
+    assert.match(await raw(), /^pii3:/);
+    assert.equal(await inA(() => db.value("SELECT citizenship_no FROM membership_applications WHERE tracking_id = 'MB-PII'")), '12-34-5678', 'transparent decrypt');
+    st = (await cli.status(schema)).find(r => r.table === 'membership_applications');
+    assert.equal(st.plaintext, 0);
+    // running again changes nothing
+    assert.equal((await cli.convert(schema, 'migrate')).find(r => r.table === 'membership_applications').changed, 0);
+    await cli.convert(schema, 'decrypt');
+    assert.equal(await raw(), '12-34-5678');
+  } finally {
+    if (before === undefined) delete process.env.PII_KEY; else process.env.PII_KEY = before;
+  }
+});
