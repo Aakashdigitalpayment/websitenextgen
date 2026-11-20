@@ -90,6 +90,22 @@
     if (act === 'delete' && !window.confirm(f.dataset.confirmDelete || 'Delete?')) e.preventDefault();
   }));
 
+  // ---- help guide: filter articles while typing (the form still works without JS via ?q=)
+  const help = $('[data-help-search]');
+  if (help) {
+    const input = $('input[type=search]', help), arts = $$('[data-help-article]'), count = $('[data-help-count]'), empty = $('[data-help-empty]');
+    const norm = v => String(v || '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ').trim();
+    const filter = () => {
+      const words = norm(input.value).split(' ').filter(Boolean);
+      let shown = 0;
+      arts.forEach(a => { const ok = words.every(w => a.dataset.helpText.includes(w)); a.hidden = !ok; if (ok) shown++; if (words.length) a.open = ok; });
+      $$('[data-help-section]').forEach(sec => { sec.hidden = !$$('[data-help-article]', sec).some(a => !a.hidden); });
+      if (count) count.textContent = shown + ' ' + (count.dataset.of || '');
+      if (empty) empty.hidden = shown > 0;
+    };
+    input.addEventListener('input', filter);
+  }
+
   // ---- copy a plain value (dashboard credential usernames)
   $$('[data-copy-text]').forEach(b => b.addEventListener('click', () => {
     if (!navigator.clipboard) return;

@@ -17,6 +17,16 @@ const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const { requireAdmin } = auth;
 
+// ---------------------------------------------------------------- help guide (every admin; PHP admin/help-guide.php)
+router.get('/help', (req, res) => {
+  const help = require('../lib/help-content');
+  const plan = res.locals.plan;
+  const list = help.visibleFor({ level: auth.roleLevel(req.admin.role), visible: href => perms.linkVisible(req.permCtx, href), allows: href => !plan || plan.allows(href) });
+  const q = String(req.query.q || '').slice(0, 80);
+  const articles = help.search(list, q);
+  res.render('admin/help', { title: res.locals.t('सहायता पुस्तिका', 'Help guide'), sections: help.SECTIONS, articles, total: list.length, q });
+});
+
 // ---------------------------------------------------------------- custom roles (superadmin)
 router.get('/roles', requireAdmin('superadmin'), ah(async (req, res) => {
   const roles = await db.many('SELECT r.*, (SELECT count(*) FROM admin_users u WHERE u.custom_role_id = r.id AND u.deleted_at IS NULL) AS user_count FROM admin_roles r ORDER BY r.name');

@@ -147,3 +147,40 @@ test('admin settings: short map links are resolved on save; a short directions l
     assert.match(r.text, /Could not resolve the short link|छोटो लिङ्क खोल्न सकिएन/);
   } finally { maps.fetchImpl = fetchBefore; }
 });
+
+// ---------------------------------------------------------------- admin help guide
+test('help guide: content data is bilingual, links real admin pages, filtered by role and searchable', async () => {
+  const help = require('../src/lib/help-content');
+  const sections = new Set(help.SECTIONS.map(x => x[0]));
+  assert.ok(help.ARTICLES.length >= 30);
+  const ids = new Set();
+  for (const a of help.ARTICLES) {
+    assert.ok(!ids.has(a.id), 'unique id ' + a.id); ids.add(a.id);
+    assert.ok(sections.has(a.section), a.id + ' section');
+    assert.match(a.href, /^\/admin(\/|$)/);
+    for (const pair of [a.title, a.summary, ...a.steps, ...(a.tips || [])]) {
+      assert.equal(pair.length, 2); assert.ok(pair[0] && pair[1], a.id + ' has np + en');
+      assert.match(pair[0], /[ऀ-ॿ]/, a.id + ' Nepali text');
+    }
+    assert.ok(require('../src/lib/icons').names.includes(a.icon), a.id + ' icon ' + a.icon);
+  }
+  const editor = help.visibleFor({ level: 1 }).map(a => a.id);
+  assert.ok(editor.includes('notices') && !editor.includes('settings') && !editor.includes('backup'));
+  assert.ok(help.visibleFor({ level: 4, allows: h => !h.startsWith('/admin/programs') }).every(a => a.id !== 'programs'), 'plan filter');
+  assert.deepEqual(help.search(help.ARTICLES, 'WhatsApp').map(a => a.id), ['settings']);
+  assert.ok(help.search(help.ARTICLES, 'पासवर्ड').length >= 3);
+
+  const agent = await adminAgent();
+  let r = await get('/admin/help', agent);
+  assert.equal(r.status, 200);
+  assert.match(r.text, /href="\/admin\/help"/, 'linked from the admin layout');
+  assert.match(r.text, /data-help-search/);
+  assert.match(r.text, /id="help-backup"/, 'superadmin sees superadmin articles');
+  assert.ok(!/<script>/.test(r.text), 'no inline script');
+  r = await get('/admin/help?q=' + encodeURIComponent('maps.app.goo.gl'), agent);
+  assert.match(r.text, /id="help-settings"/);
+  assert.ok(!/id="help-notices"/.test(r.text));
+  r = await get('/admin/help?q=zzqqxx', agent);
+  assert.match(r.text, /data-help-empty >|data-help-empty\s*>/);
+  assert.ok(require('../src/lib/admin-perms').resolve('/help').always, 'open to every admin role');
+});
