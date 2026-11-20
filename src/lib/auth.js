@@ -204,7 +204,7 @@ async function audit(req, action, entityType, entityId, summary, extra = {}) {
       [req.admin ? 'admin' : req.member ? 'member' : 'system',
         extra.actorId ?? req.admin?.id ?? req.member?.id ?? null,
         extra.actorName ?? req.admin?.username ?? req.member?.name ?? null,
-        action, entityType, entityId || null, String(summary || '').slice(0, 500),
+        String(action).slice(0, 64), entityType, entityId || null, String(summary || '').slice(0, 255), // audit_log.summary is VARCHAR(255)
         extra.old ? JSON.stringify(extra.old) : null, extra.new ? JSON.stringify(extra.new) : null,
         req.ip, String(req.get('user-agent') || '').slice(0, 255)]);
   } catch (e) { console.error('audit failed:', e.message); }
