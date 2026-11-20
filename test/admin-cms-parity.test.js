@@ -455,3 +455,28 @@ test('office credentials: staff can open the list, only admins+ change entries o
   assert.equal(r.status, 200);
   assert.match(r.text, /Access log|पहुँच लग/);
 });
+
+// ---------------------------------------------------------------- P2-10 notifications
+test('notifications: one-member push with type, push log, clear old subscriptions, template test, per-module office alerts', async () => {
+  const mid = await inA(() => db.value("INSERT INTO members (name, name_np, phone, sadasyata_number, approval_status, is_active) VALUES ('Push M', 'पुश', '9841999999', 'PM-1', 'approved', 1) RETURNING id"));
+  let r = await admin.form('/admin/notifications/push', { title: 'तपाईंको कार्ड तयार', body: 'x', target: 'PM-1', type: 'success' }, '/admin/notifications');
+  assert.equal(r.status, 302);
+  const n = await inA(() => db.many('SELECT member_id, type FROM member_notifications WHERE title = $1', ['तपाईंको कार्ड तयार']));
+  assert.deepEqual(n.map(x => [x.member_id, x.type]), [[mid, 'success']]);
+  await inA(() => db.query("INSERT INTO member_push_subscriptions (member_id, endpoint, p256dh, auth, created_at) VALUES ($1, 'https://fcm.googleapis.com/x', 'p', 'a', now() - interval '120 days')", [mid]));
+  await admin.form('/admin/notifications/push/clear-expired', {}, '/admin/notifications');
+  assert.equal(Number(await inA(() => db.value('SELECT count(*) FROM member_push_subscriptions WHERE member_id = $1', [mid]))), 0);
+  const tid = await inA(() => db.value("INSERT INTO notification_templates (event_type, audience, channel, body, enabled) VALUES ('grievance', 'admin', 'sms', 'नमस्ते {{name}} {{tracking_id}}', 1) ON CONFLICT (event_type, audience, channel) DO UPDATE SET enabled = 1 RETURNING id"));
+  r = await admin.get('/admin/notifications');
+  assert.match(r.text, /name="target"/);
+  assert.match(r.text, new RegExp(`<option value="${tid}">`));
+  await admin.form('/admin/notifications/template-test', { template_id: String(tid), to: '9841000000' }, '/admin/notifications');
+  assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'template_test'")));
+  // office alert toggles: email for grievances switched off → adminEvent sends no email
+  const notify = require('../src/lib/notify');
+  await setSetting('notify_admin_emails', 'office@x.np');
+  await setSetting('notify_email_grievance', '0');
+  const before = Number(await inA(() => db.value("SELECT count(*) FROM notification_log WHERE channel = 'email'")));
+  await inA(() => notify.adminEvent(require('../src/modules/applications').grievance, { name: 'X' }));
+  assert.equal(Number(await inA(() => db.value("SELECT count(*) FROM notification_log WHERE channel = 'email'"))), before);
+});

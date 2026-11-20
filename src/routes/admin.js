@@ -750,7 +750,10 @@ router.get('/notifications', requireAdmin('admin'), ah(async (req, res) => {
   const pg = util.paginate(total, util.int(req.query.page, 1), 50);
   const rows = await db.many(`SELECT * FROM notification_log ORDER BY id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`);
   const subs = await db.value('SELECT count(*) FROM member_push_subscriptions');
-  res.render('admin/notifications', { title: res.locals.t('सूचना पठाइएको विवरण', 'Notifications'), rows, pg, subs });
+  const pushLog = await db.many(`SELECT l.*, m.name, m.name_np, n.title FROM member_push_log l LEFT JOIN members m ON m.id = l.member_id
+    LEFT JOIN member_notifications n ON n.id = l.notif_id ORDER BY l.id DESC LIMIT 50`);
+  const templates = await db.many('SELECT id, event_type, audience, channel FROM notification_templates WHERE enabled = 1 ORDER BY event_type, channel LIMIT 200').catch(() => []);
+  res.render('admin/notifications', { title: res.locals.t('सूचना पठाइएको विवरण', 'Notifications'), rows, pg, subs, pushLog, templates });
 }));
 
 router.post('/notifications/test', requireAdmin('admin'), ah(async (req, res) => {
@@ -768,11 +771,45 @@ router.post('/notifications/push', requireAdmin('admin'), ah(async (req, res) =>
   const body = String(req.body.body || '').trim().slice(0, 300);
   const url = /^\/(?!\/)/.test(String(req.body.url || '')) ? req.body.url : '/member/notifications';
   if (!title) { flash(req, 'error', res.locals.t('शीर्षक चाहिन्छ', 'Title required')); return res.redirect('/admin/notifications'); }
+  const type = ['info', 'success', 'warning', 'error'].includes(req.body.type) ? req.body.type : 'broadcast';
+  // one member (legacy push-notifications.php target) by member no. / card / phone, or everyone
+  const target = String(req.body.target || '').trim();
+  if (target) {
+    const m = await db.one(`SELECT id, name FROM members WHERE deleted_at IS NULL AND is_active = 1 AND (sadasyata_number = $1 OR member_card_no = $1 OR phone = $1) ORDER BY id LIMIT 1`, [target.slice(0, 50)]);
+    if (!m) { flash(req, 'error', res.locals.t('सदस्य भेटिएन।', 'Member not found.')); return res.redirect('/admin/notifications'); }
+    const nid = await db.value(`INSERT INTO member_notifications (member_id, title, message, type, link, is_read, created_at) VALUES ($1, $2, $3, $4, $5, 0, now()) RETURNING id`, [m.id, title, body || null, type, url]);
+    const r = await push.sendToMember(m.id, { title, body, url }, nid);
+    await auth.audit(req, 'notify_member', 'member_notifications', nid, `Notification "${title}" → member #${m.id}, push ${r.sent} sent / ${r.failed} failed`);
+    flash(req, 'success', res.locals.t(`${m.name} लाई सूचना पठाइयो (push ${r.sent})।`, `Sent to ${m.name} (${r.sent} push).`));
+    return res.redirect('/admin/notifications');
+  }
   const members = await db.many('SELECT id FROM members WHERE is_active = 1 AND deleted_at IS NULL');
-  for (const m of members) await db.query(`INSERT INTO member_notifications (member_id, title, message, type, link, is_read, created_at) VALUES ($1, $2, $3, 'broadcast', $4, 0, now())`, [m.id, title, body || null, url]);
+  for (const m of members) await db.query(`INSERT INTO member_notifications (member_id, title, message, type, link, is_read, created_at) VALUES ($1, $2, $3, $4, $5, 0, now())`, [m.id, title, body || null, type, url]);
   const r = await push.sendToAll({ title, body, url });
   await auth.audit(req, 'broadcast', 'member_notifications', null, `Broadcast "${title}" → ${members.length} members, push ${r.sent} sent / ${r.failed} failed`);
   flash(req, 'success', res.locals.t(`${members.length} सदस्यलाई सूचना, push ${r.sent} पठाइयो।`, `Notified ${members.length} members; ${r.sent} push messages sent.`));
+  res.redirect('/admin/notifications');
+}));
+
+// browser subscriptions older than 90 days are usually dead (legacy push-notifications.php "clear expired")
+router.post('/notifications/push/clear-expired', requireAdmin('admin'), ah(async (req, res) => {
+  const r = await db.query("DELETE FROM member_push_subscriptions WHERE created_at < now() - interval '90 days'");
+  await auth.audit(req, 'push_clear_expired', 'member_push_subscriptions', null, `${r.rowCount} old push subscriptions removed`);
+  flash(req, 'success', res.locals.t(`${r.rowCount} पुराना push उपकरण हटाइए।`, `${r.rowCount} old push subscriptions removed.`));
+  res.redirect('/admin/notifications');
+}));
+
+// send one template with sample values (legacy notification-templates.php test)
+router.post('/notifications/template-test', requireAdmin('admin'), ah(async (req, res) => {
+  const tpl = await db.one('SELECT * FROM notification_templates WHERE id = $1', [util.int(req.body.template_id)]);
+  const to = String(req.body.to || '').trim().slice(0, 200);
+  if (!tpl || !to) { flash(req, 'error', res.locals.t('ढाँचा र प्राप्तकर्ता चाहिन्छ।', 'Choose a template and a recipient.')); return res.redirect('/admin/notifications'); }
+  const vars = { name: 'राम बहादुर', tracking_id: 'TEST-0001', module: 'परीक्षण', status: 'approved', remarks: 'नमुना', amount: '10,000', date: nd.todayBs(), details: '', site: res.locals.siteName };
+  const fill = str => String(str || '').replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (m, k) => (vars[k] ?? ''));
+  const r = tpl.channel === 'sms' ? await notify.sendSms('template_test', to, fill(tpl.body).slice(0, 320))
+    : await notify.sendEmail('template_test', to, fill(tpl.subject) || 'Test', fill(tpl.body));
+  await auth.audit(req, 'template_test', 'notification_templates', tpl.id, `Test of ${tpl.event_type}/${tpl.channel} → ${to}`);
+  flash(req, r.ok ? 'success' : 'error', r.ok ? res.locals.t('परीक्षण पठाइयो।', 'Test sent.') : (r.skipped || r.error || 'failed'));
   res.redirect('/admin/notifications');
 }));
 
