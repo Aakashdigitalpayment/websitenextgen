@@ -276,3 +276,43 @@ test('status history records the per-channel notification outcome; quick status 
   await inA(() => db.query("UPDATE site_settings SET setting_value = '0' WHERE setting_key = 'inbox_quick_status_notify'"));
   await inA(async () => require('../src/lib/settings').invalidate());
 });
+
+// ---------------------------------------------------------------- b-6 KYC SSOT tools / b-8 partner services
+test('KYC inbox: member link filter + badge, divergence alert, member ↔ KYM links; member page partner services', async () => {
+  const [m1, m2, m3] = [await memberId('M-1'), await memberId('M-2'), await memberId('M-3')];
+  const k = await inA(async () => {
+    const ins = (mid, name, mobile) => db.value("INSERT INTO kyc_applications (tracking_id, member_id, full_name, full_name_en, mobile, status) VALUES ($1, $2, $3, $3, $4, 'pending') RETURNING id", ['KY-' + name, mid, name, mobile]);
+    const k1 = await ins('M-1', 'Kym Linked', '9800009999'); // phone differs from the member row
+    const k2 = await ins('m-2', 'Kym Nopass', '9841000002');
+    const k3 = await ins('M-3', 'Kym Unlinked', '9841000003');
+    const k4 = await ins('ZZ-9', 'Kym Orphan', '9841000009');
+    await db.query('UPDATE members SET kyc_application_id = $1 WHERE id = $2', [k1, m1]);
+    await db.query('UPDATE members SET kyc_application_id = $1 WHERE id = $2', [k2, m2]);
+    await db.query('INSERT INTO member_partner_services (member_id, partner_name, service_name, service_taken) VALUES ($1, $2, $3, 1)', [m1, 'City Clinic', 'Checkup']);
+    return { k1, k2, k3, k4 };
+  });
+  const names = async link => (await admin.get('/admin/inbox/kyc?link=' + link)).text;
+  let t = await names('linked');
+  assert.match(t, /Kym Linked/); assert.doesNotMatch(t, /Kym Nopass|Kym Unlinked|Kym Orphan/);
+  t = await names('no_password');
+  assert.match(t, /Kym Nopass/); assert.doesNotMatch(t, /Kym Linked|Kym Orphan/);
+  t = await names('unlinked_member');
+  assert.match(t, /Kym Unlinked/); assert.doesNotMatch(t, /Kym Linked|Kym Nopass/);
+  t = await names('kym_only');
+  assert.match(t, /Kym Orphan/); assert.doesNotMatch(t, /Kym Linked/);
+  // the unfiltered list shows a badge per row
+  t = (await admin.get('/admin/inbox/kyc')).text;
+  assert.match(t, /badge badge-ok">(लिंक|Linked)/);
+  assert.match(t, /badge badge-info">(KYM मात्र|KYM only)/);
+  // divergence: member phone 9841000001 vs KYM 9800009999; back link to the member
+  t = (await admin.get(`/admin/inbox/kyc/${k.k1}?from_member=${m1}`)).text;
+  assert.match(t, /9841000001<\/td><td>9800009999/);
+  assert.match(t, new RegExp(`href="/admin/members/${m1}">←`));
+  // member page links to the KYM, lists partner services and the attendance rating
+  t = (await admin.get('/admin/members/' + m1)).text;
+  assert.match(t, new RegExp(`/admin/inbox/kyc/${k.k1}\\?from_member=${m1}`));
+  assert.match(t, /City Clinic/);
+  t = (await admin.get(`/admin/members/${m1}/activities`)).text;
+  assert.match(t, /City Clinic — Checkup/);
+  assert.ok(m3);
+});

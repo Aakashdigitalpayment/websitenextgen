@@ -195,7 +195,15 @@ async function memberView(item) {
     db.many("SELECT * FROM member_profile_change_requests WHERE member_id = $1 AND status = 'pending' ORDER BY id DESC", [item.id]),
     db.many("SELECT * FROM member_password_reset_requests WHERE member_id = $1 AND status = 'pending' ORDER BY id DESC", [item.id]),
   ]);
-  return { cards, accounts, docs, timeline: timeline.slice(0, 15), timelineTotal: timeline.length, changes, resets };
+  // KYM link (SSOT), partner-service log and programme attendance rating (legacy member-online-portal.php)
+  const [kyc, partnerServices, rating] = await Promise.all([
+    require('../lib/kym').loadLinkedKyc(item),
+    db.many('SELECT partner_name, service_name, service_taken, service_note, created_at FROM member_partner_services WHERE member_id = $1 ORDER BY created_at DESC LIMIT 20', [item.id]),
+    db.one(`SELECT (SELECT count(DISTINCT a.program_id) FROM member_program_attendance a JOIN upcoming_programs p ON p.id = a.program_id
+                     WHERE a.member_id = $1 AND a.attendance_status = 'VALID' AND p.is_active = 1 AND p.parent_program_id IS NULL) AS attended,
+                   (SELECT count(*) FROM upcoming_programs WHERE is_active = 1 AND parent_program_id IS NULL AND (event_date IS NULL OR event_date <= CURRENT_DATE)) AS total`, [item.id]),
+  ]);
+  return { cards, accounts, docs, timeline: timeline.slice(0, 15), timelineTotal: timeline.length, changes, resets, kycId: kyc ? kyc.id : null, partnerServices, rating };
 }
 const renderMemberForm = async (res, item, values, errors = {}, status = 200) => res.status(status).render('admin/member-form', {
   title: item ? item.name_np || item.name : res.locals.t('नयाँ सदस्य', 'New member'), item, values, errors,

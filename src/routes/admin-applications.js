@@ -188,6 +188,9 @@ router.get('/inbox/:module/:id', getModule, ah(async (req, res, next) => {
   const extra = {};
   if (m.key === 'kyc') {
     extra.linkedMember = row.member_id ? await kym.findMemberBySadasyata(row.member_id) : null;
+    extra.divergent = kym.compareShared(extra.linkedMember, row); // member ↔ KYM shared fields that disagree
+    const fromMember = util.int(req.query.from_member);
+    if (fromMember) extra.fromMember = await db.one('SELECT id, name, name_np, sadasyata_number FROM members WHERE id = $1', [fromMember]);
     extra.hasMonthlySaving = (await db.columns('members')).has('monthly_saving_regular');
   }
   if (m.key === 'membership' && row.member_pk) extra.linkedMember = await db.one('SELECT id, name, sadasyata_number FROM members WHERE id = $1', [row.member_pk]);

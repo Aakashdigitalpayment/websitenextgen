@@ -5,7 +5,7 @@
   const multipart = !!attachCol;
 %>
 <div class="content-head">
-  <div><div class="crumbs"><a href="/admin/inbox/<%= m.key %>"><%= title %></a></div><h1><%= row[m.nameCol] %></h1><div class="small muted"><%= row.tracking_id || '#' + row.id %> · <%= bsDate(row.created_at) %><% if (row.status) { %> · <span class="badge"><%= statusLabel(row.status) %></span><% } %></div></div>
+  <div><div class="crumbs"><% if (locals.fromMember) { %><a href="/admin/members/<%= fromMember.id %>">← <%= fromMember.name_np || fromMember.name %> (<%= fromMember.sadasyata_number %>)</a> · <% } %><a href="/admin/inbox/<%= m.key %>"><%= title %></a></div><h1><%= row[m.nameCol] %></h1><div class="small muted"><%= row.tracking_id || '#' + row.id %> · <%= bsDate(row.created_at) %><% if (row.status) { %> · <span class="badge"><%= statusLabel(row.status) %></span><% } %></div></div>
   <div class="flex gap-1 no-print">
     <% if (m.key === 'vendor' && roleLevel(admin.role) >= 3) { %><% if (row.linked_partner_id) { %><a class="btn btn-outline btn-sm" href="/admin/r/partner_facilities/<%= row.linked_partner_id %>/edit"><%- icon('store') %><%= t('साझेदार सुविधा', 'Partner facility') %></a><% } else { %><form method="post" action="/admin/partners/promote-vendor/<%= row.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('यो भेन्डरलाई स्वीकृत गरी साझेदार सुविधामा थप्ने?', 'Approve this vendor and add it as a partner facility?') %>"><%- icon('store') %><%= t('साझेदार बनाउनुहोस्', 'Make partner') %></button></form><% } %><% } %>
     <a class="btn btn-outline btn-sm" href="/admin/inbox/<%= m.key %>/<%= row.id %>/print?autoprint=1" target="_blank" rel="noopener"><%- icon('file') %><%= t('फारम प्रिन्ट', 'Print form') %></a>
@@ -72,6 +72,13 @@
             <p class="small faint mt-1"><%= t('पासवर्डबिनाको सदस्य stub बन्छ; त्यसपछि आवेदकले अनलाइन केवाइएम भर्न सक्छन्।', 'A member stub without a password is created; the applicant can then fill in the online KYM.') %></p>
           </form>
         <% } %>
+      </div>
+    <% } %>
+    <% if (m.key === 'kyc' && locals.divergent && divergent.length) { %>
+      <div class="card" style="border-color:var(--warn)"><h3><%- icon('alert') %> <%= t('सदस्य र KYM मा फरक विवरण', 'Member and KYM details differ') %></h3>
+        <div class="table-wrap"><table class="table small"><thead><tr><th><%= t('विवरण', 'Field') %></th><th><%= t('सदस्य', 'Member') %></th><th>KYM</th></tr></thead>
+          <tbody><% divergent.forEach(d => { %><tr><td><%= t(...d.field) %></td><td><%= d.member %></td><td><%= d.kyc %></td></tr><% }) %></tbody></table></div>
+        <p class="small faint mt-1"><%= t('"सदस्यसँग लिंक / sync" ले KYM का विवरण सदस्यमा सार्छ।', '"Link / sync member" copies the KYM values to the member.') %></p>
       </div>
     <% } %>
     <% if (m.key === 'kyc') { %>

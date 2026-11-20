@@ -434,11 +434,22 @@ const modules = {
  * `mutateRole`: role needed for any POST on the module (auction bids decide a sale).
  */
 const RISK = [['low', 'न्यून', 'Low'], ['medium', 'मध्यम', 'Medium'], ['high', 'उच्च', 'High']];
+// legacy memberSsotKycLinkFilterSql: KYM ↔ members link state
+const KYC_LINK = [['linked', 'लिंक (KYM + सदस्य)', 'Linked (KYM + member)'], ['kym_only', 'KYM मात्र (सदस्य खाता छैन)', 'KYM only (no member row)'],
+  ['no_password', 'सदस्य stub (पासवर्ड छैन)', 'Member stub (no password)'], ['unlinked_member', 'सदस्य छ, लिंक छैन', 'Member exists, not linked']];
+const SAME_MEMBER = "SELECT 1 FROM members mm WHERE upper(trim(mm.sadasyata_number)) = upper(trim(kyc_applications.member_id)) AND mm.deleted_at IS NULL";
+const KYC_LINK_SQL = {
+  linked: `EXISTS (${SAME_MEMBER} AND COALESCE(mm.kyc_application_id, 0) <> 0 AND COALESCE(mm.password_hash, '') <> '')`,
+  kym_only: `(COALESCE(trim(kyc_applications.member_id), '') = '' OR NOT EXISTS (${SAME_MEMBER}))`,
+  no_password: `EXISTS (${SAME_MEMBER} AND COALESCE(mm.password_hash, '') = '')`,
+  unlinked_member: `EXISTS (${SAME_MEMBER} AND COALESCE(mm.kyc_application_id, 0) = 0)`,
+};
 const EXTRA = {
   loan: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'loan_application', memberEvent: 'loan', amountCol: 'loan_amount', pendingSum: true },
   account: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'account_application', memberEvent: 'account' },
   kyc: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'kyc_application', memberEvent: 'kyc',
-    filters: [{ name: 'risk', col: 'risk_category', label: ['सबै जोखिम', 'All risk levels'], options: RISK }] },
+    filters: [{ name: 'risk', col: 'risk_category', label: ['सबै जोखिम', 'All risk levels'], options: RISK },
+      { name: 'link', label: ['सदस्य लिंक (सबै)', 'Member link (all)'], options: KYC_LINK.map(([v, np, en]) => [v, np, en]), where: KYC_LINK_SQL }] },
   grievance: { adminOnly: true, attachCol: 'admin_attachment', noteCol: 'admin_note', adminEvent: 'grievance', memberEvent: 'grievance' },
   appointment: { attachCol: 'admin_attachment', adminEvent: 'appointment', memberEvent: 'appointment', dateCol: 'preferred_date',
     listOrder: 'preferred_date DESC NULLS LAST, created_at DESC',

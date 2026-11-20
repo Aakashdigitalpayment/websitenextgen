@@ -450,6 +450,9 @@ async function activities(member, { from = null, to = null } = {}) {
   await add(`SELECT * FROM member_program_preregistrations WHERE member_id = $1${range('created_at', p)} ORDER BY created_at DESC LIMIT 100`, p,
     r => ({ date: r.created_at, type: ['कार्यक्रम पूर्व दर्ता', 'Programme pre-registration'], status: r.source || '', detail: r.program_title || '' }));
   p = [member.id];
+  await add(`SELECT * FROM member_partner_services WHERE member_id = $1${range('created_at', p)} ORDER BY created_at DESC LIMIT 100`, p,
+    r => ({ date: r.created_at, type: ['साझेदार सेवा', 'Partner service'], status: Number(r.service_taken) ? 'taken' : 'logged', detail: [r.partner_name, r.service_name].filter(Boolean).join(' — ') }));
+  p = [member.id];
   await add(`SELECT * FROM member_password_reset_requests WHERE member_id = $1${range('requested_at', p)} ORDER BY requested_at DESC LIMIT 100`, p,
     r => ({ date: r.requested_at, type: ['पासवर्ड रिसेट अनुरोध', 'Password reset request'], status: r.status || '', detail: '#' + r.id + (r.admin_note ? ' — ' + r.admin_note : '') }));
   p = [member.id];
