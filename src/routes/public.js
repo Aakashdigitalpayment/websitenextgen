@@ -557,10 +557,12 @@ router.get('/exchange-rate', ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- contact
+// contact.php map: map_embed_url, or any Google Maps share link (google_map_url), or map_lat / map_lng
+const contactMap = s => { const maps = require('../lib/maps'); const mapEmbed = maps.fromSettings(s); return { mapEmbed, mapLink: maps.openLink(s) }; };
 router.get('/contact', ah(async (req, res) => {
   const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
   antispam.mathPrompt(req, res, 'contact');
-  res.render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: {}, errors: {} });
+  res.render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: {}, errors: {}, ...contactMap(res.locals.settings) });
 }));
 
 router.post('/contact', submitLimiter, ah(async (req, res) => {
@@ -573,7 +575,7 @@ router.post('/contact', submitLimiter, ah(async (req, res) => {
   if (Object.keys(errors).length) {
     const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
     antispam.mathPrompt(req, res, 'contact');
-    return res.status(422).render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: req.body, errors });
+    return res.status(422).render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: req.body, errors, ...contactMap(res.locals.settings) });
   }
   const row = await forms.insertSubmission(mod, data, { is_read: 0 });
   notify.later(() => notify.adminEvent(mod, { name: row.name, details: { 'नाम': row.name, 'फोन': row.phone || '', 'इमेल': row.email || '', 'विषय': row.subject, 'सन्देश': util.excerpt(row.message, 300) } }));

@@ -55,3 +55,4 @@
 .spotlight .person-photo { width: 140px; height: 140px; margin: 0; }
 .spotlight blockquote { border-left: 3px solid var(--brand); margin: 10px 0; padding-left: 12px; }
 @media (max-width: 600px) { .spotlight { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
+.contact-cards { gap: 10px; } .contact-cards .card { display: flex; gap: 8px; align-items: center; padding: 10px 12px; } .contact-cards .icon-tile { margin: 0; }

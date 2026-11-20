@@ -249,3 +249,24 @@ test('home: slide CTA (sanitised), leadership, mobile app, app features, awards,
   assert.ok(r.text.includes('/reports?type=monthly') && r.text.includes('/reports?type=annual'));
   assert.ok(r.text.includes('/exchange-rate'), 'extra quick links');
 });
+
+// ---------------------------------------------------------------- P1-10 contact map
+test('contact: map from a Google Maps share link or coordinates; mobile shown; unsafe links ignored', async () => {
+  const maps = require('../src/lib/maps');
+  assert.equal(maps.toEmbed('https://www.google.com/maps/@27.7172,85.324,14z'), 'https://www.google.com/maps?q=27.7172,85.324&z=14&output=embed');
+  assert.equal(maps.toEmbed('https://evil.example/maps?q=x'), '');
+  assert.equal(maps.toEmbed('https://maps.app.goo.gl/abc'), '');
+  await setting('map_embed_url', '');
+  await setting('google_map_url', 'https://www.google.com/maps/place/Coop/@27.7,85.3,15z/data=!3d27.71!4d85.32');
+  await setting('mobile', '9851000000');
+  await clearCaches();
+  let r = await get('/contact');
+  assert.ok(r.text.includes('src="https://www.google.com/maps?q=27.71,85.32&amp;z=17&amp;output=embed"'), 'embedded map');
+  assert.ok(r.text.includes('9851000000'));
+  await setting('google_map_url', '');
+  await setting('map_lat', '27.5');
+  await setting('map_lng', '85.1');
+  await clearCaches();
+  r = await get('/contact');
+  assert.ok(r.text.includes('maps?q=27.5,85.1'));
+});
