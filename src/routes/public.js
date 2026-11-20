@@ -239,6 +239,17 @@ router.get('/awards', ah(async (req, res) => {
   res.render('public/awards', { title: res.locals.t('सम्मान तथा पुरस्कार', 'Awards & honours'), awards, spotlight });
 }));
 
+// awards.php?id=: one award in full
+router.get('/awards/:id', ah(async (req, res, next) => {
+  const award = await db.one(`SELECT * FROM awards WHERE id = $1 AND ${ACTIVE}`, [util.int(req.params.id)]);
+  if (!award) return next();
+  const f = res.locals.f, t = res.locals.t, content = f(award, 'description');
+  res.render('public/article', { title: f(award, 'title'), description: util.excerpt(content, 158) || f(award, 'awarded_by'), ogImage: award.image || null,
+    breadcrumbs: [[t('सम्मान तथा पुरस्कार', 'Awards'), '/awards']], item: award, content: content || f(award, 'awarded_by'), image: award.image, date: award.award_date,
+    lead: [f(award, 'awarded_by'), award.award_date ? res.locals.bsDate(award.award_date) : ''].filter(Boolean).join(' · '),
+    more: await db.many(`SELECT id, title, title_np, award_date AS created_at FROM awards WHERE ${ACTIVE} AND id <> $1 ORDER BY display_order, award_date DESC NULLS LAST LIMIT 5`, [award.id]), base: '/awards', crumb: t('सम्मान तथा पुरस्कार', 'Awards') });
+}));
+
 router.get('/success-stories', ah(async (req, res) => {
   const stories = await db.many(`SELECT * FROM member_success_stories WHERE ${ACTIVE} ORDER BY display_order, id DESC`);
   res.render('public/stories', { title: res.locals.t('सफलताका कथा', 'Success stories'), stories });
@@ -287,12 +298,36 @@ router.get('/notices/:id', ah(async (req, res, next) => {
 }));
 
 // ---------------------------------------------------------------- media & documents
+// gallery.php / gallery-albums.php: photo / video tabs with counts, album covers, paging, YouTube thumbnails, lightbox
+const youtubeId = url => (String(url || '').match(/(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/) || [])[1] || '';
 router.get('/gallery', ah(async (req, res) => {
-  const albums = await db.many(`SELECT * FROM gallery_albums WHERE ${ACTIVE} ORDER BY display_order, id DESC`);
-  const album = util.int(req.query.album, 0);
-  const images = await db.many(
-    `SELECT * FROM gallery WHERE ${ACTIVE} AND ${NOT_DELETED} ${album ? 'AND album_id = $1' : ''} ORDER BY display_order, id DESC LIMIT 200`, album ? [album] : []);
-  res.render('public/gallery', { title: res.locals.t('ग्यालरी', 'Gallery'), albums, album, images });
+  const type = req.query.type === 'video' ? 'video' : 'photo';
+  const albums = await db.many(`SELECT a.*,
+      (SELECT count(*) FROM gallery g WHERE g.album_id = a.id AND g.is_active = 1 AND g.deleted_at IS NULL AND COALESCE(g.media_type, 'photo') = $1) AS n,
+      (SELECT COALESCE(NULLIF(g.thumbnail, ''), g.image, g.video_url) FROM gallery g WHERE g.album_id = a.id AND g.is_active = 1 AND g.deleted_at IS NULL AND COALESCE(g.media_type, 'photo') = $1 ORDER BY g.display_order, g.id DESC LIMIT 1) AS cover
+    FROM gallery_albums a WHERE a.is_active = 1 ORDER BY a.display_order, a.id DESC`, [type]);
+  // ?album= id, or a legacy album name / slug
+  const raw = String(req.query.album || '').trim().slice(0, 120);
+  const slug = v => String(v || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const albumRow = raw ? albums.find(a => String(a.id) === raw || [a.name_np, a.name_en].some(n => n && (n === raw || slug(n) === slug(raw)))) : null;
+  const category = String(req.query.category || '').trim().slice(0, 80);
+  const where = [`${ACTIVE}`, NOT_DELETED, `COALESCE(media_type, 'photo') = '${type}'`];
+  const params = [];
+  if (albumRow) { params.push(albumRow.id); where.push(`album_id = $${params.length}`); }
+  if (category) { params.push(category); where.push(`category = $${params.length}`); }
+  const counts = Object.fromEntries((await db.many(`SELECT COALESCE(media_type, 'photo') AS t, count(*) AS n FROM gallery WHERE ${ACTIVE} AND ${NOT_DELETED} GROUP BY 1`)).map(r => [r.t, Number(r.n)]));
+  const per = type === 'video' ? 12 : 24;
+  const total = await db.value(`SELECT count(*) FROM gallery WHERE ${where.join(' AND ')}`, params);
+  const pg = util.paginate(total, util.int(req.query.page, 1), per);
+  const items = await db.many(`SELECT * FROM gallery WHERE ${where.join(' AND ')} ORDER BY display_order, id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params);
+  for (const g of items) {
+    g.ytId = type === 'video' ? youtubeId(g.video_url) : '';
+    g.thumb = g.thumbnail || (g.ytId ? `https://i.ytimg.com/vi/${g.ytId}/hqdefault.jpg` : '');
+  }
+  for (const a of albums) { const id = youtubeId(a.cover); if (id) a.cover = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`; }
+  // album cards when no album / category is chosen and there are albums; otherwise the grid
+  const showAlbums = !albumRow && !category && albums.some(a => Number(a.n) > 0) && req.query.view !== 'all';
+  res.render('public/gallery', { title: res.locals.t('ग्यालरी', 'Gallery'), type, counts, albums: albums.filter(a => Number(a.n) > 0), album: albumRow, category, items, pg, showAlbums });
 }));
 
 router.get('/downloads', ah(async (req, res) => {

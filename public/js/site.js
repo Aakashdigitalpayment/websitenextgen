@@ -106,6 +106,36 @@
     });
   });
 
+  // ---------------------------------------------------------------- gallery lightbox (photos) and in-page YouTube player (videos)
+  const lb = $('[data-lightbox-dialog]');
+  if (lb && typeof lb.showModal === 'function') {
+    const items = $$('[data-lightbox], [data-video]');
+    const body = $('[data-lb-body]', lb), cap = $('[data-lb-caption]', lb);
+    let cur = 0;
+    const render = n => {
+      cur = (n + items.length) % items.length;
+      const a = items[cur];
+      body.textContent = '';
+      if (a.dataset.video && /^[A-Za-z0-9_-]{11}$/.test(a.dataset.video)) {
+        const f = document.createElement('iframe');
+        f.src = 'https://www.youtube-nocookie.com/embed/' + a.dataset.video + '?autoplay=1&rel=0';
+        f.title = a.title || 'Video'; f.allow = 'autoplay; encrypted-media; picture-in-picture'; f.allowFullscreen = true;
+        body.appendChild(f);
+      } else {
+        const img = document.createElement('img'); img.src = a.href; img.alt = a.dataset.caption || ''; body.appendChild(img);
+      }
+      cap.textContent = a.dataset.caption || a.title || '';
+    };
+    items.forEach((a, n) => a.addEventListener('click', e => { if (e.ctrlKey || e.metaKey) return; e.preventDefault(); render(n); lb.showModal(); }));
+    $('[data-lb-close]', lb).addEventListener('click', () => lb.close());
+    $('[data-lb-prev]', lb).addEventListener('click', () => render(cur - 1));
+    $('[data-lb-next]', lb).addEventListener('click', () => render(cur + 1));
+    lb.addEventListener('close', () => { body.textContent = ''; }); // stops the video
+    lb.addEventListener('click', e => { if (e.target === lb) lb.close(); });
+    lb.addEventListener('keydown', e => { if (e.key === 'ArrowRight') render(cur + 1); else if (e.key === 'ArrowLeft') render(cur - 1); });
+    if (items.length < 2) { $('[data-lb-prev]', lb).hidden = true; $('[data-lb-next]', lb).hidden = true; }
+  }
+
   // ---------------------------------------------------------------- legacy about.php#anchors → their own pages
   if (location.pathname === '/about' && location.hash) {
     const h = location.hash.toLowerCase();

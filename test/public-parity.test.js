@@ -366,6 +366,29 @@ test('manifest with icons + shortcuts, PNG icons and share card, sitemap with la
   assert.ok(r.text.includes('Allow: /') && r.text.includes('Disallow: /track') && r.text.includes('Disallow: /api/'));
 });
 
+// ---------------------------------------------------------------- P2-6 gallery, P2-11 awards
+test('gallery: photo / video tabs with counts, album covers, legacy album name, YouTube thumbnail, paging; award detail', async () => {
+  await inA(async () => {
+    const al = await db.value("INSERT INTO gallery_albums (name_np, name_en, is_active) VALUES ('वार्षिक सभा', 'AGM 2081', 1) RETURNING id");
+    await db.query("INSERT INTO gallery (title, image, album_id, is_active) SELECT 'P' || g, 'gallery/p' || g || '.jpg', $1, 1 FROM generate_series(1, 30) g", [al]);
+    await db.query("INSERT INTO gallery (title, media_type, video_url, is_active) VALUES ('Clip', 'video', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 1)");
+    await db.query("INSERT INTO awards (title, description, awarded_by, is_active) VALUES ('Detail award', '<p>Full award text</p>', 'Federation', 1)");
+  });
+  let r = await get('/gallery');
+  assert.ok(r.text.includes('album-card') && r.text.includes('(३०)'), 'album cards and photo count');
+  r = await get('/gallery?album=AGM%202081');
+  assert.equal((r.text.match(/data-lightbox data-caption/g) || []).length, 24, 'first page of 24');
+  assert.ok(r.text.includes('class="pagination"'));
+  r = await get('/gallery?type=video');
+  assert.ok(r.text.includes('i.ytimg.com/vi/dQw4w9WgXcQ') && r.text.includes('data-video="dQw4w9WgXcQ"'));
+  const aid = await inA(() => db.value("SELECT id FROM awards WHERE title = 'Detail award'"));
+  r = await get('/awards/' + aid);
+  assert.equal(r.status, 200);
+  assert.ok(r.text.includes('Full award text') && r.text.includes('Federation'));
+  r = await get('/awards');
+  assert.ok(r.text.includes('/awards/' + aid));
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');

@@ -2,8 +2,9 @@
 <section class="section"><div class="container">
   <% if (!awards.length && !spotlight.length) { %><div class="empty"><%= t('विवरण चाँडै।', 'Coming soon.') %></div><% } %>
   <div class="grid grid-3"><% awards.forEach(a => { %>
-    <div class="card"><% if (a.image) { %><div class="card-media"><img src="<%= mediaUrl(a.image) %>"<%- srcset(a.image, '(max-width: 600px) 100vw, 380px') %> alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('award') %></span><% } %>
-      <div class="card-meta"><%= a.award_date ? bsDate(a.award_date) : '' %></div><h3><%= f(a, 'title') %></h3><p class="muted small"><%= f(a, 'awarded_by') %></p></div>
+    <a class="card card-link" href="/awards/<%= a.id %>"><% if (a.image) { %><div class="card-media"><img src="<%= mediaUrl(a.image) %>"<%- srcset(a.image, '(max-width: 600px) 100vw, 380px') %> alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('award') %></span><% } %>
+      <div class="card-meta"><%= a.award_date ? bsDate(a.award_date) : '' %></div><h3><%= f(a, 'title') %></h3><p class="muted small"><%= f(a, 'awarded_by') %></p>
+      <% if (f(a, 'description')) { %><p class="small"><%= util.excerpt(f(a, 'description'), 110) %> <span class="faint"><%= t('थप पढ्नुहोस्', 'Read more') %></span></p><% } %></a>
   <% }) %></div>
   <% if (spotlight.length) { %>
     <h2 class="mt-4"><%= t('वर्षको उत्कृष्ट सदस्य', 'Member of the year') %></h2>
