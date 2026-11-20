@@ -151,6 +151,13 @@ document.querySelectorAll('[data-print]').forEach(b => b.addEventListener('click
       const r = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-csrf-token': root.dataset.csrf }, body: JSON.stringify({ message: msg }) });
       const j = await r.json();
       wait.remove(); add(j.answer || '—', 'bot');
+      // suggested pages: same-site paths only, rendered as text links (never HTML from the server)
+      const links = Array.isArray(j.links) ? j.links.filter(u => typeof u === 'string' && /^\/(?!\/)[\w\-/?=&#.]*$/.test(u)).slice(0, 3) : [];
+      if (links.length) {
+        const row = document.createElement('div'); row.className = 'chat-chips';
+        links.forEach(u => { const a = document.createElement('a'); a.className = 'tab'; a.href = u; a.textContent = u; row.appendChild(a); });
+        log.appendChild(row); log.scrollTop = log.scrollHeight;
+      }
       history.push({ role: 'user', content: msg }, { role: 'assistant', content: j.answer || '' });
       history.splice(0, Math.max(0, history.length - 8));
     } catch (err) { wait.remove(); add(root.dataset.lang === 'en' ? 'Connection problem. Please try again.' : 'जडानमा समस्या भयो। फेरि प्रयास गर्नुहोस्।', 'bot'); }

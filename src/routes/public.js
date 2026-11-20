@@ -24,22 +24,17 @@ router.use(seo.middleware);
 router.use((req, res, next) => { res.locals.iconFor = require('../lib/icons').iconFor; next(); });
 
 // floating widgets in the footer: satisfaction links (when enabled) + useful links flagged is_popup
-const widgetCache = new Map();
 router.use((req, res, next) => {
   if (req.method !== 'GET') return next();
-  const schema = db.currentSchema();
-  const hit = widgetCache.get(schema);
-  if (hit && Date.now() - hit.at < 30_000) { res.locals.floatWidgets = hit.data; return next(); }
-  Promise.all([
-    res.locals.settings.satisfaction_widget_enabled === '1' ? db.many('SELECT title, title_en, url FROM satisfaction_links WHERE is_active = 1 ORDER BY display_order, id LIMIT 6') : [],
+  const sat = res.locals.settings.satisfaction_widget_enabled === '1';
+  require('../lib/public-cache').cached('float-widgets:' + (sat ? 1 : 0), 30_000, () => Promise.all([
+    sat ? db.many('SELECT title, title_en, url FROM satisfaction_links WHERE is_active = 1 ORDER BY display_order, id LIMIT 6') : [],
     db.many('SELECT title, title_np, url FROM useful_links WHERE is_active = 1 AND is_popup = 1 ORDER BY display_order, id LIMIT 8'),
-  ]).then(([satisfaction, useful]) => {
+    db.value('SELECT count(*) FROM chatbot_faqs WHERE is_active = 1').catch(() => 0),
+  ]).then(([satisfaction, useful, chatFaqs]) => {
     const ok = l => /^(https?:\/\/|\/(?!\/))/i.test(l.url || '');
-    const data = { satisfaction: satisfaction.filter(ok), useful: useful.filter(ok) };
-    widgetCache.set(schema, { at: Date.now(), data });
-    res.locals.floatWidgets = data;
-    next();
-  }).catch(next);
+    return { satisfaction: satisfaction.filter(ok), useful: useful.filter(ok), chatFaqs: Number(chatFaqs) || 0 };
+  })).then(data => { res.locals.floatWidgets = data; next(); }).catch(next);
 });
 
 // notices shown on every public page: popup carousel (≤ 5, includes/header.php popup V3), header bell and ticker (latest 10)

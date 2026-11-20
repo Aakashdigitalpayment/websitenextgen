@@ -102,3 +102,4 @@
 .search-dialog::backdrop { background: rgba(10, 12, 14, .55); }
 .grow { flex: 1; min-width: 0; }
 .footer-about p { margin: 0; } .footer-links a { white-space: nowrap; }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; } .chat-chips .tab { padding: 3px 10px; font-size: .78rem; }
