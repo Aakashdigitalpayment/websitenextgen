@@ -421,6 +421,24 @@ test('elections: latest cycle by default, voting window banner, archive list', a
   assert.equal(r.status, 200);
 });
 
+// ---------------------------------------------------------------- P2-12 committees
+test('committees: org chart for the current tenure, past committees, team_members fallback', async () => {
+  const [withT, noT] = await inA(async () => {
+    const a = await db.value("INSERT INTO committee_types (name, name_np, is_active) VALUES ('Loan committee', 'ऋण समिति', 1) RETURNING id");
+    const b = await db.value("INSERT INTO committee_types (name, name_np, is_active) VALUES ('Audit committee', 'लेखा समिति', 1) RETURNING id");
+    const cur = await db.value("INSERT INTO committee_tenures (committee_type_id, tenure_name, is_current, is_active, start_date, end_date) VALUES ($1, '2081-2085', 1, 1, '2024-01-01', '2028-01-01') RETURNING id", [a]);
+    const old = await db.value("INSERT INTO committee_tenures (committee_type_id, tenure_name, is_current, is_active, start_date, end_date) VALUES ($1, '2077-2081', 0, 1, '2020-01-01', '2024-01-01') RETURNING id", [a]);
+    await db.query("INSERT INTO committee_members (tenure_id, name, position, is_active) VALUES ($1, 'Current Coordinator', 'Coordinator', 1), ($2, 'Former Member', 'Member', 1)", [cur, old]);
+    await db.query("INSERT INTO team_members (name, position, category, is_active) VALUES ('Fallback Person', 'Member', $1, 1)", ['cmt_' + b]);
+    return [a, b];
+  });
+  let r = await get('/committees/' + withT);
+  assert.ok(r.text.includes('org-chart') && r.text.includes('Current Coordinator'));
+  assert.ok(r.text.includes('Former Member') && r.text.includes('विगतका समितिहरू'));
+  r = await get('/committees/' + noT);
+  assert.ok(r.text.includes('Fallback Person'));
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');

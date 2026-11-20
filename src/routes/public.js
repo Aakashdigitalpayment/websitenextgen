@@ -239,13 +239,18 @@ router.get('/committees', ah(async (req, res) => {
   res.render('public/committees', { title: res.locals.t('समितिहरू', 'Committees'), types });
 }));
 
+// committees.php: current tenure as an org chart, past committees, fallback to team_members.category = 'cmt_<id>'
 router.get('/committees/:id', ah(async (req, res, next) => {
   const type = await db.one(`SELECT * FROM committee_types WHERE id = $1 AND ${ACTIVE}`, [util.int(req.params.id)]);
   if (!type) return next();
   const tenures = await db.many(`SELECT * FROM committee_tenures WHERE committee_type_id = $1 AND ${ACTIVE} ORDER BY is_current DESC, start_date DESC NULLS LAST, id DESC`, [type.id]);
   const tenure = tenures.find(x => String(x.id) === req.query.tenure) || tenures[0];
-  const members = tenure ? await db.many(`SELECT * FROM committee_members WHERE tenure_id = $1 AND ${ACTIVE} ORDER BY display_order, id`, [tenure.id]) : [];
-  res.render('public/committee', { title: res.locals.f(type, 'name'), type, tenures, tenure, members });
+  const members = tenure ? await db.many(`SELECT * FROM committee_members WHERE tenure_id = $1 AND ${ACTIVE} ORDER BY display_order, id`, [tenure.id])
+    : await db.many(`SELECT * FROM team_members WHERE ${ACTIVE} AND category = $1 ORDER BY display_order, id`, ['cmt_' + type.id]);
+  const past = tenures.filter(x => !Number(x.is_current) && (!tenure || x.id !== tenure.id));
+  const pastMembers = past.length ? await db.many(`SELECT * FROM committee_members WHERE tenure_id = ANY($1::int[]) AND ${ACTIVE} ORDER BY display_order, id`, [past.map(x => x.id)]) : [];
+  res.render('public/committee', { title: res.locals.f(type, 'name'), type, tenures, tenure, members, chart: members.length ? teamLib.chartRows(members) : [],
+    past: past.map(x => ({ tenure: x, members: pastMembers.filter(m => m.tenure_id === x.id) })), openPast: req.query.past === '1' });
 }));
 
 router.get('/awards', ah(async (req, res) => {
