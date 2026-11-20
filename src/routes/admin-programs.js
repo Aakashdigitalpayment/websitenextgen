@@ -7,6 +7,7 @@ const auth = require('../lib/auth');
 const util = require('../lib/util');
 const att = require('../lib/attendance');
 const notify = require('../lib/notify');
+const nd = require('../lib/nepali-date');
 const { flash } = require('../lib/security');
 
 const router = express.Router();
@@ -30,6 +31,77 @@ router.get('/', ah(async (req, res) => {
   res.render('admin/programs', { title: res.locals.t('कार्यक्रम तथा उपस्थिति', 'Programmes & attendance'), rows });
 }));
 
+// ---------------------------------------------------------------- cross-programme register + exports (legacy program-attendance.php)
+const fmt = v => (v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000).toISOString().slice(0, 16).replace('T', ' ') : '');
+/** 'YYYY-MM-DD' in AD, or BS when the year is above 2050 (legacy programFilterBsDateToAd). */
+function filterDate(raw) {
+  const v = nd.toLatinDigits(String(raw || '').trim()).replace(/[/.]/g, '-');
+  const m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return null;
+  const iso = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  if (Number(m[1]) > 2050) return nd.bsToAd(iso);
+  return Number.isNaN(Date.parse(iso)) ? null : iso;
+}
+const REGISTER_TABS = ['attendance', 'prereg', 'requests'];
+function registerQuery(tab, f) {
+  const p = [], w = [];
+  const add = v => { p.push(v); return '$' + p.length; };
+  const T = { attendance: ['a', 'attended_at'], prereg: ['r', 'created_at'], requests: ['q', 'requested_at'] }[tab];
+  const [al, dateCol] = T;
+  if (f.programId) w.push(`${al}.program_id = ${add(f.programId)}`);
+  if (f.from) w.push(`${al}.${dateCol} >= ${add(f.from)}::date`);
+  if (f.to) w.push(`${al}.${dateCol} < ${add(f.to)}::date + 1`);
+  if (f.activeOnly) w.push('p.is_active = 1');
+  const like = f.q ? add('%' + f.q + '%') : null;
+  let from;
+  if (tab === 'attendance') {
+    from = `FROM member_program_attendance a LEFT JOIN members m ON m.id = a.member_id LEFT JOIN kyc_applications k ON k.id = m.kyc_application_id
+            LEFT JOIN upcoming_programs p ON p.id = a.program_id LEFT JOIN program_registration_desks d ON d.id = a.desk_id LEFT JOIN admin_users u ON u.id = a.staff_admin_id`;
+    if (like) w.push(`(m.name ILIKE ${like} OR m.name_np ILIKE ${like} OR m.sadasyata_number ILIKE ${like} OR m.phone ILIKE ${like} OR a.member_card_no ILIKE ${like})`);
+  } else if (tab === 'prereg') {
+    from = `FROM member_program_preregistrations r LEFT JOIN upcoming_programs p ON p.id = r.program_id LEFT JOIN members m ON m.id = r.member_id`;
+    if (like) w.push(`(r.member_name ILIKE ${like} OR r.member_card_no ILIKE ${like} OR r.phone ILIKE ${like} OR m.sadasyata_number ILIKE ${like})`);
+  } else {
+    from = `FROM member_program_attendance_requests q LEFT JOIN upcoming_programs p ON p.id = q.program_id LEFT JOIN program_occurrences o ON o.id = q.occurrence_id`;
+    if (!f.showDone) w.push("q.status = 'pending'");
+    if (like) w.push(`(q.member_name ILIKE ${like} OR q.member_card_no ILIKE ${like} OR q.member_phone ILIKE ${like})`);
+  }
+  return { from: from + (w.length ? ' WHERE ' + w.join(' AND ') : ''), params: p };
+}
+const REGISTER_SELECT = {
+  attendance: ['a.*, m.name, m.name_np, m.sadasyata_number, m.phone, COALESCE(k.father_name, \'\') AS father_name, p.title AS parent_title, d.desk_label, COALESCE(u.full_name, u.username) AS staff_name', 'a.attended_at DESC, a.id DESC'],
+  prereg: [`r.*, p.title AS parent_title, m.sadasyata_number, EXISTS (SELECT 1 FROM member_program_attendance x WHERE x.member_id = r.member_id AND x.program_id = r.program_id AND x.attendance_status = 'VALID') AS attended`, 'r.created_at DESC, r.id DESC'],
+  requests: ['q.*, p.title AS parent_title, o.location_name', 'q.requested_at DESC, q.id DESC'],
+};
+const REGISTER_CSV = {
+  attendance: [['Member ID', r => r.sadasyata_number || r.member_card_no], ['Name', r => r.name_np || r.name], ['Father', r => r.father_name], ['Phone', r => r.phone],
+    ['Program', r => r.parent_title || r.program_title], ['Location', r => r.location_label], ['Method', r => r.attendance_method], ['Desk', r => r.desk_label], ['Staff', r => r.staff_name],
+    ['Status', r => r.attendance_status], ['Attended At', r => fmt(r.attended_at)], ['Void reason', r => r.void_reason]],
+  prereg: [['Name', r => r.member_name], ['Member ID', r => r.member_card_no || r.sadasyata_number], ['Phone', r => r.phone], ['Program', r => r.parent_title || r.program_title],
+    ['Source', r => r.source], ['Created', r => fmt(r.created_at)], ['Attended?', r => (r.attended ? 'Yes' : 'No')]],
+  requests: [['Name', r => r.member_name], ['Card no', r => r.member_card_no], ['Phone', r => r.member_phone], ['Address', r => r.member_address], ['Program', r => r.parent_title || r.program_title],
+    ['Location', r => r.location_name], ['Status', r => r.status], ['Requested at', r => fmt(r.requested_at)], ['Processed at', r => fmt(r.processed_at)], ['Admin note', r => r.admin_note]],
+};
+
+router.get('/register', ah(async (req, res) => {
+  const exp = REGISTER_TABS.includes(req.query.export) ? req.query.export : null;
+  const tab = exp || (REGISTER_TABS.includes(req.query.tab) ? req.query.tab : 'attendance');
+  const f = { programId: util.int(req.query.program_id, 0), q: String(req.query.q || '').trim().slice(0, 100), from: filterDate(req.query.date_from), to: filterDate(req.query.date_to),
+    activeOnly: req.query.active_only === '1', showDone: req.query.show_done === '1' };
+  const { from, params } = registerQuery(tab, f);
+  const [sel, order] = REGISTER_SELECT[tab];
+  if (exp) {
+    const rows = await db.many(`SELECT ${sel} ${from} ORDER BY ${order} LIMIT 50000`, params);
+    await auth.audit(req, 'program_report_export', 'upcoming_programs', f.programId || null, `Register export: ${exp} (${rows.length} rows)`);
+    return util.sendCsv(res, `program-${exp}-${new Date().toISOString().slice(0, 10)}.csv`, REGISTER_CSV[exp].map(c => c[0]), rows.map(r => REGISTER_CSV[exp].map(c => c[1](r) ?? '')));
+  }
+  const total = Number(await db.value(`SELECT count(*) ${from}`, params));
+  const pg = util.paginate(total, util.int(req.query.page, 1), 50);
+  const rows = await db.many(`SELECT ${sel} ${from} ORDER BY ${order} LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params);
+  const programs = await db.many('SELECT id, title, event_date FROM upcoming_programs WHERE parent_program_id IS NULL ORDER BY event_date DESC NULLS LAST, id DESC LIMIT 300');
+  res.render('admin/program-register', { title: res.locals.t('उपस्थिति दर्ता (सबै कार्यक्रम)', 'Attendance register (all programmes)'), tab, rows, pg, programs, f, fmt });
+}));
+
 async function loadProgram(req, res, next) {
   const p = await db.one('SELECT * FROM upcoming_programs WHERE id = $1', [util.int(req.params.id)]);
   if (!p) return next('route');
@@ -43,7 +115,9 @@ router.get('/:id', ah(loadProgram), ah(async (req, res) => {
     db.many('SELECT * FROM program_occurrences WHERE parent_program_id = $1 ORDER BY event_date NULLS LAST, sort_order, id', [p.id]),
     db.many(`SELECT a.*, m.name, m.name_np, m.sadasyata_number, m.phone, d.desk_label FROM member_program_attendance a LEFT JOIN members m ON m.id = a.member_id
              LEFT JOIN program_registration_desks d ON d.id = a.desk_id WHERE a.program_id = $1 ORDER BY a.attended_at DESC LIMIT 500`, [p.id]),
-    db.many("SELECT * FROM member_program_attendance_requests WHERE program_id = $1 AND status = 'pending' ORDER BY requested_at", [p.id]),
+    req.query.show_done === '1'
+      ? db.many('SELECT * FROM member_program_attendance_requests WHERE program_id = $1 ORDER BY (status = \'pending\') DESC, requested_at DESC LIMIT 200', [p.id])
+      : db.many("SELECT * FROM member_program_attendance_requests WHERE program_id = $1 AND status = 'pending' ORDER BY requested_at", [p.id]),
     db.many(`SELECT r.*, EXISTS (SELECT 1 FROM member_program_attendance a WHERE a.member_id = r.member_id AND a.program_id = r.program_id AND a.attendance_status = 'VALID') AS attended
              FROM member_program_preregistrations r WHERE r.program_id = $1 ORDER BY r.created_at DESC LIMIT 500`, [p.id]),
     rep.desksFor(p.id),
@@ -53,7 +127,7 @@ router.get('/:id', ah(loadProgram), ah(async (req, res) => {
   const myDesk = desks.find(d => Number(d.is_active) && d.assigned_staff_admin_id === req.admin.id);
   const qr = p.qr_token ? await QRCode.toDataURL(qrUrl(req, p.qr_token), { margin: 1, width: 260 }) : null;
   for (const o of occurrences) o.qr = o.qr_token ? await QRCode.toDataURL(qrUrl(req, o.qr_token), { margin: 1, width: 180 }) : null;
-  res.render('admin/program-detail', { title: p.title, p, occurrences, attendance, requests, prereg, desks, staff, myDeskId: myDesk ? myDesk.id : 0, smsResult: req.session.smsResult || null, qr, qrLink: p.qr_token ? qrUrl(req, p.qr_token) : null, qrUrl: t => qrUrl(req, t), deskResult: req.session.deskResult || null });
+  res.render('admin/program-detail', { title: p.title, p, occurrences, showDone: req.query.show_done === '1', attendance, requests, prereg, desks, staff, myDeskId: myDesk ? myDesk.id : 0, smsResult: req.session.smsResult || null, qr, qrLink: p.qr_token ? qrUrl(req, p.qr_token) : null, qrUrl: t => qrUrl(req, t), deskResult: req.session.deskResult || null });
   delete req.session.deskResult;
   delete req.session.smsResult;
 }));
@@ -65,6 +139,14 @@ router.post('/:id/qr', ah(loadProgram), ah(async (req, res) => {
   const table = occId ? 'program_occurrences' : 'upcoming_programs';
   const id = occId || p.id;
   if (occId && !(await db.value('SELECT 1 FROM program_occurrences WHERE id = $1 AND parent_program_id = $2', [occId, p.id]))) return res.redirect('/admin/programs/' + p.id);
+  // clear: no token, QR off (legacy clear_qr)
+  if (req.body.clear === '1') {
+    await db.query(`UPDATE ${table} SET qr_token = NULL, qr_enabled = 0 WHERE id = $1`, [id]);
+    await auth.audit(req, 'program_qr_clear', table, id, 'QR token cleared');
+    flash(req, 'success', res.locals.t('QR हटाइयो।', 'QR cleared.'));
+    return res.redirect('/admin/programs/' + p.id);
+  }
+  const firstToken = !(await db.value(`SELECT qr_token FROM ${table} WHERE id = $1`, [id]));
   const data = {
     qr_enabled: req.body.qr_enabled ? 1 : 0,
     attendance_open_at: req.body.open_at ? toLocal(req.body.open_at) : null,
@@ -74,6 +156,14 @@ router.post('/:id/qr', ah(loadProgram), ah(async (req, res) => {
   if (!occId) data.instant_attendance = req.body.instant ? 1 : 0;
   if (!occId && req.body.pre_registration_open !== undefined) data.pre_registration_open = req.body.pre_registration_open === '1' ? 1 : 0;
   await db.update(table, id, await db.pick(table, data));
+  // first token and no window: event day 00:00 → next day 23:59 (Nepal time), or now → +7 days without a date (legacy gen_qr)
+  if (firstToken && !data.attendance_open_at && !data.attendance_close_at) {
+    await db.query(`UPDATE ${table} t SET
+        attendance_open_at = CASE WHEN d.day IS NULL THEN now()::timestamp ELSE d.day::timestamp END,
+        attendance_close_at = CASE WHEN d.day IS NULL THEN now()::timestamp + interval '7 days' ELSE (d.day + 1)::timestamp + interval '23 hours 59 minutes' END
+      FROM (SELECT COALESCE(${occId ? '(SELECT event_date FROM program_occurrences WHERE id = $1)' : 'NULL::date'}, (SELECT event_date FROM upcoming_programs WHERE id = $2)) AS day) d
+      WHERE t.id = $1`, [id, p.id]);
+  }
   await auth.audit(req, 'program_qr', table, id, data.qr_token ? 'QR token (re)generated' : 'QR settings updated');
   flash(req, 'success', res.locals.t('QR सेटिङ सुरक्षित भयो।', 'QR settings saved.'));
   res.redirect('/admin/programs/' + p.id);
@@ -91,6 +181,29 @@ router.post('/:id/occurrences', ah(loadProgram), ah(async (req, res) => {
   res.redirect('/admin/programs/' + req.program.id);
 }));
 
+// edit one location / session (legacy program-occurrences.php save with id)
+router.post('/:id/occurrences/:occ', ah(loadProgram), ah(async (req, res) => {
+  const p = req.program, b = req.body;
+  const back = '/admin/programs/' + p.id + '#locations';
+  const occ = await db.one('SELECT * FROM program_occurrences WHERE id = $1 AND parent_program_id = $2', [util.int(req.params.occ), p.id]);
+  if (!occ) return res.redirect(back);
+  const name = String(b.location_name || '').trim().slice(0, 180);
+  if (!name) { flash(req, 'error', res.locals.t('स्थान चाहिन्छ', 'Location required')); return res.redirect(back); }
+  let date = null;
+  if (String(b.event_date || '').trim()) {
+    date = filterDate(b.event_date);
+    if (!date) { flash(req, 'error', res.locals.t('मिति मिलेन (YYYY-MM-DD, वि.सं. वा ई.सं.)', 'Invalid date (YYYY-MM-DD, BS or AD)')); return res.redirect(back); }
+  }
+  const active = b.is_active === '1' ? 1 : 0;
+  const data = { location_name: name, event_date: date, start_time: String(b.start_time || '').trim().slice(0, 20) || null, end_time: String(b.end_time || '').trim().slice(0, 20) || null,
+    sort_order: util.int(b.sort_order, 0), is_active: active, updated_at: new Date() };
+  if (!active) data.qr_enabled = 0;
+  await db.update('program_occurrences', occ.id, data);
+  await auth.audit(req, 'program_occurrence_update', 'program_occurrences', occ.id, `${p.title}: ${name}${active ? '' : ' (inactive)'}`);
+  flash(req, 'success', res.locals.t('स्थान अद्यावधिक भयो।', 'Location updated.'));
+  res.redirect(back);
+}));
+
 router.post('/:id/occurrences/:occ/delete', ah(loadProgram), ah(async (req, res) => {
   const used = await db.value('SELECT count(*) FROM member_program_attendance WHERE occurrence_id = $1', [util.int(req.params.occ)]);
   if (used) await db.query('UPDATE program_occurrences SET is_active = 0, qr_enabled = 0 WHERE id = $1 AND parent_program_id = $2', [util.int(req.params.occ), req.program.id]);
@@ -98,10 +211,41 @@ router.post('/:id/occurrences/:occ/delete', ah(loadProgram), ah(async (req, res)
   res.redirect('/admin/programs/' + req.program.id);
 }));
 
-// registration desk: check a member in by membership no. / card / phone
+/** Desk member lookup (legacy api/program-desk-lookup.php): card, eligibility, existing check-in, history summary. */
+const VOID_OWN_MINUTES = 30;
+router.get('/:id/desk/lookup', ah(loadProgram), ah(async (req, res) => {
+  const p = req.program;
+  const q = String(req.query.q || '').trim().slice(0, 60);
+  const member = q ? await rep.findMemberByNo(q) : null;
+  if (!member) return res.json({ ok: false, error: res.locals.t('सदस्य भेटिएन।', 'Member not found.') });
+  const occId = util.int(req.query.occurrence_id, 0);
+  const deskId = util.int(req.query.desk_id, 0);
+  const desk = deskId ? await db.one('SELECT occurrence_id FROM program_registration_desks WHERE id = $1 AND parent_program_id = $2', [deskId, p.id]) : null;
+  const occurrence = (occId || (desk && desk.occurrence_id)) ? await db.one('SELECT id FROM program_occurrences WHERE id = $1 AND parent_program_id = $2', [occId || desk.occurrence_id, p.id]) : null;
+  const [kyc, existing, history] = await Promise.all([
+    member.kyc_application_id ? db.one('SELECT photo, father_name FROM kyc_applications WHERE id = $1', [member.kyc_application_id]) : null,
+    att.existing(member.id, p.id, occurrence?.id),
+    rep.memberHistorySummary(member.id, p.id),
+  ]);
+  const bad = att.eligibility(member);
+  const ms = member.monthly_saving_regular;
+  res.json({
+    ok: true,
+    member: { id: member.id, name: member.name, name_np: member.name_np, sadasyata_number: member.sadasyata_number, phone: member.phone, address: member.address,
+      father_name: (kyc && kyc.father_name) || member.father_name || '', photo: res.locals.mediaUrl((kyc && kyc.photo) || member.avatar_url || '') || null,
+      monthly_saving: ms === null || ms === undefined ? '' : String(Number(ms)) },
+    eligible: !bad, reason: bad ? res.locals.t(bad[0], bad[1]) : null,
+    existing: existing ? { id: existing.id, attended_at: existing.attended_at, when: res.locals.bsDate(existing.attended_at) + ' ' + fmt(existing.attended_at).slice(11), location: existing.location_label,
+      can_void: existing.staff_admin_id === req.admin.id && Date.now() - new Date(existing.attended_at).getTime() < VOID_OWN_MINUTES * 60_000 } : null,
+    history,
+  });
+}));
+
+// registration desk: check a member in by membership no. / card / phone (or the exact member from the lookup)
 router.post('/:id/desk', ah(loadProgram), ah(async (req, res) => {
   const p = req.program;
-  const member = await att.findMember(req.body.q);
+  const byId = util.int(req.body.member_id, 0);
+  const member = byId ? await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [byId]) : await rep.findMemberByNo(req.body.q);
   // named desk (optional): must belong to this programme and be active; a location desk implies its location
   const deskId = util.int(req.body.desk_id, 0);
   const desk = deskId ? await db.one('SELECT * FROM program_registration_desks WHERE id = $1 AND parent_program_id = $2 AND is_active = 1', [deskId, p.id]) : null;
@@ -109,10 +253,18 @@ router.post('/:id/desk', ah(loadProgram), ah(async (req, res) => {
   const occurrence = occId ? await db.one('SELECT * FROM program_occurrences WHERE id = $1 AND parent_program_id = $2', [occId, p.id]) : null;
   if (!member) req.session.deskResult = { type: 'error', text: res.locals.t('सदस्य भेटिएन: ', 'Member not found: ') + String(req.body.q || '').slice(0, 40) };
   else {
-    const r = await att.record({ member, program: p, occurrence, method: 'ADMIN_MANUAL', source: desk ? 'registration_desk' : 'admin_desk', ip: req.ip, staffAdminId: req.admin.id, deskId: desk ? desk.id : null, note: String(req.body.note || '').slice(0, 255) || (desk ? desk.desk_label : null) });
-    req.session.deskResult = r.duplicate
-      ? { type: 'warn', text: `${member.name_np || member.name} — ${res.locals.t('पहिले नै उपस्थित', 'already checked in')} (${res.locals.bsDate(r.duplicate.attended_at)})` }
-      : { type: 'success', text: `✓ ${member.name_np || member.name} (${member.sadasyata_number || member.phone})` };
+    const r = await att.record({ member, program: p, occurrence, method: 'ADMIN_MANUAL', source: desk ? 'registration_desk' : 'admin_desk', ip: req.ip, staffAdminId: req.admin.id, deskId: desk ? desk.id : null, note: String(req.body.note || '').slice(0, 255) || (desk ? desk.desk_label : null), checkEligible: true });
+    req.session.deskResult = r.ineligible
+      ? { type: 'error', text: `${member.name_np || member.name} — ${res.locals.t(r.ineligible[0], r.ineligible[1])}` }
+      : r.duplicate
+        ? { type: 'warn', text: `${member.name_np || member.name} — ${res.locals.t('पहिले नै उपस्थित', 'already checked in')} (${res.locals.bsDate(r.duplicate.attended_at)})` }
+        : { type: 'success', text: `✓ ${member.name_np || member.name} (${member.sadasyata_number || member.phone})` };
+    // monthly saving captured at the desk (legacy coop_monthly_saving_set … 'Registration desk')
+    const ms = String(req.body.monthly_saving ?? '');
+    if (!r.ineligible && (ms === '1' || ms === '0') && String(member.monthly_saving_regular ?? '') !== ms) {
+      await db.query('UPDATE members SET monthly_saving_regular = $1 WHERE id = $2', [Number(ms), member.id]);
+      await auth.audit(req, 'member_monthly_saving', 'members', member.id, `मासिक बचत → ${ms === '1' ? 'नियमित' : 'नियमित नभएको'} (Registration desk)`);
+    }
   }
   res.redirect('/admin/programs/' + p.id + (deskId ? '?desk=' + deskId : '') + '#desk');
 }));
@@ -189,8 +341,9 @@ router.post('/:id/prereg/:rid/attend', auth.requireAdmin('staff'), ah(loadProgra
   if (!member) flash(req, 'error', res.locals.t('पूर्व दर्ता रेकर्ड फेला परेन।', 'Pre-registration not found.'));
   else if (hasLocations) flash(req, 'error', res.locals.t('बहु-स्थान कार्यक्रममा दर्ता डेस्क वा स्वीकृतिबाट स्थान सहित दर्ता गर्नुहोस्।', 'For multi-location programmes, check in at the desk with a location.'));
   else {
-    const rec = await att.record({ member, program: p, method: 'ADMIN_PREREG', source: 'admin_prereg', ip: req.ip, staffAdminId: req.admin.id, note: 'Pre-registration बाट attendance mark' });
-    flash(req, rec.duplicate ? 'error' : 'success', rec.duplicate ? res.locals.t('यो सदस्यको उपस्थिति पहिल्यै दर्ता भइसकेको छ।', 'This member is already checked in.') : res.locals.t('पूर्व दर्ताबाट उपस्थिति दर्ता भयो।', 'Marked as attended from pre-registration.'));
+    const rec = await att.record({ member, program: p, method: 'ADMIN_PREREG', source: 'admin_prereg', ip: req.ip, staffAdminId: req.admin.id, note: 'Pre-registration बाट attendance mark', checkEligible: true });
+    if (rec.ineligible) flash(req, 'error', res.locals.t(rec.ineligible[0], rec.ineligible[1]));
+    else flash(req, rec.duplicate ? 'error' : 'success', rec.duplicate ? res.locals.t('यो सदस्यको उपस्थिति पहिल्यै दर्ता भइसकेको छ।', 'This member is already checked in.') : res.locals.t('पूर्व दर्ताबाट उपस्थिति दर्ता भयो।', 'Marked as attended from pre-registration.'));
   }
   res.redirect('/admin/programs/' + p.id + '#prereg');
 }));
@@ -254,7 +407,11 @@ router.post('/:id/requests/:rid', ah(loadProgram), ah(async (req, res) => {
     if (approve) {
       const member = await db.one('SELECT * FROM members WHERE id = $1', [r.member_id]);
       const occurrence = r.occurrence_id ? await db.one('SELECT * FROM program_occurrences WHERE id = $1', [r.occurrence_id]) : null;
-      if (member) await att.record({ member, program: req.program, occurrence, method: 'ADMIN_APPROVE', source: 'member_request', ip: r.verified_by_ip, staffAdminId: req.admin.id });
+      const rec = member ? await att.record({ member, program: req.program, occurrence, method: 'ADMIN_APPROVE', source: 'member_request', ip: r.verified_by_ip, staffAdminId: req.admin.id, checkEligible: true }) : null;
+      if (!rec || rec.ineligible) {
+        flash(req, 'error', rec ? res.locals.t(rec.ineligible[0], rec.ineligible[1]) : res.locals.t('सदस्य फेला परेन।', 'Member not found.'));
+        return res.redirect('/admin/programs/' + req.program.id + '#requests');
+      }
     }
     await db.query('UPDATE member_program_attendance_requests SET status = $1, processed_at = now(), admin_id = $2, admin_note = $3 WHERE id = $4', [approve ? 'approved' : 'rejected', req.admin.id, String(req.body.note || '').slice(0, 255) || null, r.id]);
     await notify.notifyMember(r.member_id, req.program.title + ': ' + (approve ? res.locals.t('उपस्थिति स्वीकृत', 'attendance approved') : res.locals.t('उपस्थिति अस्वीकृत', 'attendance rejected')), null, '/member/programs');
@@ -263,10 +420,10 @@ router.post('/:id/requests/:rid', ah(loadProgram), ah(async (req, res) => {
 }));
 
 router.get('/:id/attendance.csv', ah(loadProgram), ah(async (req, res) => {
-  const rows = await db.many(`SELECT a.attended_at, a.attendance_status, a.attendance_method, a.location_label, m.sadasyata_number, m.name, m.name_np, m.phone, a.void_reason
-                              FROM member_program_attendance a LEFT JOIN members m ON m.id = a.member_id WHERE a.program_id = $1 ORDER BY a.attended_at`, [req.program.id]);
-  const cols = ['attended_at', 'attendance_status', 'attendance_method', 'location_label', 'sadasyata_number', 'name', 'name_np', 'phone', 'void_reason'];
-  res.type('text/csv; charset=utf-8').attachment(`attendance-${req.program.id}.csv`).send(util.toCsv(cols, rows));
+  const { from, params } = registerQuery('attendance', { programId: req.program.id });
+  const rows = await db.many(`SELECT ${REGISTER_SELECT.attendance[0]} ${from} ORDER BY a.attended_at, a.id`, params);
+  await auth.audit(req, 'program_report_export', 'upcoming_programs', req.program.id, `Attendance CSV (${rows.length} rows)`);
+  util.sendCsv(res, `attendance-${req.program.id}.csv`, REGISTER_CSV.attendance.map(c => c[0]), rows.map(r => REGISTER_CSV.attendance.map(c => c[1](r) ?? '')));
 }));
 
 module.exports = router;

@@ -1,0 +1,43 @@
+<%
+  const keep = Object.fromEntries(Object.entries({ program_id: f.programId || '', q: f.q, date_from: query.date_from || '', date_to: query.date_to || '', active_only: f.activeOnly ? '1' : '', show_done: f.showDone ? '1' : '' }).filter(([, v]) => v));
+  const link = extra => '/admin/programs/register?' + new URLSearchParams({ ...keep, ...extra }).toString();
+  const TABS = [['attendance', 'उपस्थिति', 'Attendance'], ['prereg', 'पूर्व दर्ता', 'Pre-registrations'], ['requests', 'अनुरोध', 'Requests']];
+%>
+<div class="content-head">
+  <div><div class="crumbs"><a href="/admin/programs"><%= t('कार्यक्रम', 'Programmes') %></a></div><h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1></div>
+  <div class="flex gap-1 wrap"><a class="btn btn-outline btn-sm" href="<%= link({ export: tab }) %>"><%- icon('download') %>CSV</a></div>
+</div>
+<div class="tabs"><% TABS.forEach(([k, np, en]) => { %><a class="tab <%= tab === k ? 'active' : '' %>" href="<%= link({ tab: k }) %>"><%= t(np, en) %></a><% }) %></div>
+<form class="toolbar" method="get">
+  <input type="hidden" name="tab" value="<%= tab %>">
+  <select class="select" name="program_id" data-autosubmit aria-label="<%= t('कार्यक्रम', 'Programme') %>"><option value=""><%= t('सबै कार्यक्रम', 'All programmes') %></option><% programs.forEach(pr => { %><option value="<%= pr.id %>" <%= f.programId === pr.id ? 'selected' : '' %>><%= pr.title %><%= pr.event_date ? ' — ' + bsDate(pr.event_date) : '' %></option><% }) %></select>
+  <input class="input" name="q" value="<%= f.q %>" placeholder="<%= t('नाम, सदस्यता नं., फोन', 'Name, member no., phone') %>">
+  <input class="input" name="date_from" value="<%= query.date_from || '' %>" placeholder="<%= t('देखि (वि.सं./ई.सं.)', 'From (BS/AD)') %>" style="max-width:150px" aria-label="<%= t('देखि', 'From') %>">
+  <input class="input" name="date_to" value="<%= query.date_to || '' %>" placeholder="<%= t('सम्म', 'To') %>" style="max-width:150px" aria-label="<%= t('सम्म', 'To') %>">
+  <label class="choice" style="padding:6px 10px"><input type="checkbox" name="active_only" value="1" <%= f.activeOnly ? 'checked' : '' %>> <%= t('सक्रिय कार्यक्रम मात्र', 'Active programmes only') %></label>
+  <% if (tab === 'requests') { %><label class="choice" style="padding:6px 10px"><input type="checkbox" name="show_done" value="1" <%= f.showDone ? 'checked' : '' %>> <%= t('प्रक्रिया भएका पनि', 'Include processed') %></label><% } %>
+  <button class="btn btn-outline"><%- icon('search') %></button>
+</form>
+<% if (!rows.length) { %><div class="empty"><%= t('केही भेटिएन।', 'Nothing found.') %></div><% } else { %>
+<div class="table-wrap"><table class="table">
+<% if (tab === 'attendance') { %>
+  <thead><tr><th><%= t('सदस्य', 'Member') %></th><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('तरिका', 'Method') %></th><th><%= t('समय', 'When') %></th></tr></thead>
+  <tbody><% rows.forEach(r => { %><tr style="<%= r.attendance_status === 'VOID' ? 'opacity:.55;text-decoration:line-through' : '' %>">
+    <td><%= r.name_np || r.name || '—' %><div class="small faint"><%= r.sadasyata_number || r.member_card_no || '' %> · <%= r.phone || '' %><%= r.father_name ? ' · ' + t('बुबा', 'Father') + ': ' + r.father_name : '' %></div></td>
+    <td><a href="/admin/programs/<%= r.program_id %>"><%= r.parent_title || r.program_title %></a></td><td class="small"><%= r.location_label || '' %><%= r.desk_label ? ' · ' + r.desk_label : '' %></td>
+    <td><span class="badge"><%= r.attendance_method %></span><% if (r.attendance_status === 'VOID') { %> <span class="badge badge-bad">VOID</span><% } %></td><td class="small"><%= bsDate(r.attended_at) %> <%= fmt(r.attended_at).slice(11) %></td></tr><% }) %></tbody>
+<% } else if (tab === 'prereg') { %>
+  <thead><tr><th><%= t('सदस्य', 'Member') %></th><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('स्रोत', 'Source') %></th><th><%= t('दर्ता मिति', 'Registered') %></th><th></th></tr></thead>
+  <tbody><% rows.forEach(r => { %><tr><td><%= r.member_name %><div class="small faint"><%= r.member_card_no || r.sadasyata_number || '' %> · <%= r.phone || '' %></div></td>
+    <td><a href="/admin/programs/<%= r.program_id %>#prereg"><%= r.parent_title || r.program_title %></a></td><td class="small"><%= r.source || '' %></td><td class="small"><%= bsDate(r.created_at) %></td>
+    <td><% if (r.attended) { %><span class="badge badge-ok"><%= t('उपस्थित', 'Attended') %></span><% } %></td></tr><% }) %></tbody>
+<% } else { %>
+  <thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('अनुरोध', 'Requested') %></th><th><%= t('टिप्पणी', 'Note') %></th></tr></thead>
+  <tbody><% rows.forEach(r => { %><tr><td><%= r.member_name %><div class="small faint"><%= r.member_card_no || '' %> · <%= r.member_phone || '' %></div></td>
+    <td><a href="/admin/programs/<%= r.program_id %>#requests"><%= r.parent_title || r.program_title %></a><div class="small faint"><%= r.location_name || '' %></div></td>
+    <td><span class="badge <%= r.status === 'approved' ? 'badge-ok' : r.status === 'rejected' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(r.status) %></span><% if (r.processed_at) { %><div class="small faint"><%= bsDate(r.processed_at) %></div><% } %></td>
+    <td class="small"><%= bsDate(r.requested_at) %> <%= fmt(r.requested_at).slice(11) %></td><td class="small"><%= r.admin_note || '' %></td></tr><% }) %></tbody>
+<% } %>
+</table></div>
+<%- include('../partials/pagination', { pg }) %>
+<% } %>

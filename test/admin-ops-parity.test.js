@@ -392,3 +392,82 @@ test('member import: header aliases, membership date (BS), KYM stub soft-fill, I
   const sample = await admin.get('/admin/members/import/sample.csv');
   assert.match(sample.text, /father_name,citizenship_no,membership_date_bs,monthly_saving/);
 });
+
+// ---------------------------------------------------------------- b-11..b-14 programmes
+test('programmes: QR default window + clear, occurrence edit, desk lookup / eligibility / monthly saving, register + exports', async () => {
+  const pid = await inA(() => db.value("INSERT INTO upcoming_programs (title, program_type, event_date, is_active) VALUES ('Desk AGM', 'AGM', '2026-11-20', 1) RETURNING id"));
+  // first QR without a window: event day 00:00 → next day 23:59
+  let r = await admin.form(`/admin/programs/${pid}/qr`, { qr_enabled: '1' }, '/admin/programs/' + pid);
+  assert.equal(r.status, 302);
+  let p = await inA(() => db.one("SELECT qr_token, qr_enabled, to_char(attendance_open_at, 'YYYY-MM-DD HH24:MI') AS o, to_char(attendance_close_at, 'YYYY-MM-DD HH24:MI') AS c FROM upcoming_programs WHERE id = $1", [pid]));
+  assert.ok(p.qr_token);
+  assert.equal(p.o, '2026-11-20 00:00');
+  assert.equal(p.c, '2026-11-21 23:59');
+  r = await admin.form(`/admin/programs/${pid}/qr`, { clear: '1' }, '/admin/programs/' + pid);
+  p = await inA(() => db.one('SELECT qr_token, qr_enabled FROM upcoming_programs WHERE id = $1', [pid]));
+  assert.equal(p.qr_token, null);
+  assert.equal(Number(p.qr_enabled), 0);
+
+  // occurrence edit: BS date accepted, deactivating turns its QR off; another programme's occurrence is untouched
+  await admin.form(`/admin/programs/${pid}/occurrences`, { location_name: 'Hall A', event_date: '2026-11-20' }, '/admin/programs/' + pid);
+  const occ = await inA(() => db.one('SELECT * FROM program_occurrences WHERE parent_program_id = $1', [pid]));
+  r = await admin.form(`/admin/programs/${pid}/occurrences/${occ.id}`, { location_name: 'Hall B', event_date: '2083-08-04', start_time: '09:00', end_time: '12:00', sort_order: '2' }, '/admin/programs/' + pid);
+  assert.equal(r.status, 302);
+  const o2 = await inA(() => db.one('SELECT * FROM program_occurrences WHERE id = $1', [occ.id]));
+  assert.equal(o2.location_name, 'Hall B');
+  assert.match(o2.event_date, /^2026-11-/);
+  assert.deepEqual([o2.start_time, o2.end_time, o2.sort_order, Number(o2.is_active), Number(o2.qr_enabled)], ['09:00', '12:00', 2, 0, 0]);
+  const other = await inA(() => db.value("INSERT INTO upcoming_programs (title) VALUES ('Other') RETURNING id"));
+  r = await admin.form(`/admin/programs/${other}/occurrences/${occ.id}`, { location_name: 'Hijack', is_active: '1' }, '/admin/programs/' + other);
+  assert.equal(await inA(() => db.value('SELECT location_name FROM program_occurrences WHERE id = $1', [occ.id])), 'Hall B');
+  await inA(() => db.query('DELETE FROM program_occurrences WHERE id = $1', [occ.id]));
+
+  // desk lookup: card JSON with eligibility + history; pending member M-3 is refused and logged INELIGIBLE
+  let j = (await admin.get(`/admin/programs/${pid}/desk/lookup?q=M-1`)).body;
+  assert.equal(j.ok, true);
+  assert.equal(j.member.sadasyata_number, 'M-1');
+  assert.equal(j.eligible, true);
+  assert.equal(j.existing, null);
+  assert.equal(typeof j.history.total, 'number');
+  j = (await admin.get(`/admin/programs/${pid}/desk/lookup?q=M-3`)).body;
+  assert.equal(j.eligible, false);
+  assert.equal((await admin.get(`/admin/programs/${pid}/desk/lookup?q=nobody`)).body.ok, false);
+  const m3 = await memberId('M-3');
+  await admin.form(`/admin/programs/${pid}/desk`, { member_id: String(m3) }, '/admin/programs/' + pid);
+  assert.equal(await inA(() => db.value('SELECT count(*) FROM member_program_attendance WHERE program_id = $1 AND member_id = $2', [pid, m3])), 0);
+  assert.equal(await inA(() => db.value("SELECT count(*) FROM program_attendance_attempts WHERE parent_program_id = $1 AND result = 'INELIGIBLE'", [pid])), 1);
+  // confirm with monthly saving: check-in + member flag + audit
+  const m1 = await memberId('M-1');
+  await admin.form(`/admin/programs/${pid}/desk`, { member_id: String(m1), monthly_saving: '1' }, '/admin/programs/' + pid);
+  const mm = await inA(() => db.one('SELECT monthly_saving_regular FROM members WHERE id = $1', [m1]));
+  assert.equal(Number(mm.monthly_saving_regular), 1);
+  assert.equal(await inA(() => db.value("SELECT count(*) FROM member_program_attendance WHERE program_id = $1 AND member_id = $2 AND attendance_status = 'VALID'", [pid, m1])), 1);
+  assert.equal(await inA(() => db.value("SELECT count(*) FROM audit_log WHERE action = 'member_monthly_saving'")), 1);
+  j = (await admin.get(`/admin/programs/${pid}/desk/lookup?q=M-1`)).body;
+  assert.ok(j.existing && j.existing.can_void, 'own recent entry can be voided');
+
+  // cross-programme register + exports
+  await inA(async () => {
+    await db.query("INSERT INTO member_program_preregistrations (member_id, member_name, member_card_no, phone, program_id, program_title, source) VALUES ($1, 'Ram', 'M-1', '9841000001', $2, 'Desk AGM', 'member_portal')", [m1, pid]);
+    await db.query("INSERT INTO member_program_attendance_requests (member_id, member_name, member_card_no, program_id, program_title, status, processed_at, admin_note) VALUES ($1, 'Ram Req', 'M-1', $2, 'Desk AGM', 'rejected', now(), 'dup')", [m1, pid]);
+  });
+  let page = await admin.get('/admin/programs/register?q=M-1');
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Desk AGM/);
+  let csv = await admin.get(`/admin/programs/register?program_id=${pid}&export=attendance`);
+  assert.match(csv.text, /Member ID,Name,Father,Phone,Program,Location,Method,Desk,Staff,Status,Attended At,Void reason/);
+  assert.match(csv.text, /M-1/);
+  csv = await admin.get(`/admin/programs/register?program_id=${pid}&export=prereg`);
+  assert.match(csv.text, /Name,Member ID,Phone,Program,Source,Created,Attended\?/);
+  assert.match(csv.text, /Yes/);
+  csv = await admin.get(`/admin/programs/register?program_id=${pid}&export=requests`);
+  assert.doesNotMatch(csv.text, /Ram Req/); // pending only by default
+  csv = await admin.get(`/admin/programs/register?program_id=${pid}&export=requests&show_done=1`);
+  assert.match(csv.text, /Ram Req/);
+  page = await admin.get(`/admin/programs/register?tab=attendance&date_from=2083-01-01`); // BS date filter
+  assert.equal(page.status, 200);
+  page = await admin.get(`/admin/programs/${pid}?show_done=1`);
+  assert.match(page.text, /Ram Req/);
+  const pcsv = await admin.get(`/admin/programs/${pid}/attendance.csv`);
+  assert.match(pcsv.text, /Father/);
+});

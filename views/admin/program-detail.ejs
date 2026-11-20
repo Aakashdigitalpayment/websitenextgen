@@ -4,7 +4,7 @@
 %>
 <div class="content-head">
   <div><div class="crumbs"><a href="/admin/programs"><%= t('कार्यक्रम', 'Programmes') %></a></div><h1><%= p.title %></h1><div class="small muted"><%= p.event_date ? bsDate(p.event_date) : '' %> <%= p.event_time || '' %> · <%= p.location || '' %></div></div>
-  <div class="flex gap-1 wrap"><a class="btn btn-outline btn-sm" href="/admin/programs/dashboard?program_id=<%= p.id %>"><%- icon('chart') %><%= t('लाइभ', 'Live') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/reports/consolidated?program_id=<%= p.id %>"><%- icon('file') %><%= t('रिपोर्ट', 'Reports') %></a><a class="btn btn-outline btn-sm" href="/admin/r/upcoming_programs/<%= p.id %>/edit"><%- icon('edit') %><%= t('सम्पादन', 'Edit') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/<%= p.id %>/attendance.csv"><%- icon('download') %>CSV</a></div>
+  <div class="flex gap-1 wrap"><a class="btn btn-outline btn-sm" href="/admin/programs/dashboard?program_id=<%= p.id %>"><%- icon('chart') %><%= t('लाइभ', 'Live') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/reports/consolidated?program_id=<%= p.id %>"><%- icon('file') %><%= t('रिपोर्ट', 'Reports') %></a><a class="btn btn-outline btn-sm" href="/admin/r/upcoming_programs/<%= p.id %>/edit"><%- icon('edit') %><%= t('सम्पादन', 'Edit') %></a><a class="btn btn-outline btn-sm" href="/admin/programs/<%= p.id %>/attendance.csv"><%- icon('download') %>CSV</a><a class="btn btn-ghost btn-sm" href="/admin/programs/register?program_id=<%= p.id %>"><%- icon('layers') %><%= t('दर्ता रजिस्टर', 'Register') %></a></div>
 </div>
 <div class="kpis">
   <div class="kpi"><div class="l"><%= t('उपस्थित', 'Checked in') %></div><div class="v"><%= num(valid.length) %></div></div>
@@ -29,14 +29,28 @@
         <label class="choice"><input type="checkbox" name="rotate" value="1"> <%= t('नयाँ QR (पुरानो बन्द)', 'New QR (old one stops)') %></label>
       </div>
       <button class="btn btn-primary mt-2"><%= p.qr_token ? t('सुरक्षित गर्नुहोस्', 'Save') : t('QR बनाउनुहोस्', 'Create QR') %></button>
+      <% if (!p.qr_token) { %><div class="field-hint"><%= t('समय नदिए कार्यक्रमको दिन ००:०० देखि भोलिपल्ट २३:५९ सम्म खुला रहन्छ।', 'Without times, check-in is open from the event day 00:00 until the next day 23:59.') %></div><% } %>
     </form>
+    <% if (p.qr_token) { %><form method="post" action="/admin/programs/<%= p.id %>/qr" class="mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="clear" value="1"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('QR हटाउने? छापिएका QR चल्दैनन्।', 'Clear the QR? Printed codes stop working.') %>"><%- icon('trash') %><%= t('QR हटाउनुहोस्', 'Clear QR') %></button></form><% } %>
   </div>
   <div class="card" id="desk">
     <h3><%= t('दर्ता डेस्क', 'Registration desk') %></h3>
     <% if (deskResult) { %><div class="alert alert-<%= deskResult.type %>"><%= deskResult.text %></div><% } %>
-    <form method="post" action="/admin/programs/<%= p.id %>/desk" class="stack">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <div class="field"><label><%= t('सदस्यता नं. / कार्ड नं. / मोबाइल', 'Member no. / card no. / mobile') %></label><input class="input" name="q" required autofocus autocomplete="off" style="font-size:1.1rem"></div>
+    <form method="post" action="/admin/programs/<%= p.id %>/desk" class="stack" data-desk-lookup="/admin/programs/<%= p.id %>/desk/lookup">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="member_id" value="">
+      <div class="field"><label for="desk_q"><%= t('सदस्यता नं. / कार्ड नं. / मोबाइल', 'Member no. / card no. / mobile') %></label><input class="input" id="desk_q" name="q" required autofocus autocomplete="off" style="font-size:1.1rem"></div>
+      <div class="card card-flat" data-desk-card hidden aria-live="polite">
+        <div class="flex gap-2 items-center"><img data-desk-photo alt="" width="64" height="64" style="border-radius:8px;object-fit:cover;background:var(--surface-2)" hidden>
+          <div class="grow"><div style="font-weight:600" data-desk-name></div><div class="small muted" data-desk-meta></div><div class="small faint" data-desk-father></div></div></div>
+        <div class="small mt-1" data-desk-status></div>
+        <div class="small mt-1 faint" data-desk-history></div>
+        <div class="choices mt-1" data-desk-ms><span class="small muted"><%= t('मासिक बचत', 'Monthly saving') %>:</span>
+          <label class="choice"><input type="radio" name="monthly_saving" value="1"> <%= t('नियमित', 'Regular') %></label>
+          <label class="choice"><input type="radio" name="monthly_saving" value="0"> <%= t('नियमित नभएको', 'Not regular') %></label>
+          <label class="choice"><input type="radio" name="monthly_saving" value="" checked> <%= t('नबदल्ने', 'Keep') %></label></div>
+        <div data-desk-void hidden class="mt-1"><button type="button" class="btn btn-ghost btn-sm" data-desk-void-btn><%= t('मेरो पछिल्लो दर्ता रद्द', 'Void my last entry') %></button></div>
+      </div>
+      <template data-desk-labels data-attended="<%= t('पहिले नै उपस्थित', 'Already checked in') %>" data-eligible="<%= t('योग्य — दर्ता गर्न तयार', 'Eligible — ready to check in') %>" data-total="<%= t('कुल उपस्थिति', 'Total attended') %>" data-agm="<%= t('पछिल्ला ३ AGM', 'Last 3 AGMs') %>" data-streak="<%= t('लगातार', 'streak') %>" data-father="<%= t('बुबा', 'Father') %>" data-notfound="<%= t('सदस्य भेटिएन।', 'Member not found.') %>"></template>
       <% const activeDesks = desks.filter(d => Number(d.is_active)); const curDesk = Number(query.desk) || myDeskId; if (activeDesks.length) { %><div class="field"><label><%= t('डेस्क', 'Desk') %></label><select class="select" name="desk_id"><option value=""><%= t('— डेस्क बिना —', '— no desk —') %></option><% activeDesks.forEach(d => { %><option value="<%= d.id %>" <%= curDesk === d.id ? 'selected' : '' %>><%= d.desk_label %><%= d.location_name ? ' — ' + d.location_name : '' %><%= d.staff_name ? ' (' + d.staff_name + ')' : '' %></option><% }) %></select></div><% } %>
       <% if (occurrences.length) { %><div class="field"><label><%= t('स्थान', 'Location') %></label><select class="select" name="occurrence_id"><option value="">—</option><% occurrences.filter(o => o.is_active).forEach(o => { %><option value="<%= o.id %>"><%= o.location_name %></option><% }) %></select></div><% } %>
       <button class="btn btn-primary"><%- icon('check') %><%= t('उपस्थिति दर्ता', 'Check in') %></button>
@@ -63,13 +77,25 @@
   </form><% } %>
 </div>
 
-<div class="card mt-3">
+<div class="card mt-3" id="locations">
   <h3><%= t('स्थान/सत्र (बहु-स्थान कार्यक्रम)', 'Locations / sessions') %></h3>
   <% if (occurrences.length) { %><div class="grid grid-3 mb-2"><% occurrences.forEach(o => { %>
     <div class="card card-flat" style="<%= o.is_active ? '' : 'opacity:.55' %>"><div class="flex justify-between"><strong style="font-weight:500"><%= o.location_name %></strong>
       <form method="post" action="/admin/programs/<%= p.id %>/occurrences/<%= o.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm btn-icon" data-confirm="<%= t('हटाउने?', 'Remove?') %>"><%- icon('trash') %></button></form></div>
       <div class="small faint"><%= o.event_date ? bsDate(o.event_date) : '' %> <%= o.start_time || '' %></div>
-      <% if (o.qr) { %><img src="<%= o.qr %>" alt="QR" width="140" height="140" class="mt-1" style="background:#fff;border-radius:8px"><div class="small" style="word-break:break-all"><code><%= qrUrl(o.qr_token) %></code></div><% } %></div>
+      <% if (o.qr) { %><img src="<%= o.qr %>" alt="QR" width="140" height="140" class="mt-1" style="background:#fff;border-radius:8px"><div class="small" style="word-break:break-all"><code><%= qrUrl(o.qr_token) %></code></div><% } %>
+      <div class="flex gap-1 wrap mt-1">
+        <form method="post" action="/admin/programs/<%= p.id %>/qr"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="occurrence_id" value="<%= o.id %>"><% if (o.qr_token) { %><input type="hidden" name="clear" value="1"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('यो स्थानको QR हटाउने?', 'Clear this location QR?') %>"><%= t('QR हटाउनुहोस्', 'Clear QR') %></button><% } else { %><input type="hidden" name="qr_enabled" value="1"><button class="btn btn-ghost btn-sm"><%= t('QR बनाउनुहोस्', 'Create QR') %></button><% } %></form>
+      </div>
+      <details class="mt-1"><summary class="small" style="cursor:pointer"><%= t('सम्पादन', 'Edit') %></summary>
+        <form method="post" action="/admin/programs/<%= p.id %>/occurrences/<%= o.id %>" class="stack mt-1">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input class="input" name="location_name" value="<%= o.location_name %>" required maxlength="180" aria-label="<%= t('स्थान', 'Location') %>">
+          <input class="input" name="event_date" value="<%= o.event_date || '' %>" placeholder="YYYY-MM-DD (<%= t('वि.सं. वा ई.सं.', 'BS or AD') %>)" aria-label="<%= t('मिति', 'Date') %>">
+          <div class="flex gap-1"><input class="input" name="start_time" value="<%= o.start_time || '' %>" placeholder="10:00" aria-label="<%= t('सुरु', 'Start') %>"><input class="input" name="end_time" value="<%= o.end_time || '' %>" placeholder="14:00" aria-label="<%= t('अन्त्य', 'End') %>"></div>
+          <div class="flex gap-1 items-center"><input class="input" type="number" name="sort_order" value="<%= o.sort_order || 0 %>" style="max-width:90px" aria-label="<%= t('क्रम', 'Order') %>"><label class="choice"><input type="checkbox" name="is_active" value="1" <%= o.is_active ? 'checked' : '' %>> <%= t('सक्रिय', 'Active') %></label></div>
+          <button class="btn btn-outline btn-sm"><%= t('सुरक्षित', 'Save') %></button>
+        </form></details></div>
   <% }) %></div><% } %>
   <form method="post" action="/admin/programs/<%= p.id %>/occurrences" class="flex gap-1 wrap items-center">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -79,15 +105,17 @@
   </form>
 </div>
 
-<% if (requests.length) { %>
-<div class="card mt-3" id="requests"><h3><%= t('उपस्थिति अनुरोध', 'Check-in requests') %></h3>
+<% if (requests.length || showDone) { %>
+<div class="card mt-3" id="requests"><div class="flex justify-between items-center wrap gap-1"><h3 class="mb-0"><%= t('उपस्थिति अनुरोध', 'Check-in requests') %></h3>
+  <span class="flex gap-1"><a class="btn btn-ghost btn-sm" href="/admin/programs/<%= p.id %><%= showDone ? '' : '?show_done=1' %>#requests"><%= showDone ? t('बाँकी मात्र', 'Pending only') : t('प्रक्रिया भएका पनि', 'Show processed') %></a>
+  <a class="btn btn-ghost btn-sm" href="/admin/programs/register?program_id=<%= p.id %>&amp;export=requests<%= showDone ? '&amp;show_done=1' : '' %>"><%- icon('download') %>CSV</a></span></div>
   <div class="table-wrap"><table class="table"><tbody><% requests.forEach(r => { %><tr><td><strong style="font-weight:500"><%= r.member_name %></strong><div class="small faint"><%= r.member_card_no || '' %> · <%= r.member_phone || '' %></div></td><td class="small"><%= bsDate(r.requested_at) %> <%= new Date(r.requested_at).toTimeString().slice(0,5) %></td>
     <td><% if (!(Number(r.member_id) > 0)) { %>
       <div class="small"><span class="badge"><%= t('सदस्य जोडिएको छैन', 'Not linked to a member') %></span></div>
       <form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>/link" class="flex gap-1 mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="input" name="member_no" placeholder="<%= t('सदस्यता नं.', 'Member no.') %>" required style="max-width:150px"><button class="btn btn-ghost btn-sm"><%- icon('link') %><%= t('जोड्नुहोस्', 'Link') %></button></form>
       <% if (isAdmin) { %><form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>/create-member" class="mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('यो विवरणबाट नयाँ सदस्य बनाउने?', 'Create a new member from these details?') %>"><%- icon('plus') %><%= t('नयाँ सदस्य बनाउनुहोस्', 'Create member') %></button></form><% } %>
     <% } %></td>
-    <td><div class="row-actions"><% ['approve', 'reject'].forEach(a => { if (a === 'approve' && !(Number(r.member_id) > 0)) return; %><form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button class="btn btn-sm <%= a === 'approve' ? 'btn-soft' : 'btn-ghost' %>"><%= a === 'approve' ? t('स्वीकृत', 'Approve') : t('अस्वीकृत', 'Reject') %></button></form><% }) %></div></td></tr><% }) %></tbody></table></div></div>
+    <td><% if (r.status !== 'pending') { %><span class="badge <%= r.status === 'approved' ? 'badge-ok' : 'badge-bad' %>"><%= statusLabel(r.status) %></span><div class="small faint"><%= r.processed_at ? bsDate(r.processed_at) : '' %> <%= r.admin_note || '' %></div><% } else { %><div class="row-actions"><% ['approve', 'reject'].forEach(a => { if (a === 'approve' && !(Number(r.member_id) > 0)) return; %><form method="post" action="/admin/programs/<%= p.id %>/requests/<%= r.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button class="btn btn-sm <%= a === 'approve' ? 'btn-soft' : 'btn-ghost' %>"><%= a === 'approve' ? t('स्वीकृत', 'Approve') : t('अस्वीकृत', 'Reject') %></button></form><% }) %></div><% } %></td></tr><% }) %></tbody></table></div></div>
 <% } %>
 
 <div class="card mt-3" id="attendance"><h3><%= t('उपस्थिति सूची', 'Attendance') %></h3>
@@ -98,7 +126,7 @@
   </tbody></table></div><% } %>
 </div>
 
-<% if (prereg.length) { %><div class="card mt-3" id="prereg"><h3><%= t('पूर्व दर्ता', 'Pre-registrations') %> (<%= num(prereg.length) %>)</h3>
+<% if (prereg.length) { %><div class="card mt-3" id="prereg"><div class="flex justify-between items-center"><h3 class="mb-0"><%= t('पूर्व दर्ता', 'Pre-registrations') %> (<%= num(prereg.length) %>)</h3><a class="btn btn-ghost btn-sm" href="/admin/programs/register?program_id=<%= p.id %>&amp;export=prereg"><%- icon('download') %>CSV</a></div>
   <% if (smsResult) { %><div class="alert alert-<%= smsResult.type %>"><%= smsResult.text %></div><% } %>
   <% if (isAdmin) { %><form method="post" action="/admin/programs/<%= p.id %>/prereg/notify" id="prereg-notify" class="stack mb-2">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -113,3 +141,4 @@
     <% if (isAdmin) { %><td><input type="checkbox" name="prereg_ids" value="<%= r.id %>" form="prereg-notify" checked aria-label="<%= r.member_name %>"></td><% } %>
     <td><%= r.member_name %><div class="small faint"><%= r.member_card_no || '' %></div></td><td class="small"><%= r.phone || '' %></td><td class="small faint"><%= bsDate(r.created_at) %></td>
     <td class="text-right"><% if (r.attended) { %><span class="badge badge-ok"><%= t('उपस्थित', 'Attended') %></span><% } else if (!occurrences.some(o => o.is_active)) { %><form method="post" action="/admin/programs/<%= p.id %>/prereg/<%= r.id %>/attend"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm"><%- icon('check') %><%= t('उपस्थित गराउनुहोस्', 'Mark attended') %></button></form><% } %></td></tr><% }) %></tbody></table></div></div><% } %>
+<script src="/static/js/program-desk.js" defer></script>

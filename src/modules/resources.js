@@ -205,7 +205,12 @@ const resources = {
     T('title', 'शीर्षक', 'Title', { required: true, list: true }),
     SEL('program_type', 'प्रकार', 'Type', [['General', 'सामान्य', 'General'], ['AGM', 'वार्षिक साधारण सभा', 'AGM'], ['SGM', 'विशेष साधारण सभा', 'SGM'], ['Orientation', 'अभिमुखीकरण', 'Orientation'], ['Training', 'तालिम', 'Training'], ['Seminar', 'गोष्ठी', 'Seminar'], ['Workshop', 'कार्यशाला', 'Workshop'], ['Financial_Literacy', 'वित्तीय साक्षरता', 'Financial literacy'], ['Other', 'अन्य', 'Other']], { default: 'General', list: true }),
     D('event_date', 'मिति', 'Date', { list: true }), T('event_time', 'समय', 'Time'),
-    T('location', 'स्थान', 'Location', { list: true }), TA('description', 'विवरण', 'Description'), B('pre_registration_open', 'पूर्व दर्ता खुला', 'Pre-registration open'), ACTIVE],
+    T('location', 'स्थान', 'Location', { list: true }), TA('description', 'विवरण', 'Description'), B('pre_registration_open', 'पूर्व दर्ता खुला', 'Pre-registration open'),
+    // legacy programs.php fields; a new programme takes them from Programme settings
+    B('is_multi_location', 'बहु-स्थान कार्यक्रम', 'Multi-location programme', { hint: 'स्थान थप्दा स्वतः / set automatically when locations are added' }),
+    B('instant_attendance', 'तुरुन्त उपस्थिति (स्वीकृति नचाहिने)', 'Instant check-in (no approval)', { hint: 'नयाँमा: कार्यक्रम सेटिङबाट / new: from Programme settings' }),
+    B('shared_qr_mode', 'साझा QR (भविष्य)', 'Shared QR (future)', { hint: 'नयाँमा: कार्यक्रम सेटिङबाट / new: from Programme settings' }),
+    SEL('eligible_member_scope', 'योग्य सदस्य', 'Eligible members', [['all_active', 'सबै सक्रिय सदस्य', 'All active members'], ['shareholders', 'शेयरधनी (भविष्य)', 'Shareholders (future)'], ['voters', 'मतदाता (भविष्य)', 'Voters (future)']], { default: 'all_active' }), ACTIVE],
   // new programmes take the defaults from Programme settings (legacy admin/programs.php + program-settings.php)
   beforeSave: async (data, { existing }) => {
     if (existing) return {};
