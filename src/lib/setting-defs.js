@@ -169,7 +169,7 @@ const AI_MODELS = {
 
 /** Keys owned by other admin pages (member portal, client protection, theme, security policy…): not "imported". */
 const MANAGED_GROUPS = new Set(['members', 'protection', 'appearance', 'internal', 'theme', 'program', 'programs']);
-const MANAGED_KEY = /^(admin_2fa_required|admin_idle_minutes|admin_hidden_menu_groups|push_vapid_\w+|theme_\w+|layout_\w+|lang_\w+|starter_design|program_\w+|notify_(email|sms)_[a-z_]+|card_prefix|member_\w+|ai_welcome|deposit_tax_rate|protection_\w+|satisfaction_widget_enabled)$/;
+const MANAGED_KEY = /^(admin_2fa_required|admin_idle_minutes|admin_hidden_menu_groups|push_vapid_\w+|theme_\w+|layout_\w+|lang_\w+|starter_design|program_\w+|notify_(email|sms)_[a-z_]+|card_prefix|member_\w+|ai_welcome|deposit_tax_rate|protection_\w+|satisfaction_widget_enabled|license_renewal_amount|license_esewa_id|license_khalti_id)$/;
 
 /** site_settings.setting_type has a CHECK (text, textarea, image, number, color, url): the stored type for a def. */
 const storeType = t => ({ richtext: 'textarea', map: 'url', email: 'text', bool: 'text', select: 'text', secret: 'text' }[t] || t);

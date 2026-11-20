@@ -513,3 +513,35 @@ test('B-10: admin clears notification log entries older than 30 days (audited)',
   assert.ok(Number(await inA(() => db.value('SELECT count(*) FROM notification_log'))) >= 1);
   assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'notification_log_clear'")));
 });
+
+// ---------------------------------------------------------------- B-11 licence: per-tenant payment details, B.S. date
+test('B-11: platform sets the licence date in B.S. and per-tenant renewal amount / eSewa / Khalti', async () => {
+  const lic = require('../src/lib/license');
+  assert.equal(lic.parseUntil('2026-07-17'), '2026-07-17');
+  assert.equal(lic.parseUntil('२०८३-०४-०१'), require('../src/lib/nepali-date').bsToAd('2083-04-01'));
+  assert.equal(lic.payInfo({ license_esewa_id: '98000' }).esewa, '98000');
+  const user = 'opcg' + SUFFIX, pw = 'Operator@123456';
+  await db.query('INSERT INTO platform.operators (username, password, full_name) VALUES ($1, $2, $3)', [user, await require('../src/lib/auth').hashPassword(pw), 'Op']);
+  try {
+    const agent = request.agent(app), H = 'platform.app.local';
+    let r = await agent.get('/platform/login').set('Host', H);
+    r = await agent.post('/platform/login').set('Host', H).type('form').send({ _csrf: r.text.match(/name="_csrf" value="([^"]+)"/)[1], username: user, password: pw });
+    assert.equal(r.status, 302);
+    r = await agent.get('/platform').set('Host', H);
+    const csrf = r.text.match(/name="_csrf" value="([^"]+)"/)[1];
+    const tid = await db.value('SELECT id FROM platform.tenants WHERE slug = $1', [A]);
+    assert.match(r.text, new RegExp(`id="lic_bs_${tid}"`));
+    r = await agent.post(`/platform/tenants/${tid}/license`).set('Host', H).type('form')
+      .send({ _csrf: csrf, until: '', until_bs: '2090-01-01', renewal_amount: '15000', esewa_id: '9801234567', khalti_id: '' });
+    assert.equal(r.status, 302);
+    assert.equal(String((await db.value('SELECT license_valid_until::text FROM platform.tenants WHERE id = $1', [tid]))), require('../src/lib/nepali-date').bsToAd('2090-01-01'));
+    const c = await adminClient();
+    const page = await c.get('/admin/license');
+    assert.match(page.text, /9801234567/);
+    assert.match(page.text, /15000/);
+  } finally {
+    await db.query('DELETE FROM platform.operators WHERE username = $1', [user]);
+    await db.query('UPDATE platform.tenants SET license_valid_until = NULL WHERE slug = $1', [A]);
+    tenants.clearCache();
+  }
+});

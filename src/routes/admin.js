@@ -118,7 +118,7 @@ router.get('/license/blocked', ah(async (req, res) => {
   if (!b) return res.redirect('/admin/login');
   const st = require('../lib/license').status(req.tenant);
   const notices = await db.many("SELECT * FROM site_license_renewal_notices WHERE status = 'pending' ORDER BY id DESC LIMIT 5");
-  res.render('admin/license-blocked', { layout: 'auth', title: res.locals.t('सेवा नवीकरण', 'Licence renewal'), st, pay: require('../lib/license').payInfo(), notices, username: b.username });
+  res.render('admin/license-blocked', { layout: 'auth', title: res.locals.t('सेवा नवीकरण', 'Licence renewal'), st, pay: require('../lib/license').payInfo(res.locals.settings), notices, username: b.username });
 }));
 router.post('/license/blocked', licenseLimiter, ah(async (req, res) => {
   const b = blockedStash(req);
@@ -137,7 +137,7 @@ async function submitLicenseNotice(req, res, who) {
   await db.query(`INSERT INTO site_license_renewal_notices (status, gateway, txn_reference, amount_reported, note, submitted_by_admin_id, submitted_by_username, created_at) VALUES ('pending', $1, $2, $3, $4, $5, $6, now())`,
     [gateway, txn, amount, note, who.adminId, who.username]);
   await auth.audit(req, 'license_notice', 'site_license_renewal_notices', null, `Renewal notice ${txn}`, { actorId: who.adminId, actorName: who.username });
-  const vendor = require('../lib/license').payInfo().vendorEmail;
+  const vendor = require('../lib/license').payInfo(res.locals.settings).vendorEmail;
   if (vendor && util.isEmail(vendor)) {
     notify.later(() => notify.sendEmail('license_notice', vendor, `Licence renewal notice: ${req.tenant.name}`,
       `Cooperative: ${req.tenant.name} (${req.tenant.slug})\nBy: ${who.username}\nVia: ${gateway}\nReference: ${txn}\nAmount: ${amount}\nNote: ${note || ''}`));
@@ -943,7 +943,7 @@ router.post('/2fa/disable', ah(async (req, res) => {
 // ---------------------------------------------------------------- site licence (tenant side)
 router.get('/license', requireAdmin('admin'), ah(async (req, res) => {
   const notices = await db.many('SELECT * FROM site_license_renewal_notices ORDER BY id DESC LIMIT 20');
-  res.render('admin/license', { title: res.locals.t('वेबसाइट सेवा नवीकरण', 'Website licence'), notices, pay: require('../lib/license').payInfo() });
+  res.render('admin/license', { title: res.locals.t('वेबसाइट सेवा नवीकरण', 'Website licence'), notices, pay: require('../lib/license').payInfo(res.locals.settings) });
 }));
 // withdraw a notice sent by mistake (legacy site-license.php cancel)
 router.post('/license/cancel', requireAdmin('admin'), ah(async (req, res) => {

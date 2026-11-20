@@ -160,7 +160,8 @@ router.get('/', ah(async (req, res) => {
       members: await db.value('SELECT count(*) FROM members WHERE deleted_at IS NULL'),
       pending: await db.value("SELECT count(*) FROM loan_applications WHERE status = 'pending' AND deleted_at IS NULL"),
       notices: await db.many("SELECT * FROM site_license_renewal_notices WHERE status = 'pending' ORDER BY id DESC"),
-    })).catch(() => ({ members: '?', pending: '?', notices: [] }));
+      pay: await (async s => ({ amount: s.license_renewal_amount || '', esewa: s.license_esewa_id || '', khalti: s.license_khalti_id || '' }))(await require('../lib/settings').all()), // per-tenant overrides only
+    })).catch(() => ({ members: '?', pending: '?', notices: [], pay: {} }));
     t.license = require('../lib/license').status(t);
   }
   render(res, 'tenants', { title: 'Tenants', list, errors: {}, values: {}, baseDomain: config.baseDomain, dnsHelp: require('../lib/domains').instructions, designs: require('../lib/starter').list(), PLANS: require('../lib/plans').PLANS });
@@ -216,10 +217,22 @@ router.post('/tenants/:id/domains', ah(async (req, res) => {
 router.post('/tenants/:id/license', ah(async (req, res) => {
   const t = await tenants.get(Number(req.params.id));
   if (!t) return res.redirect('/platform');
-  const until = /^\d{4}-\d{2}-\d{2}$/.test(req.body.until || '') ? req.body.until : null;
+  // A.D. date picker, or a B.S. date typed in the text box (site-license.php save_license_date accepted both)
+  const lic = require('../lib/license');
+  const until = lic.parseUntil(req.body.until_bs) || lic.parseUntil(req.body.until);
   await db.query('UPDATE platform.tenants SET license_valid_until = $1, license_note = $2, updated_at = now() WHERE id = $3', [until, String(req.body.note || '').slice(0, 500) || null, t.id]);
   const nid = Number(req.body.notice_id) || 0;
   if (nid) await db.withSchema(t.schema_name, () => db.query("UPDATE site_license_renewal_notices SET status = $1 WHERE id = $2", [req.body.notice_action === 'cancel' ? 'cancelled' : 'cleared', nid]));
+  // per-tenant payment details (blank = platform default from the environment)
+  if (['renewal_amount', 'esewa_id', 'khalti_id'].some(k => req.body[k] !== undefined)) {
+    await db.withSchema(t.schema_name, async () => {
+      const st = require('../lib/settings');
+      for (const [k, key] of [['renewal_amount', 'license_renewal_amount'], ['esewa_id', 'license_esewa_id'], ['khalti_id', 'license_khalti_id']]) {
+        if (req.body[k] !== undefined) await st.set(key, String(req.body[k] || '').trim().slice(0, 120), { group: 'license', label: 'Licence ' + k.replace('_', ' ') });
+      }
+      st.invalidate();
+    });
+  }
   tenants.clearCache();
   flash(req, 'success', `Licence for ${t.slug}: ${until || 'no expiry'}`);
   res.redirect('/platform');
