@@ -370,7 +370,7 @@ Node `admin-applications.js:271-275` finds the member by `memberCol` value OR ex
 
 **SM-17 · Legacy query params dropped.** — **COVERED** for `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=` (→ `/calendar?y=&m=`), `honor-apply.php?program_id=` (→ `?program=`), `news.php?page=`, `notices.php?page=`. Not mapped (no Node equivalent to land on): `team.php?cat=` (Node uses `menu`/`item`), `institutional-profile.php?id=` (page has FY/month filters, no per-row anchor), `sel_day`/`tab` of the calendar. `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=&sel_day=&tab=` (map to `/calendar?y=&m=&d=`), `institutional-profile.php?id=`, `honor-apply.php?program_id=` (→ `?program=`), `team.php?cat=`, `news.php?page=`/`notices.php?page=`.
 
-**SM-18 · Record deliberate drops in docs/parity.** sw.js member-page offline cache + `member/offline.php` cached dashboard (privacy on shared phones), `api-public-chat.php` live chat (contact form), `scroll-accessibility.js`, `pull-to-refresh.js`, iframe `?embed=1` modes, `core/helpers.php` dead finance helpers. Also create `docs/parity/coverage.md` (CLAUDE.md §1 says it must exist; it does not).
+**SM-18 · Record deliberate drops in docs/parity.** — **COVERED**: table "Deliberately not ported" in `docs/parity/README.md`; `docs/parity/coverage.md` exists. sw.js member-page offline cache + `member/offline.php` cached dashboard (privacy on shared phones), `api-public-chat.php` live chat (contact form), `scroll-accessibility.js`, `pull-to-refresh.js`, iframe `?embed=1` modes, `core/helpers.php` dead finance helpers. Also create `docs/parity/coverage.md` (CLAUDE.md §1 says it must exist; it does not).
 
 **SM-19 · Information-room viewer deterrence + logging.** — **COVERED**: `public/js/information-room-viewer.js` (copy/cut/contextmenu/dragstart, Ctrl/Cmd+S/P/C/U/A, PrintScreen, blur on `visibilitychange`) on items with `restrict_copy`; print hidden via `@media print`; `/view` logs `view`, the inline fetch is not logged again, a direct open logs `download` only when allowed; viewer styles moved to `app.css`; legacy `information-room-view.php?id=` → `/member/information-room/<id>/view`. Port `assets/js/information-room-viewer.js` into `public/js/` (block copy/cut/contextmenu/dragstart, Ctrl/Cmd+S/P/C/U/A, PrintScreen; blur class on `visibilitychange`) for items with `allow_download=0`; log `view` when `/member/information-room/:id/view` is opened and log the inline fetch as `view` not `download` (`member.js:401-416`). Also move the viewer's inline `style=` into app.css (CLAUDE.md §4).
 
@@ -387,7 +387,7 @@ Node `admin-applications.js:271-275` finds the member by `memberCol` value OR ex
 PHP: `/home/user/websourcecode` · Node: `/home/user/websitenextgen` (branch `claude/tender-ramanujan-e5xzgu`, HEAD d5b8018).
 Method: every PHP file was listed; per page the POST actions / GET filters / exports were extracted (`grep $_POST/$action/$_GET`) and checked against the Node route, lib and view by reading the code (not by name). The gap specs in `docs/parity/3-admin-system.md` and `4-admin-ops.md` were re-verified one by one; nearly all of them are now implemented on this branch (noted "verified" below). DB columns were compared with a parser over `database/install.sql` vs `db/schema.sql` + `db/migrations/*.sql`, then grepped for use in `src/`, `views/`, `scripts/`, `public/js/`.
 
-Note: `CLAUDE.md` says `docs/parity/coverage.md` maps every PHP file; **that file does not exist yet** — this matrix (with matrix A) is the material for it.
+Note: this file is `docs/parity/coverage.md` (CLAUDE.md §1).
 
 Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/routes/admin.js`, `res.<key>` = `src/modules/resources.js` resource, `inbox:<key>` = `src/modules/applications.js` module served by `src/routes/admin-applications.js`.
 
@@ -659,7 +659,7 @@ Every other install.sql table is edited through `res.*`, `inbox:*` or a dedicate
 16. **COVERED** (`test/coverage-gaps.test.js`: admin button type, img alt, label for=, headers + noopener, concurrent check-in, over-size upload) — **Tests to add** (smoke parity): admin `<button>` type lint, `<img>` alt lint, label `for=` lint, security headers + `rel=noopener`, concurrent double check-in (Promise.all → one VALID row), over-size upload error message.
 17. **COVERED** (`readPhpSite` reads `includes/push-vapid.local.php`, `parseVapid` converts the PEM and checks it matches the public key; migration stores `push_vapid_public/private`; the shared fallback pair in push-vapid-config.php is deliberately not imported — that private key is public in the PHP repo) — **VAPID key import**: copy the PHP site's VAPID key pair (push-vapid.local.php / settings) into `push_vapid_public/private` during site migration so existing member push subscriptions keep working.
 18. `db/legacy/install.sql` is an older copy of the PHP file; refresh it or point `schema:convert` at the PHP repo copy.
-19. Create `docs/parity/coverage.md` (required by CLAUDE.md §1, currently absent) from this matrix + matrix A.
+19. **COVERED** — Create `docs/parity/coverage.md` (required by CLAUDE.md §1, currently absent) from this matrix + matrix A.
 
 ---
 
