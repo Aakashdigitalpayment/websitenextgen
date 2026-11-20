@@ -423,3 +423,35 @@ test('auction gallery: photos are added, and only the record\'s own photos can b
   assert.equal(imgs.length, 2);
   assert.ok(imgs.every(x => /^auction-notices\/[0-9a-f]{32}\.png$/.test(x)));
 });
+
+// ---------------------------------------------------------------- P2-4 dashboard, P2-9 credentials
+test('dashboard: KPI widgets and every tab render', async () => {
+  let r = await admin.get('/admin');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /KYC/);
+  assert.match(r.text, /href="\/admin\/password-requests"/);
+  for (const tab of ['members', 'welfare', 'programs', 'credentials']) {
+    r = await admin.get('/admin?tab=' + tab);
+    assert.equal(r.status, 200, tab);
+  }
+  r = await admin.get('/admin?tab=programs');
+  assert.match(r.text, /Check-ins|कुल उपस्थिति/);
+});
+
+test('office credentials: staff can open the list, only admins+ change entries or see logs', async () => {
+  await inA(() => db.query("INSERT INTO admin_users (username, password, full_name, role, is_active, status) VALUES ('staff1', $1, 'St', 'staff', 1, 'active')", [require('bcryptjs').hashSync(PW, 4)]));
+  await inA(() => db.query("INSERT INTO office_credentials (site_name, site_url, username, category, password_enc, password_iv, is_active, sort_order, created_by) VALUES ('Bank', 'https://bank.example.np/login', 'coop1', 'bank', '', '', 1, 0, 1)"));
+  const st = client();
+  await st.form('/admin/login', { username: 'staff1', password: PW }, '/admin/login');
+  let r = await st.get('/admin/credentials');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /bank\.example\.np\/favicon\.ico/);
+  assert.doesNotMatch(r.text, /name="site_logo"/);
+  const id = await inA(() => db.value("SELECT id FROM office_credentials WHERE site_name = 'Bank'"));
+  r = await st.form(`/admin/credentials/${id}/delete`, {}, '/admin/credentials');
+  assert.equal(r.status, 403);
+  assert.equal((await st.get(`/admin/credentials/${id}/log`)).status, 403);
+  r = await admin.get(`/admin/credentials/${id}/log`);
+  assert.equal(r.status, 200);
+  assert.match(r.text, /Access log|पहुँच लग/);
+});

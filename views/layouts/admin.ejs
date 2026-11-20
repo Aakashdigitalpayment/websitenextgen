@@ -53,6 +53,7 @@
       <a class="side-link <%= cur.startsWith('/admin/audit') ? 'active' : '' %>" href="/admin/audit"><%- icon('eye') %><%= t('अडिट लग', 'Audit log') %></a>
       <a class="side-link <%= cur.startsWith('/admin/analytics') ? 'active' : '' %>" href="/admin/analytics"><%- icon('chart') %><%= t('विश्लेषण', 'Analytics') %></a>
       <a class="side-link <%= cur.startsWith('/admin/satisfaction') ? 'active' : '' %>" href="/admin/satisfaction"><%- icon('star') %><%= t('सन्तुष्टि विजेट', 'Satisfaction widget') %></a><% } %>
+      <% if (lvl >= 2) { %><a class="side-link <%= cur.startsWith('/admin/credentials') ? 'active' : '' %>" href="/admin/credentials"><%- icon('settings') %><%= t('कार्यालय पासवर्ड', 'Office credentials') %></a><% } %>
       <% if (lvl >= 3) { %><a class="side-link <%= cur.startsWith('/admin/users') ? 'active' : '' %>" href="/admin/users"><%- icon('users') %><%= t('प्रशासक', 'Admin users') %></a><% } %>
       <% if (lvl >= 4) { %><a class="side-link <%= cur.startsWith('/admin/security') ? 'active' : '' %>" href="/admin/security"><%- icon('shield') %><%= t('सुरक्षा नीति', 'Security policy') %></a>
       <a class="side-link <%= cur.startsWith('/admin/roles') ? 'active' : '' %>" href="/admin/roles"><%- icon('shield') %><%= t('भूमिका र अनुमति', 'Roles & permissions') %></a>
@@ -60,7 +61,6 @@
       <a class="side-link <%= cur.startsWith('/admin/error-log') ? 'active' : '' %>" href="/admin/error-log"><%- icon('alert') %><%= t('त्रुटि लग', 'Error log') %></a>
       <a class="side-link <%= cur.startsWith('/admin/domains') ? 'active' : '' %>" href="/admin/domains"><%- icon('globe') %><%= t('वेबसाइट डोमेन', 'Website domain') %></a>
       <a class="side-link <%= cur.startsWith('/admin/integrations') ? 'active' : '' %>" href="/admin/integrations"><%- icon('link') %><%= t('CBS/DMS API', 'CBS / DMS API') %></a>
-      <a class="side-link <%= cur.startsWith('/admin/credentials') ? 'active' : '' %>" href="/admin/credentials"><%- icon('settings') %><%= t('कार्यालय पासवर्ड', 'Office credentials') %></a>
       <a class="side-link <%= cur.startsWith('/admin/system') || cur.startsWith('/admin/backup') ? 'active' : '' %>" href="/admin/system"><%- icon('chart') %><%= t('प्रणाली / ब्याकअप', 'System / backup') %></a><% } %>
       <a class="side-link <%= cur.startsWith('/admin/2fa') ? 'active' : '' %>" href="/admin/2fa"><%- icon('shield') %><%= t('दुई-चरण प्रमाणीकरण', '2-step login') %></a>
       <a class="side-link <%= cur.startsWith('/admin/password') && !cur.startsWith('/admin/password-') ? 'active' : '' %>" href="/admin/password"><%- icon('settings') %><%= t('पासवर्ड', 'Password') %></a>

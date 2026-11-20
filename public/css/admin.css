@@ -116,3 +116,4 @@ body.panel { background: var(--bg); }
 .readonly-value { background: var(--surface-2); color: var(--muted); }
 .list-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .toolbar .select { width: auto; }
+.cred-logo { vertical-align: -2px; border-radius: 3px; }

@@ -27,6 +27,7 @@ const EXTRA = [
   ['member_portal', ['सदस्य पोर्टल अनुरोध', 'Member portal requests'], 'members', ['/member-portal']],
   ['settings', ['सेटिङ', 'Settings'], 'system', ['/settings']],
   ['admin_users', ['प्रशासक प्रयोगकर्ता', 'Admin users'], 'system', ['/users']],
+  ['credentials', ['कार्यालय पासवर्ड', 'Office credentials'], 'system', ['/credentials']],
   ['theme', ['रूप / थिम', 'Theme'], 'system', ['/theme']],
   ['notifications', ['SMS/इमेल/Push', 'SMS / email / push'], 'system', ['/notifications']],
   ['license', ['सेवा नवीकरण', 'Licence'], 'system', ['/license']],
@@ -46,7 +47,7 @@ const ALIASES = [
   ['/files/_private/reports', 'r:reports'],
 ];
 // never grantable (requireAdmin('superadmin') guards them as well)
-const SUPER_ONLY = ['/security', '/roles', '/menu-control', '/domains', '/integrations', '/credentials', '/system', '/backup', '/error-log'];
+const SUPER_ONLY = ['/security', '/roles', '/menu-control', '/domains', '/integrations', '/system', '/backup', '/error-log'];
 
 const GROUP_LABELS = {
   applications: ['आवेदन तथा अनुरोध', 'Applications'], members: ['सदस्य', 'Members'],
