@@ -453,6 +453,15 @@ test('EMI: loan-rate presets, years unit, yearly summary with BS months, input b
   assert.equal((r.text.match(/<tr><td>/g) || []).length, 360, 'tenure capped at 360');
 });
 
+// ---------------------------------------------------------------- P2-10 programmes page
+test('programmes: upcoming / past tabs, stats, how it works', async () => {
+  await inA(() => db.query("INSERT INTO upcoming_programs (title, event_date, is_active) VALUES ('Old training', CURRENT_DATE - 30, 1), ('Next AGM', CURRENT_DATE + 10, 1)"));
+  let r = await get('/programs');
+  assert.ok(r.text.includes('Next AGM') && !r.text.includes('Old training') && r.text.includes('steps-3'));
+  r = await get('/programs?tab=past');
+  assert.ok(r.text.includes('Old training') && !r.text.includes('Next AGM</h3>'));
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');
