@@ -124,3 +124,11 @@ test('auction bid: open window, minimum price, mobile, 24 h duplicate, BID track
   assert.match(tr.text, new RegExp(row.tracking_id));
   assert.match(tr.text, /Bidder/);
 });
+
+// ---------------------------------------------------------------- P1-5 tracker: assigned Member ID
+test('tracker shows the Member ID assigned to an approved membership request, with a KYM link', async () => {
+  await inA(() => db.query("INSERT INTO membership_applications (tracking_id, full_name, mobile, address, status, assigned_sadasyata) VALUES ('MB-TEST-AS1', 'New Person', '9841222333', 'Ktm', 'approved', 'M-777')"));
+  const r = await client().get('/track?id=MB-TEST-AS1&phone=9841222333');
+  assert.match(r.text, /M-777/);
+  assert.match(r.text, /href="\/apply\/kyc"/);
+});
