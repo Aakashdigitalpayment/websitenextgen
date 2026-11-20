@@ -52,9 +52,9 @@ const hooks = {
   /** career-detail.php: the position takes online applications (active, allowed, before the deadline); one application per email / phone. */
   async job(ctx) {
     const d = ctx.data;
-    const c = await db.one(`SELECT id FROM careers WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(allow_online_apply, 1) = 1
-                            AND (deadline IS NULL OR deadline >= CURRENT_DATE)`, [Number(d.career_id) || 0]);
-    if (!c) return fail(ctx.lang, ['यस पदको अनलाइन आवेदन बन्द छ।', 'Online applications for this position are closed.'], 'career_id');
+    const c = await db.one(`SELECT id, deadline FROM careers WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(allow_online_apply, 1) = 1`, [Number(d.career_id) || 0]);
+    const left = c ? require('./nepali-date').daysUntil(c.deadline) : null; // BS deadlines typed into the DATE column count as BS
+    if (!c || (left !== null && left < 0)) return fail(ctx.lang, ['यस पदको अनलाइन आवेदन बन्द छ।', 'Online applications for this position are closed.'], 'career_id');
     if (d.email) d.email = String(d.email).trim().toLowerCase();
     const dup = await db.value(`SELECT 1 FROM job_applications WHERE career_id = $1 AND deleted_at IS NULL AND (lower(email) = $2 OR ${require('./member-portal').phoneDigitsSql('phone')} = $3) LIMIT 1`,
       [c.id, d.email || '-', kym.normalizeMobile(d.phone).slice(-10) || '-']);

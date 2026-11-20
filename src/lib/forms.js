@@ -79,9 +79,10 @@ const optionSources = {
     return rows.map(r => [String(r.id), r.name_np, r.name_en || r.name_np, { requires_nominee: !!Number(r.requires_nominee), requires_document: !!Number(r.requires_document), programs: r.programs.map(String) }]);
   },
   async careers({ admin } = {}) {
-    const rows = await db.many(admin ? 'SELECT id, title, title_np FROM careers ORDER BY id DESC LIMIT 500' : `SELECT id, title, title_np FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND COALESCE(allow_online_apply, 1) = 1
-                                AND (deadline IS NULL OR deadline >= CURRENT_DATE) ORDER BY id DESC`);
-    return rows.map(r => [String(r.id), r.title_np || r.title, r.title || r.title_np]);
+    const rows = await db.many(admin ? 'SELECT id, title, title_np FROM careers ORDER BY id DESC LIMIT 500' : `SELECT id, title, title_np, deadline FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND COALESCE(allow_online_apply, 1) = 1
+                                ORDER BY id DESC`);
+    // open = no deadline or deadline today or later; a BS date typed into the DATE column counts as BS (nd.daysUntil)
+    return rows.filter(r => admin || (d => d === null || d >= 0)(nd.daysUntil(r.deadline))).map(r => [String(r.id), r.title_np || r.title, r.title || r.title_np]);
   },
   async districts() { return DISTRICTS.map(d => [d, d, d]); },
   /** getOfficeTimeOptions(): office_time_start … office_time_end every 30 minutes, values like PHP ('10:00 AM'). */
@@ -368,7 +369,7 @@ const STATUS_LABELS = {
   confirmed: ['निश्चित', 'Confirmed'], cancelled: ['रद्द', 'Cancelled'], resolved: ['समाधान', 'Resolved'], closed: ['बन्द', 'Closed'],
   reviewed: ['हेरियो', 'Reviewed'], shortlisted: ['छनोट सूचीमा', 'Shortlisted'], interviewed: ['अन्तर्वार्ता', 'Interviewed'],
   selected: ['छनोट', 'Selected'], under_review: ['समीक्षामा', 'Under review'], accepted: ['स्वीकार', 'Accepted'],
-  expired: ['म्याद सकियो', 'Expired'], paid: ['भुक्तानी भयो', 'Paid'], withdrawn: ['फिर्ता', 'Withdrawn'], cleared: ['फछ्र्यौट', 'Cleared'],
+  expired: ['म्याद सकियो', 'Expired'], withdrawn: ['फिर्ता', 'Withdrawn'], cleared: ['फछ्र्यौट', 'Cleared'],
 };
 const statusLabel = (s, lang = 'np') => (STATUS_LABELS[s] ? STATUS_LABELS[s][lang === 'en' ? 1 : 0] : s);
 
