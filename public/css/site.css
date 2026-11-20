@@ -126,3 +126,6 @@
 .emi-bar-p { background: var(--brand); }
 .emi-table { max-height: 480px; overflow: auto; }
 @media print { .emi-table { max-height: none; overflow: visible; } }
+
+.ft { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; background: var(--surface-2); color: var(--muted); flex: none; }
+.ft-pdf { background: var(--bad-soft); color: var(--bad); } .ft-doc { background: var(--info-soft); color: var(--info); } .ft-xls { background: var(--ok-soft); color: var(--ok); } .ft-img { background: var(--warn-soft); color: var(--warn); }

@@ -268,7 +268,7 @@ function createApp() {
   // 404
   app.use((req, res) => {
     res.status(404).render(req.path.startsWith('/admin') && req.admin ? 'admin/error' : 'public/error',
-      { title: 'Not found', code: 404, message: res.locals.t('तपाईंले खोजेको पृष्ठ भेटिएन।', 'The page you are looking for was not found.') });
+      { title: res.locals.t ? res.locals.t('पृष्ठ भेटिएन', 'Page not found') : 'Not found', code: 404, message: res.locals.t('तपाईंले खोजेको पृष्ठ भेटिएन।', 'The page you are looking for was not found.') });
   });
 
   // errors

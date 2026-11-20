@@ -3,7 +3,7 @@
   <% if (!centers.length) { %><div class="empty"><%= t('शाखा विवरण चाँडै राखिनेछ।', 'Branch details coming soon.') %></div><% } %>
   <div class="grid grid-3"><% centers.forEach(c => { %>
     <div class="card">
-      <div class="flex justify-between items-center"><h3 class="mb-0"><%= f(c, 'name') %></h3><% if (c.is_main_branch) { %><span class="badge badge-brand"><%= t('मुख्य कार्यालय', 'Head office') %></span><% } %></div>
+      <div class="flex justify-between items-center"><div><h3 class="mb-0"><%= f(c, 'name') %></h3><% const other = lang === 'en' ? c.name_np : (c.name_en || (c.name !== c.name_np ? c.name : '')); if (other && other !== f(c, 'name')) { %><div class="small faint"><%= other %></div><% } %></div><span class="badge <%= Number(c.is_main_branch) ? 'badge-brand' : '' %>"><%= Number(c.is_main_branch) ? t('प्रधान कार्यालय', 'Head office') : t('सेवा केन्द्र', 'Service centre') %></span></div>
       <ul class="list mt-1 small">
         <% if (c.address) { %><li class="flex gap-1" style="padding:6px 0"><%- icon('pin') %><%= c.address %></li><% } %>
         <% if (c.phone) { %><li class="flex gap-1" style="padding:6px 0"><%- icon('phone') %><a href="tel:<%= c.phone %>"><%= c.phone %></a></li><% } %>

@@ -462,6 +462,26 @@ test('programmes: upcoming / past tabs, stats, how it works', async () => {
   assert.ok(r.text.includes('Old training') && !r.text.includes('Next AGM</h3>'));
 });
 
+// ---------------------------------------------------------------- P3 polish
+test('P3: auction status translated with chips, download category labels and counts, branch role badge, localised 404 with links', async () => {
+  await inA(async () => {
+    await db.query("INSERT INTO auction_notices (title, status, is_active) VALUES ('Land A', 'ongoing', 1), ('Car B', 'completed', 1)");
+    await db.query("INSERT INTO downloads (title, file_path, category, download_count, is_active) VALUES ('Loan form', 'downloads/f.pdf', 'forms', 7, 1)");
+    await db.query("INSERT INTO service_centers (name, name_np, is_main_branch, is_active) VALUES ('Branch X', 'शाखा क', 0, 1)");
+  });
+  let r = await get('/auctions');
+  assert.ok(r.text.includes('चालु') && r.text.includes('?status=completed'));
+  r = await get('/auctions?status=completed');
+  assert.ok(r.text.includes('Car B') && !r.text.includes('Land A'));
+  r = await get('/downloads');
+  assert.ok(r.text.includes('फारमहरू') && r.text.includes('७ पटक डाउनलोड') && r.text.includes('ft-pdf'));
+  r = await get('/service-centers');
+  assert.ok(r.text.includes('सेवा केन्द्र'));
+  r = await get('/no-such-page-here');
+  assert.equal(r.status, 404);
+  assert.ok(r.text.includes('पृष्ठ भेटिएन') && r.text.includes('href="/interest-rates"'));
+});
+
 // ---------------------------------------------------------------- P2-1 header
 test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
   await setting('internet_banking_url', 'https://ebank.example.com');

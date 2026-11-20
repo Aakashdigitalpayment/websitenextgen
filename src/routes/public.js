@@ -592,8 +592,9 @@ router.get('/careers/:id', ah(async (req, res, next) => {
 }));
 
 router.get('/auctions', ah(async (req, res) => {
-  const items = await db.many(`SELECT * FROM auction_notices WHERE ${ACTIVE} ORDER BY CASE status WHEN 'ongoing' THEN 1 WHEN 'upcoming' THEN 2 ELSE 3 END, auction_date DESC NULLS LAST, id DESC`);
-  res.render('public/auctions', { title: res.locals.t('लिलाम सूचना', 'Auction notices'), items });
+  const all = await db.many(`SELECT * FROM auction_notices WHERE ${ACTIVE} ORDER BY CASE status WHEN 'ongoing' THEN 1 WHEN 'upcoming' THEN 2 ELSE 3 END, auction_date DESC NULLS LAST, id DESC`);
+  const status = ['ongoing', 'upcoming', 'completed', 'cancelled'].includes(req.query.status) ? req.query.status : '';
+  res.render('public/auctions', { title: res.locals.t('लिलाम सूचना', 'Auction notices'), all, items: status ? all.filter(a => a.status === status) : all, status });
 }));
 
 router.get('/auctions/:id', ah(async (req, res, next) => {

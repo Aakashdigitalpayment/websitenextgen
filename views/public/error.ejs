@@ -4,5 +4,13 @@
     <h1><%= title %></h1>
     <p class="muted"><%= message %></p>
     <a class="btn btn-primary mt-2" href="/"><%= t('गृहपृष्ठमा जानुहोस्', 'Go to home') %></a>
+    <% if (Number(locals.code) === 404) { %>
+    <form class="flex gap-1 mt-3" method="get" action="/search" role="search"><input class="input grow" type="search" name="q" minlength="2" maxlength="80" placeholder="<%= t('साइटमा खोज्नुहोस्', 'Search the site') %>" aria-label="<%= t('खोज', 'Search') %>"><button class="btn btn-outline"><%- icon('search') %></button></form>
+    <div class="grid grid-3 mt-3 small">
+      <% [['/services', 'wallet', t('सेवाहरू', 'Services')], ['/notices', 'bell', t('सूचना', 'Notices')], ['/interest-rates', 'percent', t('ब्याजदर', 'Interest rates')], ['/apply/loan', 'banknote', t('ऋण आवेदन', 'Loan application')], ['/contact', 'phone', t('सम्पर्क', 'Contact')], ['/downloads', 'download', t('डाउनलोड', 'Downloads')]].filter(l => !locals.plan || plan.allows(l[0])).forEach(l => { %>
+        <a class="card card-link card-flat" href="<%= l[0] %>"><span class="icon-tile"><%- icon(l[1]) %></span><%= l[2] %></a>
+      <% }) %>
+    </div>
+    <% } %>
   </div>
 </section>
