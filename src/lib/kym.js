@@ -322,11 +322,25 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
     if (status === 'approved' || status === 'rejected') status = 'pending';
   } else {
     const { want_id_card: wantCard, ...mergeable } = row; // the card request is always taken as posted
-    const { merged, filled, blocked } = mergeFillEmpty(existing, mergeable);
+    // AML/CFT details live in one JSON column: fill empty keys one by one instead of all-or-nothing
+    let amlMerged = null, amlFilled = 0;
+    if (mod.amlCol && mergeable[mod.amlCol] && existing[mod.amlCol]) {
+      const parse = v => { try { const o = JSON.parse(v); return o && typeof o === 'object' ? o : {}; } catch { return {}; } };
+      const ex = parse(existing[mod.amlCol]), inc = parse(mergeable[mod.amlCol]);
+      for (const [key, val] of Object.entries(inc)) {
+        const empty = ex[key] == null || ex[key] === '' || (Array.isArray(ex[key]) && !ex[key].length);
+        if (empty && val != null && val !== '' && !(Array.isArray(val) && !val.length)) { ex[key] = val; amlFilled++; }
+      }
+      delete mergeable[mod.amlCol];
+      if (amlFilled) amlMerged = JSON.stringify(ex);
+    }
+    const m0 = mergeFillEmpty(existing, mergeable);
+    const merged = m0.merged, blocked = m0.blocked, filled = m0.filled + amlFilled;
+    if (amlMerged) merged[mod.amlCol] = amlMerged;
     if (filled < 1 && blocked > 0) {
       return err('नयाँ खाली field भेटिएन — पहिले भरिएको डेटा public बाट फेर्न मिल्दैन। परिवर्तनका लागि पोर्टल लगइन गर्नुहोस्।', 'Nothing new to add — existing fields stay locked on the public form. Log in to the member portal to request changes.');
     }
-    update = Object.fromEntries(Object.keys(mergeable).filter(k => merged[k] !== existing[k]).map(k => [k, merged[k]]));
+    update = Object.fromEntries(Object.keys(merged).filter(k => k in row && merged[k] !== existing[k]).map(k => [k, merged[k]]));
     update.want_id_card = wantCard;
     if (filled > 0) {
       if (status === 'rejected' || status === 'approved') status = 'pending';

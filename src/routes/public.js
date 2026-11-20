@@ -447,9 +447,71 @@ const prefillFromMember = (member, mod) => {
   return v;
 };
 
+// ---------------------------------------------------------------- public KYM: verify first (online-kyc.php public_kym_verify)
+const KYM_GATE_TTL = 2 * 3600_000;
+const KYM_LOCKABLE = new Set([undefined, 'text', 'email', 'tel', 'select', 'radio', 'bsdate', 'date', 'textarea', 'geo', 'number', 'url', 'address']);
+/** Member ID + mobile verified in this session (2 h, this tenant only). */
+function kymGate(req) {
+  const g = req.session.kymGate;
+  return g && g.tenantId === req.tenant.id && Date.now() - g.at <= KYM_GATE_TTL ? g : null;
+}
+/** Stored KYM values of the verified Member ID; non-empty ones are locked on the public form (memberSsotPrefillEmptyOnlyFromKyc). */
+async function kymLocked(gate) {
+  const own = await kym.findKycByMemberId(gate.memberId, true);
+  const stored = own ? forms.rowToValues(modules.kyc, own) : {};
+  const locked = new Set(['member_id', 'mobile']);
+  for (const f of modules.kyc.fields) if (KYM_LOCKABLE.has(f.type) && String(stored[f.name] ?? '').trim() !== '') locked.add(f.name);
+  stored.member_id = gate.memberId;
+  stored.mobile = gate.mobile;
+  return { own, stored, locked };
+}
+/** Server-side values for every locked field (address parts included): what is on file is never taken from the POST. */
+function lockedBody(body, stored, locked) {
+  const out = { ...body };
+  for (const f of modules.kyc.fields) {
+    if (!locked.has(f.name)) continue;
+    out[f.name] = stored[f.name];
+    if (f.type === 'address') for (const k of ['province', 'district', 'municipality', 'ward', 'tole']) out[f.prefix + '_' + k] = stored[f.prefix + '_' + k] ?? '';
+    if (f.sameAs) delete out[f.sameAs.toggle];
+  }
+  return out;
+}
+function renderKymGate(req, res, { error = null, values = {}, status = 200 } = {}) {
+  res.status(status).render('public/kyc-gate', { title: res.locals.t(...modules.kyc.title), mod: modules.kyc, error, values });
+}
+const gateLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip),
+  handler: (req, res) => renderKymGate(req, res, { status: 429, error: res.locals.t('धेरै पटक प्रयास भयो। केही समयपछि फेरि प्रयास गर्नुहोस्।', 'Too many attempts. Please try again later.') }) });
+router.post('/apply/kyc/verify', gateLimiter, ah(async (req, res) => {
+  if (req.member) return res.redirect('/apply/kyc');
+  const values = { member_id: String(req.body.member_id || '').slice(0, 50), mobile: String(req.body.mobile || '').slice(0, 20) };
+  if (isBot(req)) return renderKymGate(req, res, { values });
+  const auth = require('../lib/auth');
+  const key = 'kycgate:' + (kym.normalizeId(values.member_id) || '-');
+  if (await auth.tooManyAttempts(key, req.ip)) return renderKymGate(req, res, { status: 429, values, error: res.locals.t('धेरै पटक गलत प्रयास भयो। १५ मिनेटपछि फेरि प्रयास गर्नुहोस्।', 'Too many failed attempts. Try again in 15 minutes.') });
+  const g = await kym.requireMemberIdAndMobile(values.member_id, values.mobile);
+  if (!g.ok) {
+    await auth.recordFailure(key, req.ip);
+    return renderKymGate(req, res, { status: 422, values, error: res.locals.t(...g.error) });
+  }
+  await auth.clearFailures(key, req.ip);
+  req.session.kymGate = { memberId: kym.normalizeId(values.member_id), mobile: kym.normalizeMobile(values.mobile), at: Date.now(), tenantId: req.tenant.id };
+  res.redirect('/apply/kyc?verified=1');
+}));
+router.post('/apply/kyc/reset', (req, res) => { delete req.session.kymGate; res.redirect('/apply/kyc'); });
+
 async function renderForm(req, res, mod, values = {}, errors = {}, status = 200) {
   const options = await forms.resolveOptions(mod);
   let existingDocs = {};
+  let locked = null, lockedValues = null;
+  if (mod.key === 'kyc' && !req.member) {
+    const gate = kymGate(req);
+    if (!gate) return renderKymGate(req, res, { status: status === 200 ? 200 : 403, error: status === 200 ? null : res.locals.t('पहिले सदस्यता नम्बर र मोबाइल प्रमाणित गर्नुहोस्।', 'Please verify your Member ID and mobile first.') });
+    const k = await kymLocked(gate);
+    if (k.own) existingDocs = Object.fromEntries(kym.DOC_KEYS.map(d => [d, !!k.own[d]]));
+    values = status === 200 ? { ...k.stored, ...values } : lockedBody(values, k.stored, k.locked);
+    locked = k.locked;
+    lockedValues = k.stored;
+  }
   if (mod.key === 'kyc' && req.member) {
     const own = await kym.loadLinkedKyc(req.member);
     if (own) {
@@ -474,7 +536,7 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
   res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...(mod.memberGate ? {} : prefillFromMember(req.member, mod)), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number,
-    identity, kycStatus, skipFields });
+    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked });
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {
@@ -487,11 +549,20 @@ const SPAM_SCAN = ['grievance', 'feedback', 'appointment', 'survey'];
 router.post('/apply/:key', submitLimiter, (req, res, next) => {
   const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   if (!mod || mod.key === 'contact') return next();
+  if (mod.key === 'kyc' && !req.member && !kymGate(req)) {
+    return renderKymGate(req, res, { status: 403, error: res.locals.t('पहिले सदस्यता नम्बर र मोबाइल प्रमाणित गर्नुहोस्।', 'Please verify your Member ID and mobile first.') });
+  }
   const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind })), { private: true }) : [];
   let i = 0;
   const step = err => (err ? next(err) : i < chain.length ? chain[i++](req, res, step) : handle());
   const handle = () => (async () => {
     if (isBot(req)) return res.redirect('/');
+    if (mod.key === 'kyc' && !req.member) {
+      const gate = kymGate(req);
+      if (!gate) return renderForm(req, res, mod, {}, { _upload: 'gate' }, 403);
+      const k = await kymLocked(gate);
+      req.body = lockedBody(req.body, k.stored, k.locked);
+    }
     const scan = SPAM_SCAN.includes(mod.key) ? mod.fields.filter(f => f.type === 'textarea' || f.name === 'subject').map(f => req.body[f.name]) : [];
     const block = await antispam.check(req, res.locals.settings, scan);
     if (block && block.silent) return res.redirect('/');
@@ -524,6 +595,7 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
       notify.later(() => notify.adminEvent(mod, { name: row[mod.nameCol], details: submissions.details(mod, row, options) }));
     }
     req.session.lastSubmission = { module: mod.key, tracking: row.tracking_id || null, notice: out.notice || null };
+    if (mod.key === 'kyc') delete req.session.kymGate;
     res.redirect(`/apply/${mod.key}/done`);
   })().catch(next);
   step();

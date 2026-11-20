@@ -184,10 +184,15 @@ test('online KYM: Member ID + mobile gate, insert, public fill-empty update, adm
     if (files) for (const f of ['photo', 'citizenship_front', 'citizenship_back', 'signature']) r = r.attach(f, JPG, f + '.jpg');
     return r;
   };
+  // the public form needs Member ID + mobile verified first
+  let r = await post(fields);
+  assert.equal(r.status, 403, 'no verified Member ID in this session');
   // wrong mobile for the Member ID
-  let r = await post({ ...fields, mobile: '9841999999' });
+  r = await c.form('/apply/kyc/verify', { member_id: 'a-100', mobile: '9841999999' }, '/apply/kyc');
   assert.equal(r.status, 422);
   assert.match(r.text, /do not match|मिलेन/);
+  r = await c.form('/apply/kyc/verify', { member_id: 'a-100', mobile: '9841111111' }, '/apply/kyc');
+  assert.equal(r.status, 302);
   r = await post(fields);
   assert.equal(r.status, 302, r.text.slice(0, 300));
   const k = await inA(() => db.one("SELECT * FROM kyc_applications WHERE member_id = 'A-100'"));
@@ -197,7 +202,9 @@ test('online KYM: Member ID + mobile gate, insert, public fill-empty update, adm
   assert.ok(k.photo.startsWith('_private/'));
   const member = await inA(() => db.one("SELECT * FROM members WHERE sadasyata_number = 'A-100'"));
   assert.equal(member.kyc_application_id, k.id, 'linked on write');
-  // second public submit only fills empty fields
+  // second public submit only fills empty fields (verified again: a successful submit ends the verification)
+  r = await c.form('/apply/kyc/verify', { member_id: 'A-100', mobile: '9841111111' }, '/apply/kyc');
+  assert.equal(r.status, 302);
   r = await post({ ...fields, full_name: 'Changed', grandfather_name: 'x', occupation: 'agriculture' }, false);
   assert.equal(r.status, 302);
   const k2 = await inA(() => db.one('SELECT * FROM kyc_applications WHERE id = $1', [k.id]));
@@ -309,7 +316,12 @@ test('every module: public form, admin list, detail, print and export render', a
 });
 
 test('public pages: KYM form renders address cascade + date picker hooks, form data script served', async () => {
-  const r = await request(app).get('/apply/kyc').set('Host', HA);
+  const gate = await request(app).get('/apply/kyc').set('Host', HA);
+  assert.match(gate.text, /action="\/apply\/kyc\/verify"/, 'verify-first gate');
+  const c = client();
+  await inA(() => db.query("INSERT INTO members (name, phone, sadasyata_number, approval_status, is_active) VALUES ('Fresh', '9841111222', 'A-300', 'approved', 1)"));
+  assert.equal((await c.form('/apply/kyc/verify', { member_id: 'A-300', mobile: '9841111222' }, '/apply/kyc')).status, 302);
+  const r = await c.get('/apply/kyc');
   assert.equal(r.status, 200);
   assert.match(r.text, /data-address="permanent"/);
   assert.match(r.text, /data-bsdate/);

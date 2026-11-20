@@ -11,9 +11,25 @@
   const arr = v => [].concat(v ?? []).map(x => String(x ?? ''));
   const hint = fl.hint ? (Array.isArray(fl.hint) ? t(fl.hint[0], fl.hint[1]) : fl.hint) : '';
   const lockedMember = fl.name === 'member_id' && locals.lockMemberId;
+  // public KYM after Member ID + mobile verification: values on file are shown, not posted (the server uses the stored ones)
+  const isLocked = !!(locals.locked && locked.has(fl.name));
+  const SENSITIVE = ['citizenship_no', 'national_id_number', 'passport_no', 'pan_no', 'driving_license_no', 'voter_id_card_no', 'nominee_citizenship_no', 'business_pan_no', 'dob_bs', 'nominee_dob'];
+  const shownLocked = () => {
+    const raw = String((locals.lockedValues || {})[fl.name] ?? '');
+    if (SENSITIVE.includes(fl.name)) return raw.length > 3 ? '•'.repeat(Math.min(8, raw.length - 2)) + raw.slice(-2) : '•••';
+    if (fl.type === 'email') { const [u, d] = raw.split('@'); return d ? u.slice(0, 2) + '•••@' + d : raw; }
+    const o = opts.find(x => String(x[0]) === raw);
+    return o ? t(o[1], o[2]) : raw;
+  };
 %>
 <% if (fl.type === 'heading') { %>
 <div class="span-2 form-subhead" <%- showAttrs %>><%= label %></div>
+<% } else if (isLocked) { %>
+<div class="field <%= wide ? 'span-2' : '' %>" <%- showAttrs %> data-locked>
+  <label><%= label %></label>
+  <div class="locked-value"><%- icon('shield') %><%= shownLocked() %></div>
+  <div class="field-hint"><%= t('पहिले भरिएको — परिवर्तनका लागि पोर्टल लगइन गर्नुहोस्', 'Already on file — log in to the portal to change it') %></div>
+</div>
 <% } else { %>
 <div class="field <%= wide ? 'span-2' : '' %> <%= err ? 'has-error' : '' %>" <%- showAttrs %> <%- reqAttrs %>>
   <% if (fl.type === 'checkbox') { %>

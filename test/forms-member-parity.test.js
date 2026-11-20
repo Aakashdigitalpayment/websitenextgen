@@ -197,3 +197,36 @@ test('signed-in member: identity fields are read-only and come from the server',
   const mine = await c.get('/member/requests');
   assert.match(mine.text, new RegExp(row.tracking_id));
 });
+
+// ---------------------------------------------------------------- P1-2 public KYM: verify first, locked fields
+test('public KYM: verify-first gate, values on file are locked and masked, only empty fields are filled', async () => {
+  const { k } = await seedMember('K-100', '9841700001', { kycStatus: 'approved' });
+  await inA(() => db.query(`UPDATE kyc_applications SET aml_details_json = '{"pan_no":"PAN-1"}', photo = 'x/p.jpg', citizenship_front = 'x/f.jpg', citizenship_back = 'x/b.jpg', signature = 'x/s.jpg', risk_category = 'low' WHERE id = $1`, [k.id]));
+  const c = client();
+  let r = await c.get('/apply/kyc');
+  assert.match(r.text, /apply\/membership/, 'path selector links to membership');
+  r = await c.form('/apply/kyc/verify', { member_id: 'K-100', mobile: '9841700009' }, '/apply/kyc');
+  assert.equal(r.status, 422);
+  r = await c.form('/apply/kyc/verify', { member_id: 'k-100', mobile: '+977-9841700001' }, '/apply/kyc');
+  assert.equal(r.status, 302);
+  r = await c.get('/apply/kyc');
+  assert.match(r.text, /data-locked/);
+  assert.match(r.text, /केवाइसी K-100/, 'name on file is shown');
+  assert.doesNotMatch(r.text, /11-22-333/, 'citizenship number is masked');
+  assert.match(r.text, /•+33/);
+  assert.doesNotMatch(r.text, /name="full_name"/, 'locked field is not an input');
+  assert.match(r.text, /name="occupation"/, 'empty field stays editable');
+  r = await c.multipart('/apply/kyc', { member_id: 'X-999', mobile: '9800000000', full_name: 'Changed', citizenship_no: '99', occupation: 'agriculture', pan_no: 'PAN-2', passport_no: 'P-77', email: 'x@y.co', risk_category: 'high', declaration: '1', permanent_address: 'Somewhere' });
+  assert.equal(r.status, 302, errs(r));
+  const after = await inA(() => db.one('SELECT * FROM kyc_applications WHERE id = $1', [k.id]));
+  assert.equal(after.full_name, 'केवाइसी K-100');
+  assert.equal(after.citizenship_no, '11-22-333');
+  assert.equal(after.member_id, 'K-100');
+  assert.equal(after.occupation, 'agriculture');
+  const aml = JSON.parse(after.aml_details_json);
+  assert.equal(aml.pan_no, 'PAN-1', 'existing AML value kept');
+  assert.equal(aml.passport_no, 'P-77', 'empty AML key filled');
+  // the verification ends with the submission
+  r = await c.get('/apply/kyc');
+  assert.match(r.text, /action="\/apply\/kyc\/verify"/);
+});
