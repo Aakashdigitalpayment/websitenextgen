@@ -595,6 +595,14 @@ async function settingsPage(req, res, { tab, errors = {}, posted = null, status 
     oauthRedirect: `${req.protocol}://${req.get('host')}/member/oauth/google/callback`, facebookRedirect: `${req.protocol}://${req.get('host')}/member/oauth/facebook/callback`,
   });
 }
+// ai-settings.php: test the saved AI provider / model / key
+router.post('/settings/ai-test', requireAdmin('admin'), ah(async (req, res) => {
+  const r = await require('../lib/ai-chat').testConnection();
+  await auth.audit(req, 'ai_test', 'settings', null, `AI connection test (${r.provider}/${r.model}): ${r.ok ? 'OK' : 'failed'}`);
+  if (r.ok) flash(req, 'success', res.locals.t(`जडान ठीक छ (${r.provider}/${r.model}): ${r.text}`, `Connection OK (${r.provider}/${r.model}): ${r.text}`));
+  else flash(req, 'error', res.locals.t(`जडान असफल (${r.provider}/${r.model}): ${r.error}`, `Connection failed (${r.provider}/${r.model}): ${r.error}`));
+  res.redirect('/admin/settings?tab=ai');
+}));
 router.get('/settings', requireAdmin('admin'), ah((req, res) => settingsPage(req, res, { tab: String(req.query.tab || 'general') })));
 
 router.post('/settings', requireAdmin('admin'), (req, res, next) => {

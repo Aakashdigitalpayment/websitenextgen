@@ -435,3 +435,23 @@ test('B-7: resource lists with an active switch get bulk activate / deactivate (
   assert.equal(r.status, 302);
   assert.equal(Number(await inA(() => db.value('SELECT count(*) FROM faqs WHERE id = ANY($1::int[]) AND is_active = 0', [ids]))), 2);
 });
+
+// ---------------------------------------------------------------- B-5 AI connection test
+test('B-5: AI connection test button reports the provider result (or the missing key) and is audited', async () => {
+  const c = await adminClient();
+  const page = await c.get('/admin/settings?tab=ai');
+  assert.match(page.text, /action="\/admin\/settings\/ai-test"/);
+  let r = await c.form('/admin/settings/ai-test', {}, '/admin/settings?tab=ai');
+  assert.equal(r.status, 302);
+  assert.match((await c.get('/admin/settings?tab=ai')).text, /API key is not set/);
+  const ai = require('../src/lib/ai-chat');
+  const realFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'OK' } }] }) });
+  try {
+    await inA(async () => { const st = require('../src/lib/settings'); await st.set('ai_provider', 'openai'); await st.set('ai_api_key', 'sk-test'); st.invalidate(); });
+    const out = await inA(() => ai.testConnection());
+    assert.equal(out.ok, true);
+    assert.equal(out.text, 'OK');
+  } finally { global.fetch = realFetch; }
+  assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'ai_test' LIMIT 1")));
+});
