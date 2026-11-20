@@ -192,3 +192,32 @@ test('institutional profile: latest 2 by default, FY / month filters, growth chi
   r = await get('/institutional-profile?all=1');
   assert.equal((r.text.match(/class="card ip-card"/g) || []).length, 4, 'members-only stays hidden');
 });
+
+// ---------------------------------------------------------------- P1-3 about, P1-4 vision, P2-11 stories
+test('about: body from pages(slug about), history, default values, board chart; vision in English; story help box', async () => {
+  await inA(async () => {
+    await db.query("INSERT INTO pages (slug, title, content, content_np, is_active) VALUES ('about', 'About', '<p>English body</p>', '<p>नेपाली परिचय</p>', 1)");
+    await db.query("INSERT INTO team_members (name, position, category, is_active, display_order) VALUES ('Board Chair', 'Chairman', 'board', 1, 1), ('Board Member', 'Member', 'board', 1, 2)");
+    await db.query("INSERT INTO member_success_stories (member_name, headline_np, story_np, institution_help_np, member_since, is_active) VALUES ('Sita', 'कथा', 'कथा', 'ऋणले सहयोग गर्‍यो', '2070', 1)");
+  });
+  await setting('history_content_np', '<p>स्थापना इतिहास</p>');
+  await setting('total_members', '5000');
+  await setting('vision_content_np', 'नेपाली दृष्टि');
+  await setting('vision_content_en', 'English vision');
+  await setting('vision_content_title_en', 'Where we are going');
+  await clearCaches();
+  let r = await get('/about');
+  assert.ok(r.text.includes('नेपाली परिचय'));
+  assert.ok(r.text.includes('id="history"') && r.text.includes('स्थापना इतिहास'));
+  assert.ok(r.text.includes('id="values"') && r.text.includes('पारदर्शिता'), 'default value cards');
+  assert.ok(r.text.includes('id="board"') && r.text.includes('Board Chair'));
+  assert.ok(r.text.includes('/success-stories'));
+  r = await get('/about?lang=en');
+  assert.ok(r.text.includes('English body'));
+  r = await get('/vision-mission?lang=en');
+  assert.ok(r.text.includes('English vision') && r.text.includes('Where we are going'));
+  r = await get('/vision-mission');
+  assert.ok(r.text.includes('नेपाली दृष्टि'));
+  r = await get('/success-stories');
+  assert.ok(r.text.includes('ऋणले सहयोग गर्‍यो') && r.text.includes('२०७०'));
+});

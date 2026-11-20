@@ -88,4 +88,22 @@ async function navCategories() {
   return db.many('SELECT slug, name_np, name_en FROM team_menu_categories WHERE is_active = 1 AND show_in_nav = 1 ORDER BY display_order, id LIMIT 20');
 }
 
-module.exports = { chartRow, chartRows, usesChart, isBoardAlias, load, sections, navCategories };
+/**
+ * Chairman / CEO for the home leadership block, /message/:who and the chat's instant answers
+ * (leadership-message-helpers.php): settings first (name / photo / designation, NP + EN), then the team member flagged is_chairman / is_ceo.
+ */
+async function leader(who, s, lang, person) {
+  if (who !== 'chairman' && who !== 'ceo') return null;
+  const en = lang === 'en';
+  if (person === undefined) person = await db.one(`SELECT * FROM team_members WHERE is_active = 1 AND ${who === 'chairman' ? 'is_chairman' : 'is_ceo'} = 1 ORDER BY display_order, id LIMIT 1`);
+  const get = (k, dflt = '') => String(s[k] || '').trim() || dflt;
+  const pick = (np, enKey) => (en ? get(enKey) || get(np) : get(np) || get(enKey));
+  const pf = f => (person ? (en ? person[f + '_en'] || person[f] || person[f + '_np'] : person[f + '_np'] || person[f] || person[f + '_en']) || '' : '');
+  const designation = (en ? get(`${who}_designation_en`) : get(`${who}_designation_np`)) || pf('position')
+    || (who === 'chairman' ? (en ? 'Chairman' : 'अध्यक्ष') : (en ? 'Chief Executive Officer' : 'प्रमुख कार्यकारी अधिकृत'));
+  const message = en ? get(`${who}_message_en`) || get(`${who}_message_np`) || get(`${who}_message`) : get(`${who}_message_np`) || get(`${who}_message`) || get(`${who}_message_en`);
+  const name = pick(`${who}_name`, `${who}_name_en`) || pf('name');
+  return { who, name, designation, message, photo: get(`${who}_photo`) || person?.photo || '', phone: person?.phone || '', email: person?.email || '', person, href: '/message/' + who };
+}
+
+module.exports = { chartRow, chartRows, usesChart, isBoardAlias, load, sections, navCategories, leader };

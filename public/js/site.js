@@ -77,6 +77,14 @@
     dots.forEach((d, n) => d.addEventListener('click', () => show(n)));
   }
 
+  // ---------------------------------------------------------------- legacy about.php#anchors → their own pages
+  if (location.pathname === '/about' && location.hash) {
+    const h = location.hash.toLowerCase();
+    const to = /^#success/.test(h) ? '/success-stories' : /^#chairman/.test(h) ? '/message/chairman' : /^#ceo/.test(h) ? '/message/ceo'
+      : /^#(vision|mission)/.test(h) ? '/vision-mission' : /^#(why-choose|why-us)/.test(h) ? '/about#why' : '';
+    if (to && to !== location.pathname + location.hash) location.replace(to);
+  }
+
   // ---------------------------------------------------------------- share buttons: Web Share API, else copy the link
   $$('[data-share]').forEach(b => {
     b.hidden = false;

@@ -21,6 +21,7 @@ const kym = require('../lib/kym');
 
 const router = express.Router();
 router.use(seo.middleware);
+router.use((req, res, next) => { res.locals.iconFor = require('../lib/icons').iconFor; next(); });
 
 // floating widgets in the footer: satisfaction links (when enabled) + useful links flagged is_popup
 const widgetCache = new Map();
@@ -103,21 +104,28 @@ router.get('/', ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- about
+// about.php: body from pages (slug about), history, values, board org chart, stats band, "more about us" cards
 router.get('/about', ah(async (req, res) => {
-  const [features, awards] = await Promise.all([
+  const s = res.locals.settings;
+  const [features, awards, aboutPage, board, chairman, ceo] = await Promise.all([
     db.many(`SELECT * FROM why_choose_features WHERE ${ACTIVE} ORDER BY sort_order, id`),
     db.many(`SELECT * FROM awards WHERE ${ACTIVE} ORDER BY display_order, award_date DESC NULLS LAST LIMIT 4`),
+    db.one(`SELECT * FROM pages WHERE slug = 'about' AND ${ACTIVE} ORDER BY id DESC LIMIT 1`),
+    db.many(`SELECT * FROM team_members WHERE ${ACTIVE} AND category = 'board' ORDER BY display_order, id`),
+    teamLib.leader('chairman', s, req.lang),
+    teamLib.leader('ceo', s, req.lang),
   ]);
-  res.render('public/about', { title: res.locals.t('हाम्रो बारेमा', 'About us'), features, awards });
+  res.render('public/about', { title: res.locals.t('हाम्रो बारेमा', 'About us'), features, awards, aboutPage, boardChart: board.length ? teamLib.chartRows(board) : [],
+    leaders: [chairman, ceo].filter(l => l && l.message), ogImage: s.about_intro_image || s.about_page_image || s.history_photo || null });
 }));
 
 router.get('/vision-mission', (req, res) => {
   const s = res.locals.settings, t = res.locals.t;
-  const blocks = [
-    [t('दृष्टिकोण', 'Vision'), s.vision_content_np || s.vision_content],
-    [t('लक्ष्य', 'Mission'), s.mission_content_np || s.mission_content],
-    [t('मूल्य मान्यता', 'Values'), s.values_content_np || s.values_content],
-  ].filter(b => b[1]);
+  // NP/EN text and titles per section (legacy pages.php?tab=static); English falls back to Nepali
+  const en = req.lang === 'en';
+  const pick = (a, b) => (en ? s[b] || s[a] : s[a] || s[b]);
+  const blocks = [['vision_content', 'दृष्टिकोण', 'Vision'], ['mission_content', 'लक्ष्य', 'Mission'], ['values_content', 'मूल्य मान्यता', 'Values']]
+    .map(([k, np, enT]) => [pick(k + '_title_np', k + '_title_en') || t(np, enT), pick(k + '_np', k + '_en') || s[k]]).filter(b => b[1]);
   res.render('public/vision', { title: t('दृष्टिकोण र लक्ष्य', 'Vision & mission'), blocks });
 });
 
