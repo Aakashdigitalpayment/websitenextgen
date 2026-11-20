@@ -86,6 +86,7 @@
       <% if (locals.license && license.configured && license.daysLeft <= 30) { %><div class="alert <%= license.expired ? 'alert-error' : 'alert-warn' %>"><%- icon('alert') %><span><%= license.expired ? t('वेबसाइट सेवाको म्याद सकियो — सार्वजनिक साइट बन्द छ।', 'Website licence expired — the public site is offline.') : t('वेबसाइट सेवाको म्याद ' + num(license.daysLeft) + ' दिनमा सकिँदैछ।', 'Website licence expires in ' + license.daysLeft + ' days.') %> <% if (roleLevel(admin.role) >= 3) { %><a href="/admin/license"><%= t('नवीकरण', 'Renew') %></a><% } %></span></div><% } %>
       <% if (admin.must_change_password && path !== '/admin/password') { %><div class="alert alert-warn"><%- icon('alert') %><span><%= t('सुरक्षाका लागि पासवर्ड परिवर्तन गर्नुहोस्।', 'Please change your password.') %> <a href="/admin/password"><%= t('अहिले परिवर्तन गर्नुहोस्', 'Change now') %></a></span></div><% } %>
       <%- body %>
+      <% if (locals.settings && settings.site_version) { %><p class="admin-version small faint"><%= t('संस्करण', 'Version') %> <%= settings.site_version %></p><% } %>
     </main>
   </div>
 </div>

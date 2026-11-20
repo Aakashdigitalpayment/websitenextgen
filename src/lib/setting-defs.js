@@ -29,7 +29,11 @@ const DEFS = [
   d('logo_en', 'general', 'image', 'लोगो (English पृष्ठ)', 'Logo (English pages)', { hint: 'खाली = मुख्य लोगो / blank = main logo' }),
   d('site_favicon', 'general', 'image', 'फेभिकन (ब्राउजर ट्याब)', 'Favicon (browser tab)', { hint: 'वर्गाकार PNG, कम्तीमा 192px / square PNG, at least 192 px' }),
   d('site_url', 'general', 'url', 'वेबसाइट URL', 'Website URL'),
+  d('hero_title', 'general', 'text', 'मुख्य पृष्ठ शीर्षक (स्लाइडर नभएमा)', 'Home page heading (when there is no slider)', { max: 200 }),
+  d('hero_subtitle', 'general', 'text', 'मुख्य पृष्ठ उपशीर्षक (स्लाइडर नभएमा)', 'Home page sub-heading (when there is no slider)', { max: 200 }),
+  d('pwa_app_name', 'general', 'text', 'एपको पूरा नाम (PWA)', 'App name (PWA)', { max: 60, hint: 'खाली = संस्थाको नाम / blank = organisation name' }),
   d('pwa_short_name', 'general', 'text', 'एपको छोटो नाम (PWA)', 'App short name (PWA)', { max: 30 }),
+  d('site_version', 'general', 'text', 'वेबसाइट संस्करण', 'Website version', { max: 20, hint: 'प्रशासन पृष्ठको तल देखिन्छ / shown at the foot of admin pages' }),
   d('site_launch_date', 'general', 'text', 'वेबसाइट सुरु मिति', 'Website launch date', { max: 40 }),
   d('admin_date_input', 'general', 'select', 'प्रशासनमा मिति राख्ने तरिका', 'Date entry in the admin forms', { options: [['bs', 'वि.सं. पात्रो (ई.सं. मा स्वतः)', 'B.S. calendar (converted to A.D.)'], ['ad', 'ई.सं. मात्र', 'A.D. only']] }),
   // ---- contact

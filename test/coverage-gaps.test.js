@@ -400,3 +400,21 @@ test('B-2: member import commits in batches with progress, resumes, and retries 
   assert.equal(p.failed, 0);
   assert.equal(Number(await inA(() => db.value("SELECT count(*) FROM members WHERE sadasyata_number LIKE 'MI-1%'"))), 7);
 });
+
+// ---------------------------------------------------------------- B-3 settings read by the site are editable
+test('B-3: hero_title / hero_subtitle / pwa_app_name / site_version are in the settings registry and used', async () => {
+  const SD = require('../src/lib/setting-defs');
+  for (const k of ['hero_title', 'hero_subtitle', 'pwa_app_name', 'site_version']) assert.ok(SD.DEFS.some(x => x.key === k && x.group === 'general'), k);
+  await inA(async () => {
+    const st = require('../src/lib/settings');
+    await st.set('pwa_app_name', 'Coop App Full');
+    await st.set('site_version', '7.1');
+    st.invalidate();
+    require('../src/lib/public-cache').clear();
+  });
+  const man = await client().get('/manifest.webmanifest');
+  assert.match(man.text, /Coop App Full/);
+  const c = await adminClient();
+  assert.match((await c.get('/admin')).text, /admin-version[^>]*>[^<]*7\.1/);
+  assert.match((await c.get("/admin/settings")).text, /name="s_hero_title"/);
+});
