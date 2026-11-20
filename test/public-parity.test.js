@@ -128,3 +128,67 @@ test('popup notices: carousel of up to 5 on every public page, not on forms; exp
   await inA(() => db.query('UPDATE notices SET is_popup = 0'));
   await clearCaches();
 });
+
+// ---------------------------------------------------------------- P1-6 reports, P1-5 institutional profile
+test('reports: type / year / month filters, grouping, view-only download refused, ?dl=1 attachment, signed links', async () => {
+  const dir = path.join(config.uploadDir, A, 'reports');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'm.pdf'), '%PDF-1.4 test');
+  const [mid, vid, aid] = await inA(async () => [
+    await db.value("INSERT INTO reports (title, report_type, report_year, report_month, file_path, is_active) VALUES ('Shrawan report', 'monthly', '2081/82', '4', 'reports/m.pdf', 1) RETURNING id"),
+    await db.value("INSERT INTO reports (title, report_type, report_year, file_path, view_only, is_active) VALUES ('Audit 80', 'audit', '2080/81', 'reports/m.pdf', 1, 1) RETURNING id"),
+    await db.value("INSERT INTO reports (title, report_type, report_year, file_path, is_active) VALUES ('Annual 81', 'Annual Report', '2081/82', 'reports/m.pdf', 1) RETURNING id"),
+  ]);
+  let r = await get('/reports?type=monthly');
+  assert.equal(r.status, 200);
+  assert.ok(r.text.includes('Shrawan report') && !r.text.includes('Annual 81'));
+  assert.ok(r.text.includes(nd.MONTHS_NP[3]), 'BS month label');
+  r = await get('/reports?type=annual');
+  assert.ok(r.text.includes('Annual 81'), '"Annual Report" counts as annual');
+  r = await get('/reports?year=2080/81');
+  assert.ok(r.text.includes('Audit 80') && !r.text.includes('Shrawan report'));
+  r = await get('/reports?type=monthly&month=5');
+  assert.ok(!r.text.includes('Shrawan report'));
+  r = await get('/reports?id=' + mid);
+  assert.match(r.text, /<title>Shrawan report/);
+  assert.ok(r.text.includes(`id="r${mid}"`));
+  r = await get('/reports');
+  assert.ok(!r.text.includes(`/reports/${vid}/file?dl=1`), 'no download link for a view-only report');
+  r = await get(`/reports/${vid}/file?dl=1`);
+  assert.equal(r.status, 403);
+  r = await get(`/reports/${mid}/file?dl=1`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers['content-disposition'] || '', /attachment/);
+  r = await get(`/reports/${mid}/file`);
+  assert.ok(!/attachment/.test(r.headers['content-disposition'] || ''), 'inline view by default');
+  // members-only: blocked without unlock, opens with a valid signed token only
+  await inA(() => db.query("UPDATE reports SET access_level = 'member' WHERE id = $1", [aid]));
+  assert.equal((await get(`/reports/${aid}/file`)).status, 403);
+  const ma = require('../src/lib/member-access');
+  const tenant = await tenants.resolveHost(HA);
+  const fake = { tenant };
+  assert.equal((await get(`/reports/${aid}/file?t=${ma.fileToken(fake, 'report', aid)}`)).status, 200);
+  assert.equal((await get(`/reports/${aid}/file?t=${ma.fileToken(fake, 'report', mid)}`)).status, 403, 'token bound to the id');
+  assert.equal((await get(`/reports/${aid}/file?t=zz.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`)).status, 403);
+});
+
+test('institutional profile: latest 2 by default, FY / month filters, growth chips, charts, members-only hidden', async () => {
+  await inA(async () => {
+    const cols = await db.columns('institutional_profile');
+    for (let m = 1; m <= 4; m++) {
+      const row = { fiscal_year: '2081/82', report_month: m, total_members: 1000 + m, deposit: 5e6 + m * 1e5, loan: 4e6, total_assets: 7e6, is_active: 1, access_level: 'none' };
+      if (cols.has('deposit_percent')) row.deposit_percent = 2.5;
+      await db.insert('institutional_profile', row);
+    }
+    await db.insert('institutional_profile', { fiscal_year: '2080/81', report_month: 0, total_members: 900, deposit: 4e6, is_active: 1, access_level: 'member' });
+  });
+  let r = await get('/institutional-profile');
+  assert.equal(r.status, 200);
+  assert.equal((r.text.match(/class="card ip-card"/g) || []).length, 2, 'latest two');
+  assert.ok(r.text.includes('chart-svg'), 'trend charts');
+  assert.ok(r.text.includes('id="unlock"'), 'unlock form for members-only rows');
+  r = await get('/institutional-profile?fy=2081/82&month=2');
+  assert.equal((r.text.match(/class="card ip-card"/g) || []).length, 1);
+  r = await get('/institutional-profile?all=1');
+  assert.equal((r.text.match(/class="card ip-card"/g) || []).length, 4, 'members-only stays hidden');
+});

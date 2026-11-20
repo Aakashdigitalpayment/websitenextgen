@@ -6,6 +6,16 @@
 .progress > span.is-bad { background: var(--bad); }
 .job-card h3 .badge { vertical-align: middle; margin-left: 6px; }
 
+.is-focus { outline: 2px solid var(--brand); outline-offset: 2px; }
+.ip-chip { display: inline-block; font-size: .72rem; padding: 1px 7px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-weight: 500; margin-left: 4px; }
+.ip-chip.is-down { background: var(--bad-soft); color: var(--bad); }
+.ip-card .kv { grid-template-columns: 1fr auto; font-size: .9rem; }
+@media print {
+  .topbar, .site-header, .site-footer, .no-print, .float-widgets, .chat, .notice-popup, .ticker, .page-head .crumbs { display: none !important; }
+  body { background: #fff; }
+  .card { break-inside: avoid; box-shadow: none; }
+}
+
 /* notice popup carousel */
 .notice-popup .modal-head { gap: 10px; }
 .notice-popup .modal-head .badge { display: inline-flex; gap: 4px; align-items: center; }
@@ -17,3 +27,16 @@
 .np-dots { position: static; }
 .np-dots button { background: var(--line-strong); }
 .np-dots button.active { background: var(--brand); }
+.chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart-bar { fill: var(--brand); opacity: .85; }
+.chart-hit:hover .chart-bar { opacity: 1; }
+.chart-line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; }
+.chart-area { fill: var(--brand-soft); }
+.chart-dot { fill: var(--surface); stroke: var(--brand); stroke-width: 2; opacity: 0; }
+.chart-hit:hover .chart-dot { opacity: 1; }
+.chart-grid { stroke: var(--line); stroke-dasharray: 3 3; }
+.chart-base { stroke: var(--line); }
+.chart-axis { fill: var(--faint); font-size: 11px; }
+.chart-table { margin-top: 8px; color: var(--muted); }
+.chart-table summary { cursor: pointer; }
+.hbars { display: grid; gap: 8px; }

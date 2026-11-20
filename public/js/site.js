@@ -76,4 +76,21 @@
     if (next) next.addEventListener('click', () => show(i + 1));
     dots.forEach((d, n) => d.addEventListener('click', () => show(n)));
   }
+
+  // ---------------------------------------------------------------- share buttons: Web Share API, else copy the link
+  $$('[data-share]').forEach(b => {
+    b.hidden = false;
+    b.addEventListener('click', async () => {
+      const url = new URL(b.dataset.share || location.href, location.href).href;
+      try {
+        if (navigator.share) { await navigator.share({ title: b.dataset.shareTitle || document.title, url }); return; }
+        await navigator.clipboard.writeText(url);
+        const old = b.textContent; b.textContent = b.dataset.shareDone || '✓'; setTimeout(() => { b.textContent = old; }, 1800);
+      } catch (e) { /* cancelled or blocked */ }
+    });
+  });
+
+  // deep link to one card (?id= / #r12): scroll into view and highlight
+  const focus = $('.is-focus');
+  if (focus && !location.hash) focus.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
 })();

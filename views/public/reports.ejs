@@ -1,14 +1,16 @@
 <%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
+<% const MONTHS = lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP;
+   const link = o => { const p = new URLSearchParams(); const v = { type, year, month: month || '', ...o }; Object.entries(v).forEach(([k, x]) => { if (x) p.set(k, x); }); if (!(o.type ?? type) || (o.type ?? type) !== 'monthly') p.delete('month'); const s = p.toString(); return '/reports' + (s ? '?' + s : ''); }; %>
 <section class="section"><div class="container">
   <% if (locked) { %>
-  <div class="card mb-3">
+  <div class="card mb-3" id="unlock">
     <div class="flex gap-1 items-center wrap" style="justify-content:space-between">
       <div><b style="font-weight:600"><%- icon('shield') %> <%= t(num(locked) + ' प्रतिवेदन सदस्यका लागि मात्र', num(locked) + ' reports are for members only') %></b>
         <div class="small muted"><%= t('सदस्य लगइन गर्नुहोस् वा सदस्यता नम्बर राखेर खोल्नुहोस्।', 'Log in as a member or unlock with your membership number.') %></div></div>
       <a class="btn btn-outline btn-sm" href="/member/login?next=/reports"><%- icon('user') %><%= t('लगइन', 'Log in') %></a>
     </div>
     <form class="flex gap-1 wrap mt-2" method="post" action="/reports/unlock">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="next" value="<%= link({}) %>">
       <input class="input" name="membership_no" required maxlength="50" autocomplete="off" placeholder="<%= t('सदस्यता नम्बर', 'Membership number') %>" aria-label="<%= t('सदस्यता नम्बर', 'Membership number') %>" style="max-width:220px">
       <input class="input" name="mobile" required inputmode="numeric" maxlength="14" autocomplete="tel" placeholder="<%= t('दर्ता भएको मोबाइल', 'Registered mobile') %>" aria-label="<%= t('दर्ता भएको मोबाइल', 'Registered mobile') %>" style="max-width:200px">
       <button class="btn btn-primary"><%= t('खोल्नुहोस्', 'Unlock') %></button>
@@ -16,9 +18,53 @@
     <% if (unlockError) { %><div class="field-error mt-1"><%= unlockError %></div><% } %>
   </div>
   <% } %>
-  <% if (!items.length) { %><div class="empty"><%= t('प्रतिवेदन छैन।', 'No reports yet.') %></div><% } else { %>
-  <div class="grid grid-3"><% items.forEach(r => { %>
-    <div class="card"><span class="icon-tile"><%- icon('chart') %></span><div class="card-meta"><%= [r.report_type, r.report_year && num(r.report_year), r.report_quarter].filter(Boolean).join(' · ') %><% if (r.access_level === 'member') { %> · <span class="badge"><%= t('सदस्य', 'Members') %></span><% } %></div><h3><%= f(r, 'title') %></h3>
-      <% if (r.file_path) { %><a class="btn btn-soft btn-sm mt-1" href="/reports/<%= r.id %>/file" target="_blank" rel="noopener"><%- icon(Number(r.view_only) ? 'eye' : 'download') %><%= t('हेर्नुहोस्', 'Open') %></a><% } %></div>
-  <% }) %></div><% } %>
+
+  <nav class="tabs" aria-label="<%= t('प्रतिवेदनको प्रकार', 'Report type') %>">
+    <a class="tab <%= !type ? 'active' : '' %>" href="<%= link({ type: '', year: '' }) %>"><%= t('सबै', 'All') %></a>
+    <% Object.keys(types).filter(k => typeCounts[k]).forEach(k => { %>
+      <a class="tab <%= type === k ? 'active' : '' %>" href="<%= link({ type: k, year: '' }) %>"<%- type === k ? ' aria-current="page"' : '' %>><%= t(...types[k]) %> (<%= num(typeCounts[k]) %>)</a>
+    <% }) %>
+  </nav>
+  <% if (years.length > 1 || type === 'monthly') { %>
+  <form class="filter-pills" method="get" action="/reports">
+    <% if (type) { %><input type="hidden" name="type" value="<%= type %>"><% } %>
+    <label class="small muted" for="rp-year"><%= t('आर्थिक वर्ष', 'Fiscal year') %></label>
+    <select class="input" id="rp-year" name="year" data-autosubmit style="max-width:160px">
+      <option value=""><%= t('सबै', 'All') %></option>
+      <% years.forEach(y => { %><option value="<%= y %>" <%= y === year ? 'selected' : '' %>><%= num(y) %></option><% }) %>
+    </select>
+    <% if (type === 'monthly') { %>
+    <label class="small muted" for="rp-month"><%= t('महिना', 'Month') %></label>
+    <select class="input" id="rp-month" name="month" data-autosubmit style="max-width:160px">
+      <option value=""><%= t('सबै', 'All') %></option>
+      <% MONTHS.forEach((m, i) => { %><option value="<%= i + 1 %>" <%= month === i + 1 ? 'selected' : '' %>><%= m %></option><% }) %>
+    </select>
+    <% } %>
+    <noscript><button class="btn btn-outline btn-sm"><%= t('हेर्नुहोस्', 'Show') %></button></noscript>
+  </form>
+  <% } %>
+
+  <% if (!items.length) { %><div class="empty"><%= t('प्रतिवेदन छैन।', 'No reports yet.') %></div><% } %>
+  <% groups.forEach(g => { %>
+    <h2 class="mt-3"><%= t(...g.label) %></h2>
+    <% g.years.forEach(([y, rows]) => { %>
+      <% if (y) { %><h3 class="small muted mt-2"><%= t('आर्थिक वर्ष ' + num(y), 'Fiscal year ' + y) %></h3><% } %>
+      <div class="grid grid-3 mt-1"><% rows.forEach(r => { const members = r.access_level === 'member'; const m = util.int(nd.toLatinDigits(r.report_month || ''), 0); %>
+        <div class="card report-card<%= focusId === r.id ? ' is-focus' : '' %>" id="r<%= r.id %>">
+          <span class="icon-tile"><%- icon('chart') %></span>
+          <div class="card-meta"><%= [t(...g.label), r.report_year && t('आ.व. ', 'FY ') + num(r.report_year), m >= 1 && m <= 12 ? MONTHS[m - 1] : '', r.report_quarter].filter(Boolean).join(' · ') %>
+            <% if (members) { %> · <span class="badge"><%= t('सदस्य', 'Members') %></span><% } %>
+            <% if (Number(r.view_only)) { %> · <span class="badge badge-info"><%= t('हेर्न मात्र', 'View only') %></span><% } %></div>
+          <h3><%= f(r, 'title') %></h3>
+          <% if (r.file_path) { %><div class="flex gap-1 wrap mt-1">
+            <a class="btn btn-soft btn-sm" href="<%= fileUrl(r) %>" target="_blank" rel="noopener"><%- icon('eye') %><%= t('हेर्नुहोस्', 'View') %></a>
+            <% if (!Number(r.view_only)) { %>
+              <a class="btn btn-ghost btn-sm" href="<%= fileUrl(r, true) %>"><%- icon('download') %><%= t('डाउनलोड', 'Download') %></a>
+              <button type="button" class="btn btn-ghost btn-sm" data-share="/reports?id=<%= r.id %>#r<%= r.id %>" data-share-title="<%= f(r, 'title') %>" data-share-done="<%= t('लिङ्क कपी भयो', 'Link copied') %>" hidden><%- icon('link') %><%= t('सेयर', 'Share') %></button>
+            <% } %>
+          </div><% } %>
+        </div>
+      <% }) %></div>
+    <% }) %>
+  <% }) %>
 </div></section>

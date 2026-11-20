@@ -272,29 +272,80 @@ router.get('/downloads/:id/file', ah(async (req, res, next) => {
 }));
 
 // reports: files are served only through /reports/:id/file; members-only ones need a member / staff login or a membership-number unlock
+// legacy reports.php: types, ?type= / ?year= / ?month= filters, grouping by type then fiscal year, ?id= deep link
+const REPORT_TYPES = {
+  monthly: ['मासिक प्रतिवेदन', 'Monthly reports'], quarterly: ['त्रैमासिक प्रतिवेदन', 'Quarterly reports'], progress: ['प्रगति प्रतिवेदन', 'Progress reports'],
+  annual: ['वार्षिक प्रतिवेदन', 'Annual reports'], financial: ['वित्तीय विवरण', 'Financial statements'], audit: ['लेखापरीक्षण प्रतिवेदन', 'Audit reports'],
+  agm: ['साधारण सभा', 'General assembly (AGM)'], other: ['अन्य प्रतिवेदन', 'Other reports'],
+};
+const reportType = r => { const k = String(r.report_type || '').trim().toLowerCase().replace(/\s*reports?$/, ''); return Object.hasOwn(REPORT_TYPES, k) ? k : 'other'; };
 router.get('/reports', ah(async (req, res) => {
+  const t = res.locals.t;
   const memberOk = memberAccess.unlocked(req);
-  const items = await db.many(`SELECT * FROM reports WHERE ${ACTIVE} ${memberOk ? '' : "AND COALESCE(access_level, 'none') <> 'member'"} ORDER BY report_year DESC NULLS LAST, display_order, id DESC`);
-  const locked = memberOk ? 0 : await db.value(`SELECT count(*) FROM reports WHERE ${ACTIVE} AND access_level = 'member'`);
-  res.render('public/reports', { title: res.locals.t('प्रतिवेदनहरू', 'Reports'), items, locked, unlockError: req.session.unlockError || null, breadcrumbs: [[res.locals.t('हाम्रो बारेमा', 'About'), '/about']] });
+  const type = Object.hasOwn(REPORT_TYPES, req.query.type) ? req.query.type : '';
+  const year = /^[0-9/\-०-९]{4,9}$/.test(String(req.query.year || '')) ? nd.toLatinDigits(req.query.year) : '';
+  const month = type === 'monthly' ? util.int(req.query.month, 0) : 0;
+  const all = await db.many(`SELECT * FROM reports WHERE ${ACTIVE} ORDER BY report_year DESC NULLS LAST, display_order, id DESC`);
+  const visible = all.filter(r => memberOk || memberAccess.normalizeLevel(r.access_level) !== 'member');
+  const typeCounts = {};
+  for (const r of visible) typeCounts[reportType(r)] = (typeCounts[reportType(r)] || 0) + 1;
+  const years = [...new Set(visible.filter(r => !type || reportType(r) === type).map(r => nd.toLatinDigits(r.report_year || '')).filter(Boolean))].sort().reverse();
+  const items = visible.filter(r => (!type || reportType(r) === type) && (!year || nd.toLatinDigits(r.report_year || '') === year)
+    && (!month || util.int(nd.toLatinDigits(r.report_month || ''), 0) === month));
+  // groups: type → fiscal year
+  const groups = [];
+  for (const k of Object.keys(REPORT_TYPES)) {
+    const rows = items.filter(r => reportType(r) === k);
+    if (!rows.length) continue;
+    const byYear = new Map();
+    for (const r of rows) { const y = r.report_year || ''; if (!byYear.has(y)) byYear.set(y, []); byYear.get(y).push(r); }
+    groups.push({ key: k, label: REPORT_TYPES[k], years: [...byYear.entries()] });
+  }
+  const locked = all.length - visible.length;
+  // ?id= deep link (shared on Facebook): OG title / description of that report
+  const focus = util.int(req.query.id, 0) ? all.find(r => r.id === util.int(req.query.id, 0)) : null;
+  const opts = {};
+  if (focus) {
+    opts.title = res.locals.f(focus, 'title');
+    opts.description = memberAccess.normalizeLevel(focus.access_level) === 'member'
+      ? t('सदस्यका लागि मात्र प्रतिवेदन — खोलेर सदस्यता नम्बर र मोबाइल राख्नुहोस्।', 'Members-only report — open and enter membership number + mobile.')
+      : [t(...REPORT_TYPES[reportType(focus)]), focus.report_year && t('आ.व. ', 'FY ') + focus.report_year].filter(Boolean).join(' · ');
+  }
+  // signed short-lived links for unlocked members-only files (Facebook's in-app browser drops cookies)
+  const fileUrl = (r, dl) => '/reports/' + r.id + '/file' + (() => {
+    const p = new URLSearchParams();
+    if (dl) p.set('dl', '1');
+    if (memberAccess.normalizeLevel(r.access_level) === 'member' && memberOk) p.set('t', memberAccess.fileToken(req, 'report', r.id));
+    const s = p.toString();
+    return s ? '?' + s : '';
+  })();
+  res.render('public/reports', { title: t('प्रतिवेदनहरू', 'Reports'), ...opts, items, groups, types: REPORT_TYPES, typeCounts, years, type, year, month, focusId: focus ? focus.id : 0, fileUrl,
+    locked, unlockError: req.session.unlockError || null, breadcrumbs: [[t('हाम्रो बारेमा', 'About'), '/about']] });
   delete req.session.unlockError;
 }));
 
+const unlockBack = req => require('../lib/auth').safeNext(req.body?.next, '/reports');
 const unlockLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip),
-  handler: (req, res) => { req.session.unlockError = res.locals.t('धेरै पटक प्रयास भयो। केही समयपछि फेरि प्रयास गर्नुहोस्।', 'Too many attempts. Please try again later.'); res.redirect('/reports'); } });
+  handler: (req, res) => { req.session.unlockError = res.locals.t('धेरै पटक प्रयास भयो। केही समयपछि फेरि प्रयास गर्नुहोस्।', 'Too many attempts. Please try again later.'); res.redirect(unlockBack(req)); } });
+// one unlock for reports and the institutional profile (next = where to return)
 router.post('/reports/unlock', unlockLimiter, ah(async (req, res) => {
   const r = await memberAccess.tryUnlock(req, req.body.membership_no, req.body.mobile);
-  if (r.ok) flash(req, 'success', res.locals.t('सदस्य प्रतिवेदन खुला भयो।', 'Members-only reports unlocked.'));
+  if (r.ok) flash(req, 'success', res.locals.t('सदस्यका लागि मात्र रहेका विवरण खुला भयो।', 'Members-only documents unlocked.'));
   else req.session.unlockError = res.locals.t(...r.error);
-  res.redirect('/reports');
+  res.redirect(unlockBack(req));
 }));
 
 router.get('/reports/:id/file', ah(async (req, res, next) => {
   const item = await db.one('SELECT * FROM reports WHERE id = $1', [util.int(req.params.id)]);
   if (!item || !item.file_path || (!Number(item.is_active) && !req.admin)) return next();
   const level = memberAccess.normalizeLevel(item.access_level);
-  if (!memberAccess.canOpen(req, level)) {
+  if (!memberAccess.canOpen(req, level) && !memberAccess.checkFileToken(req, 'report', item.id, req.query.t)) {
     return res.status(403).render('public/error', { title: res.locals.t('सदस्यका लागि मात्र', 'Members only'), code: 403, message: res.locals.t('यो प्रतिवेदन सदस्यका लागि मात्र हो। लगइन गर्नुहोस् वा सदस्यता नम्बरले खोल्नुहोस्।', 'This report is for members only. Log in or unlock it with your membership number.') });
+  }
+  const viewOnly = Number(item.view_only) === 1;
+  const download = req.query.dl === '1';
+  if (viewOnly && download && !req.admin) {
+    return res.status(403).render('public/error', { title: res.locals.t('हेर्न मात्र', 'View only'), code: 403, message: res.locals.t('यो प्रतिवेदन डाउनलोड गर्न मिल्दैन, हेर्न मात्र मिल्छ।', 'Download is disabled for this report.') });
   }
   let stored = item.file_path;
   // legacy public path of a members-only report: move it into private storage on first access
@@ -310,20 +361,39 @@ router.get('/reports/:id/file', ah(async (req, res, next) => {
     }
   }
   if (/^https?:/i.test(stored)) return level === 'member' ? next() : res.redirect(stored);
-  require('../lib/uploads').sendStored(req, res, next, stored, { viewOnly: Number(item.view_only) === 1 });
+  require('../lib/uploads').sendStored(req, res, next, stored, { viewOnly: viewOnly && !req.admin, download: download && (!viewOnly || !!req.admin) });
 }));
 
+// institutional-profile.php: month cards with growth %, FY / month filters (default: latest 2), trend charts, print, membership-number unlock
 router.get('/institutional-profile', ah(async (req, res) => {
-  const rows = await db.many(`SELECT * FROM institutional_profile WHERE ${ACTIVE} ${req.member ? '' : "AND access_level = 'none'"} ORDER BY fiscal_year DESC, report_month DESC NULLS LAST, id DESC LIMIT 24`);
+  const t = res.locals.t;
+  const memberOk = memberAccess.unlocked(req);
+  const all = await db.many(`SELECT * FROM institutional_profile WHERE ${ACTIVE} ORDER BY fiscal_year DESC, report_month DESC NULLS LAST, id DESC LIMIT 240`);
+  const visible = all.filter(r => memberOk || memberAccess.normalizeLevel(r.access_level) !== 'member');
+  const fy = String(req.query.fy || '').trim().slice(0, 20);
+  const month = req.query.month === undefined || req.query.month === '' ? null : util.int(req.query.month, -1);
+  const showAll = req.query.all === '1';
+  const fys = [...new Set(visible.map(r => r.fiscal_year).filter(Boolean))];
+  let rows = visible.filter(r => (!fy || r.fiscal_year === fy) && (month === null || Number(r.report_month || 0) === month));
+  const filtered = !!fy || month !== null;
+  if (!filtered && !showAll) rows = rows.slice(0, 2);
   const welfare = rows[0] ? await require('../lib/welfare').forProfile(rows[0]) : [];
-  res.render('public/institutional-profile', { title: res.locals.t('संस्थागत विवरण', 'Institutional profile'), rows, latest: rows[0], welfare });
+  // trend: up to 12 points, oldest → newest, needs at least 2
+  const series = visible.slice(0, 12).reverse();
+  const label = r => nd.toLatinDigits(String(r.fiscal_year || '')).slice(2) + (Number(r.report_month) ? '·' + (req.lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[r.report_month - 1].slice(0, 3) : '');
+  const charts = series.length >= 2 ? [
+    ['deposit', t('बचत', 'Deposits')], ['loan', t('ऋण लगानी', 'Loans')], ['total_assets', t('कुल सम्पत्ति', 'Total assets')], ['total_members', t('सदस्य संख्या', 'Members')],
+  ].map(([k, l]) => ({ key: k, label: l, data: series.map(r => ({ label: label(r), value: Number(r[k]) || 0 })) })).filter(c => c.data.some(d => d.value)) : [];
+  res.render('public/institutional-profile', { title: t('संस्थागत विवरण', 'Institutional profile'), rows, latest: rows[0], welfare, fys, fy, month, showAll, filtered, charts,
+    locked: all.length - visible.length, total: visible.length, unlockError: req.session.unlockError || null });
+  delete req.session.unlockError;
 }));
 
 // report attachment through an access check — members-only reports never sit under public /uploads (legacy institutional-profile-file.php)
 router.get('/institutional-profile/:id/file', ah(async (req, res, next) => {
   const row = await db.one('SELECT id, fiscal_year, attachment_path, access_level, is_active FROM institutional_profile WHERE id = $1', [util.int(req.params.id)]);
   if (!row || !row.attachment_path || (!Number(row.is_active) && !req.admin)) return next();
-  if (row.access_level === 'member' && !req.member && !req.admin) return res.redirect('/member/login?next=' + encodeURIComponent(req.originalUrl));
+  if (!memberAccess.canOpen(req, row.access_level) && !memberAccess.checkFileToken(req, 'profile', row.id, req.query.t)) return res.redirect('/institutional-profile#unlock');
   require('../lib/uploads').sendStored(req, res, next, row.attachment_path);
 }));
 
