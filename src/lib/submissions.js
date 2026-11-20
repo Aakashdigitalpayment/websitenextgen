@@ -60,7 +60,8 @@ const hooks = {
     const opt = (ctx.options.claim_type || []).find(o => String(o[0]) === String(ctx.data.claim_type));
     ctx.extra.claim_type_np = opt ? opt[1] : null;
     if (ctx.member) ctx.extra.member_portal_id = ctx.member.id;
-    if (ctx.data.attachment_path) ctx.extra.supporting_documents = ctx.data.attachment_path;
+    const docs = [ctx.data.attachment_path, ctx.data.supporting_documents].filter(Boolean).join(',');
+    if (docs) ctx.extra.supporting_documents = docs;
     return null;
   },
 

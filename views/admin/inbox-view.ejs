@@ -32,7 +32,7 @@
             <div><%= t(fl.label[0], fl.label[1]) %></div>
             <div>
               <% if (fl.type === 'image') { %><a href="<%= mediaUrl(v) %>" target="_blank" rel="noopener"><img src="<%= mediaUrl(v) %>" alt="" style="max-height:160px;border-radius:8px;border:1px solid var(--line)"></a>
-              <% } else if (fl.type === 'file') { %><a class="btn btn-soft btn-sm" href="<%= mediaUrl(v) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('फाइल हेर्नुहोस्', 'Open file') %></a>
+              <% } else if (fl.type === 'file') { %><% String(v).split(',').map(x => x.trim()).filter(Boolean).forEach((fp, fi, all) => { %><a class="btn btn-soft btn-sm" href="<%= mediaUrl(fp) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('फाइल हेर्नुहोस्', 'Open file') %><%= all.length > 1 ? ' ' + (fi + 1) : '' %></a> <% }) %>
               <% } else if (fl.type === 'checkbox') { %><%= Number(v) ? '✓' : '—' %>
               <% } else if (fl.type === 'bsdate') { %><%= v %> <% if (fl.adCol && row[fl.adCol]) { %><span class="faint small">(<%= row[fl.adCol] %> AD)</span><% } %>
               <% } else if (fl.type === 'date') { %><%= bsDate(v) %> <span class="faint small">(<%= String(v).slice(0, 10) %> AD)</span>

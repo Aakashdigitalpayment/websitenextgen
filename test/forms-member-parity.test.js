@@ -21,6 +21,9 @@ const { createApp } = require('../src/app');
 const SUFFIX = Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 4);
 const A = 'fm' + SUFFIX, HA = `${A}.app.local`, PW = 'Admin@12345!';
 const inA = fn => db.withSchema('tenant_' + A, fn);
+// second tenant: the public form rate limit (20 per 10 min) is per tenant + IP
+const B = 'fn' + SUFFIX, HB = `${B}.app.local`;
+const inB = fn => db.withSchema('tenant_' + B, fn);
 let app;
 const JPG = Buffer.from('ffd8ffe000104a46494600010100000100010000ffd9', 'hex');
 
@@ -42,6 +45,7 @@ function client(host = HA) {
     async multipart(url, data, files = {}, tokenUrl = url) {
       const tok = await this.token(tokenUrl);
       let r = agent.post(url + (url.includes('?') ? '&' : '?') + '_csrf=' + encodeURIComponent(tok)).set('Host', host).field('_csrf', tok);
+      // files: { field: Buffer | Buffer[] }
       for (const [k, v] of Object.entries(data)) for (const x of [].concat(v)) r = r.field(k, x);
       for (const [k, v] of Object.entries(files)) r = r.attach(k, v, k + '.jpg');
       return r;
@@ -61,19 +65,24 @@ const errs = r => [...String(r.text || '').matchAll(/<label[^>]*>([^<]*)[\s\S]{0
 before(async () => {
   await tenants.applyPlatformSchema();
   await tenants.createTenant({ slug: A, name: 'Forms A', domains: [HA], adminPassword: PW });
-  await inA(async () => {
-    await db.query('UPDATE admin_users SET must_change_password = 0');
-    await require('../src/lib/settings').set('spam_math_captcha', '0');
-  });
+  await tenants.createTenant({ slug: B, name: 'Forms B', domains: [HB], adminPassword: PW });
+  for (const s of [A, B]) {
+    await db.withSchema('tenant_' + s, async () => {
+      await db.query('UPDATE admin_users SET must_change_password = 0');
+      await require('../src/lib/settings').set('spam_math_captcha', '0');
+    });
+  }
   app = require('http').createServer(createApp());
   await new Promise(r => app.listen(0, '127.0.0.1', r));
 });
 
 after(async () => {
   await new Promise(r => app.close(r));
-  await db.query(`DROP SCHEMA IF EXISTS tenant_${A} CASCADE`);
-  await db.query('DELETE FROM platform.tenants WHERE slug = $1', [A]);
-  fs.rmSync(path.join(config.uploadDir, A), { recursive: true, force: true });
+  for (const s of [A, B]) {
+    await db.query(`DROP SCHEMA IF EXISTS tenant_${s} CASCADE`);
+    await db.query('DELETE FROM platform.tenants WHERE slug = $1', [s]);
+    fs.rmSync(path.join(config.uploadDir, s), { recursive: true, force: true });
+  }
   await db.pool.end();
 });
 
@@ -299,4 +308,21 @@ test('math check: required on public forms without Turnstile, one-shot, can be t
   } finally {
     await inA(() => settings.set('spam_math_captcha', '0'));
   }
+});
+
+// ---------------------------------------------------------------- P2-6 loan fields and several documents
+test('loan: other income, guarantor address and several documents (comma-joined)', async () => {
+  const c = client(HB);
+  const loanType = (await inB(() => forms.optionSources.loanTypes()))[0][0];
+  const tok = await c.token('/apply/loan');
+  let r = c.agent.post('/apply/loan?_csrf=' + encodeURIComponent(tok)).set('Host', HB).field('_csrf', tok);
+  const data = { full_name: 'Docs', mobile: '9841910001', email: 'd@example.com', address: 'Ktm', loan_type: loanType, loan_amount: '20000', loan_purpose: 'shop', other_income: 'Rent 5000', guarantor_address: 'Lalitpur' };
+  for (const [k, v] of Object.entries(data)) r = r.field(k, v);
+  r = r.attach('documents', JPG, 'a.jpg').attach('documents', JPG, 'b.jpg');
+  r = await r;
+  assert.equal(r.status, 302, errs(r));
+  const row = await inB(() => db.one("SELECT * FROM loan_applications WHERE mobile = '9841910001'"));
+  assert.equal(row.other_income, 'Rent 5000');
+  assert.equal(row.guarantor_address, 'Lalitpur');
+  assert.equal(row.documents.split(',').length, 2);
 });

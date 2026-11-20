@@ -41,6 +41,7 @@ const modules = {
         { name: 'occupation', label: ['पेशा', 'Occupation'] },
         { name: 'organization_name', label: ['कार्यरत संस्था', 'Employer / business'] },
         { name: 'monthly_income', label: ['मासिक आम्दानी (रु.)', 'Monthly income (Rs.)'], type: 'number' },
+        { name: 'other_income', label: ['अन्य आम्दानी', 'Other income'], type: 'textarea', rows: 2 },
       ] },
       { title: ['ऋणको विवरण', 'Loan'], fields: [
         { name: 'loan_type', label: ['ऋणको प्रकार', 'Loan type'], type: 'select', required: true, show: true, optionsFrom: 'loanTypes' },
@@ -56,8 +57,9 @@ const modules = {
         { name: 'guarantor_name', label: ['जमानीको नाम', 'Guarantor name'] },
         { name: 'guarantor_relation', label: ['नाता', 'Relation'] },
         { name: 'guarantor_phone', label: ['फोन', 'Phone'], type: 'tel' },
+        { name: 'guarantor_address', label: ['जमानीको ठेगाना', 'Guarantor address'] },
         BRANCH,
-        { name: 'documents', label: ['कागजात (PDF/फोटो)', 'Documents (PDF/photo)'], type: 'file', kind: 'any' },
+        { name: 'documents', label: ['कागजात (PDF/फोटो, बढीमा ५)', 'Documents (PDF/photo, up to 5)'], type: 'file', kind: 'any', multiple: 5 },
       ] },
     ],
   },
@@ -301,6 +303,7 @@ const modules = {
       { name: 'insurer_name', label: ['बीमा कम्पनी', 'Insurer'], showIf: WELFARE(['insurance']) },
       { name: 'description', label: ['विवरण', 'Details'], type: 'textarea', rows: 4, required: true },
       { name: 'attachment_path', label: ['प्रमाण कागजात', 'Supporting document'], type: 'file', kind: 'any', requiredIf: { field: 'claim_type', meta: 'requires_document' } },
+      { name: 'supporting_documents', label: ['थप कागजात (बढीमा ५)', 'More documents (up to 5)'], type: 'file', kind: 'any', multiple: 5 },
     ] }],
   },
 

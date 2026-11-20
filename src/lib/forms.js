@@ -191,7 +191,8 @@ function validate(mod, body, uploaded, options, lang = 'np', opts = {}) {
       continue;
     }
     if (f.type === 'file' || f.type === 'image') {
-      const v = uploaded?.[f.name];
+      let v = uploaded?.[f.name];
+      if (Array.isArray(v)) v = v.filter(Boolean).join(','); // several files: comma-joined, as PHP stored documents[]
       if (v) data[f.name] = v;
       else if (isRequired(f)) errors[f.name] = msg(`${label} आवश्यक छ`, `${label} is required`);
       continue;

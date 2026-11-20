@@ -560,7 +560,7 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
   if (mod.key === 'kyc' && !req.member && !kymGate(req)) {
     return renderKymGate(req, res, { status: 403, error: res.locals.t('पहिले सदस्यता नम्बर र मोबाइल प्रमाणित गर्नुहोस्।', 'Please verify your Member ID and mobile first.') });
   }
-  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind })), { private: true }) : [];
+  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind, maxCount: f.multiple || 1 })), { private: true }) : [];
   let i = 0;
   const step = err => (err ? next(err) : i < chain.length ? chain[i++](req, res, step) : handle());
   const handle = () => (async () => {
