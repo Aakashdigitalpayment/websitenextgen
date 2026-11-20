@@ -16,6 +16,7 @@ const BUSINESS = { field: 'occupation', eq: 'business' };
 const FAMILY_RELATIONS = [['father', 'बुबा', 'Father'], ['mother', 'आमा', 'Mother'], ['grandfather', 'हजुरबुबा', 'Grandfather'], ['spouse', 'पति/पत्नी', 'Spouse'], ['son', 'छोरा', 'Son'], ['daughter', 'छोरी', 'Daughter'], ['guardian', 'अभिभावक', 'Guardian'], ['other', 'अन्य', 'Other']];
 const WELFARE = profiles => ({ field: 'claim_type', meta: 'profile', in: profiles });
 const COOP_VISIT = { field: 'visit_kind', eq: 'cooperative' };
+const DS = slugs => ({ field: 'service_type', in: slugs });
 
 const GENDER = { name: 'gender', label: ['लिङ्ग', 'Gender'], type: 'radio', options: [['male', 'पुरुष', 'Male'], ['female', 'महिला', 'Female'], ['other', 'अन्य', 'Other']] };
 
@@ -306,8 +307,13 @@ const modules = {
       { name: 'account_number', label: ['खाता नं.', 'Account no.'] },
       { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
       { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
-      { name: 'statement_from', label: ['स्टेटमेन्ट देखि', 'Statement from'], type: 'date' },
-      { name: 'statement_to', label: ['स्टेटमेन्ट सम्म', 'Statement to'], type: 'date' },
+      { name: 'statement_from', label: ['स्टेटमेन्ट देखि', 'Statement from'], type: 'date', showIf: DS(['statement_request', 'statement']) },
+      { name: 'statement_to', label: ['स्टेटमेन्ट सम्म', 'Statement to'], type: 'date', showIf: DS(['statement_request', 'statement']) },
+      { name: 'biller_name', label: ['बिल/सेवा प्रदायक', 'Biller / service provider'], showIf: DS(['bill_payment']), requiredWhenShown: true },
+      { name: 'bill_reference', label: ['बिल/ग्राहक नं.', 'Bill / customer no.'], showIf: DS(['bill_payment']) },
+      { name: 'recharge_number', label: ['रिचार्ज नम्बर', 'Recharge number'], type: 'tel', showIf: DS(['mobile_recharge']), requiredWhenShown: true },
+      { name: 'recharge_amount', label: ['रकम (रु.)', 'Amount (Rs.)'], type: 'number', min: 10, max: 100000, format: 'money', showIf: DS(['mobile_recharge']), requiredWhenShown: true },
+      { name: 'service_amount', label: ['रकम (रु.)', 'Amount (Rs.)'], type: 'number', min: 1, max: 1e10, format: 'money', showIf: DS(['share_refund', 'share_increase']), requiredWhenShown: true },
       { name: 'preferred_contact', label: ['सम्पर्क माध्यम', 'Contact via'], type: 'radio', options: [['phone', 'फोन', 'Phone'], ['email', 'इमेल', 'Email'], ['branch', 'शाखा', 'Branch']] },
       { name: 'request_details', label: ['थप विवरण', 'Details'], type: 'textarea', rows: 3 },
       { name: 'attachment', label: ['कागजात', 'Document'], type: 'file', kind: 'any', requiredIf: { field: 'service_type', meta: 'requires_document' } },
@@ -402,7 +408,7 @@ const modules = {
   },
 
   bid: {
-    table: 'auction_bids', prefix: 'BD', icon: 'gavel', nameCol: 'bidder_name', phoneCol: 'bidder_phone', hidden: true, noTracking: true,
+    table: 'auction_bids', prefix: 'BID', icon: 'gavel', nameCol: 'bidder_name', phoneCol: 'bidder_phone', hidden: true,
     title: ['बोलकबोल', 'Place a bid'],
     sections: [{ fields: [
       { name: 'auction_id', label: ['लिलाम', 'Auction'], type: 'select', required: true, optionsFrom: 'auctions', show: true },

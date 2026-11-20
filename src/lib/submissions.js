@@ -64,6 +64,24 @@ const hooks = {
     return null;
   },
 
+  /** auction.php: open window (status + end date/time), minimum price, 10-digit mobile, one pending bid per phone per day. */
+  async bid(ctx) {
+    const d = ctx.data;
+    const a = await db.one('SELECT * FROM auction_notices WHERE id = $1', [Number(d.auction_id) || 0]);
+    if (!a || !require('./auctions').isOpen(a)) return fail(ctx.lang, ['यो लिलामीमा अहिले बोलपत्र खुला छैन।', 'This auction is not open for bids.'], 'auction_id');
+    const phone = kym.normalizeMobile(d.bidder_phone);
+    if (!/^9\d{9}$/.test(phone)) return fail(ctx.lang, ['नाम र सही १० अङ्कको मोबाइल (९XXXXXXXXX) आवश्यक।', 'Valid name and 10-digit mobile (9XXXXXXXXX) required.'], 'bidder_phone');
+    d.bidder_phone = phone;
+    const min = Number(a.minimum_price) || 0;
+    if (min > 0 && Number(d.bid_amount) < min) {
+      return fail(ctx.lang, [`बोल रकम कम्तीमा रु. ${util.money(min)} हुनुपर्छ।`, `Bid must be at least Rs. ${util.money(min, 'en')}.`], 'bid_amount');
+    }
+    const dup = await db.value("SELECT 1 FROM auction_bids WHERE auction_id = $1 AND bidder_phone = $2 AND status = 'pending' AND created_at >= now() - interval '24 hours' LIMIT 1", [a.id, phone]);
+    if (dup) return fail(ctx.lang, ['पछिल्लो २४ घण्टामा यस लिलामीमा तपाईंको पेन्डिङ बोलपत्र पहिल्यै छ।', 'You already have a pending bid for this auction in the last 24 hours.'], 'bid_amount');
+    if (d.bidder_email) d.bidder_email = String(d.bidder_email).toLowerCase();
+    return null;
+  },
+
   /** honor-submit-helper.php: self-oriented categories default the nominee to the applicant. */
   async honor(ctx) {
     const opt = (ctx.options.category_id || []).find(o => String(o[0]) === String(ctx.data.category_id));

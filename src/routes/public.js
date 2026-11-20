@@ -350,7 +350,7 @@ router.get('/auctions/:id', ah(async (req, res, next) => {
   const item = await db.one(`SELECT * FROM auction_notices WHERE id = $1 AND ${ACTIVE}`, [util.int(req.params.id)]);
   if (!item) return next();
   const bids = await db.value('SELECT count(*) FROM auction_bids WHERE auction_id = $1', [item.id]);
-  res.render('public/auction-detail', { title: res.locals.f(item, 'title'), item, bids, images: String(item.images || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean) });
+  res.render('public/auction-detail', { title: res.locals.f(item, 'title'), item, bids, open: require('../lib/auctions').isOpen(item), images: String(item.images || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean) });
 }));
 
 router.get('/elections', ah(async (req, res) => {

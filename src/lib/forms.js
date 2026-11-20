@@ -53,7 +53,11 @@ const optionSources = {
   async digitalTypes() {
     const rows = await db.many('SELECT slug, name_np, name_en, requires_document FROM digital_service_types WHERE is_active = 1 ORDER BY display_order, id');
     return rows.length ? rows.map(r => [r.slug, r.name_np, r.name_en || r.name_np, { requires_document: !!Number(r.requires_document) }]) :
-      [['mobile_banking', 'मोबाइल बैंकिङ', 'Mobile banking'], ['statement', 'बैंक स्टेटमेन्ट', 'Statement'], ['qr', 'QR भुक्तानी', 'QR payment'], ['sms', 'SMS अलर्ट', 'SMS alert'], ['other', 'अन्य', 'Other']];
+      // includes/digital-service-types.php slugs, so rows imported from PHP show the same labels
+      [['statement_request', 'स्टेटमेन्ट अनुरोध', 'Statement request'], ['bill_payment', 'बिल भुक्तानी सहयोग', 'Bill payment support'], ['mobile_recharge', 'मोबाइल रिचार्ज अनुरोध', 'Mobile recharge request'],
+        ['internet_banking', 'इन्टरनेट/मोबाइल बैंकिङ', 'Internet / mobile banking'], ['missed_call_banking', 'मिस्ड कल बैंकिङ', 'Missed call banking'], ['sms_alert', 'SMS अलर्ट सेवा', 'SMS alert service'],
+        ['card_service', 'कार्ड सेवा', 'Card service'], ['qr_payment', 'QR/डिजिटल भुक्तानी', 'QR / digital payment'], ['share_refund', 'शेयर फिर्ता (Refund)', 'Share refund'],
+        ['share_increase', 'शेयर वृद्धि (Increase)', 'Share increase'], ['other', 'अन्य डिजिटल सेवा', 'Other digital service']];
   },
   async honorPrograms() {
     const rows = await db.many(`SELECT id, title_np, title_en FROM honor_programs WHERE is_active = 1
@@ -74,8 +78,10 @@ const optionSources = {
   },
   async districts() { return DISTRICTS.map(d => [d, d, d]); },
   async auctions() {
-    const rows = await db.many(`SELECT id, title, title_en FROM auction_notices WHERE is_active = 1 AND status IN ('upcoming','ongoing') ORDER BY auction_date NULLS LAST, id DESC`);
-    return rows.map(r => [String(r.id), r.title, r.title_en || r.title]);
+    const rows = await db.many(`SELECT id, title, title_en, status, is_active, auction_date, auction_time, minimum_price FROM auction_notices
+                                WHERE is_active = 1 AND status IN ('upcoming','ongoing') ORDER BY auction_date NULLS LAST, id DESC`);
+    const { isOpen } = require('./auctions');
+    return rows.filter(r => isOpen(r)).map(r => [String(r.id), r.title, r.title_en || r.title, { minimum_price: Number(r.minimum_price) || 0 }]);
   },
 };
 
