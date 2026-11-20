@@ -60,7 +60,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | information-room-file.php | /member/information-room/:id (legacy map) | COVERED | |
 | install.php | platform console / scripts/tenant-create.js | NOT-NEEDED | multi-tenant platform |
 | institutional-profile-file.php | /institutional-profile/:id/file (canOpen + file token) | COVERED | |
-| institutional-profile.php | /institutional-profile | PARTIAL | Page covered; legacy `?id=` deep link dropped by legacy-urls (SM-17) |
+| institutional-profile.php | /institutional-profile | COVERED (page; `?id=` has no per-row target — FY/month filters instead) | Page covered; legacy `?id=` deep link dropped by legacy-urls (SM-17) |
 | interest-rates.php | /interest-rates | COVERED | |
 | loan-apply.php | /apply/loan | COVERED | |
 | login.php | → /member/login (legacy-urls) | COVERED | |
@@ -98,7 +98,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | verify.php | GET/POST /verify, /verify/service, /verify/photo/:mid · public-members.js | COVERED | derived CVV (SM-1), card-number / un-hyphenated lookup (SM-6), `verify.php?partner=` QR params (SM-7) |
 | vision-mission.php | /vision-mission | COVERED | |
 | why-choose.php | /about#why | COVERED | |
-| sw.js | public/sw.js (served by app.js:71) | PARTIAL | Offline fallback + push + notificationclick ported. PHP cached member pages (PAGES_CACHE) and showed `/member/offline.php` with cached name/unread; Node deliberately never caches member/admin HTML (privacy). Not recorded in docs/parity → record as deliberate (SM-18). |
+| sw.js | public/sw.js (served by app.js:71) | COVERED (member-page cache deliberately dropped — docs/parity/README.md) | Offline fallback + push + notificationclick ported. PHP cached member pages (PAGES_CACHE) and showed `/member/offline.php` with cached name/unread; Node deliberately never caches member/admin HTML (privacy). Not recorded in docs/parity → record as deliberate (SM-18). |
 | .htaccess | Express (static only from /static, deny rules implicit), legacy-urls (extensionless, index.php→/), helmet | COVERED | `/assets/uploads/...` (SM-2) and gated folders (SM-3) done in app.js. Cache headers/compression handled by Express/nginx (deploy/) |
 | version.txt | package.json version | NOT-NEEDED | |
 
@@ -120,9 +120,9 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | honor-apply.php | /apply/honor | COVERED | |
 | id-card.php | /member/id-card (KYM photo, expiry warning, stars, unlock request) | COVERED | |
 | index.php | GET /member (KPIs, quick apply, partner services, elections) | COVERED | |
-| information-room-view.php | /member/information-room/:id/view | PARTIAL | watermark yes; copy/print/PrintScreen/blur deterrence missing (SM-19) |
+| information-room-view.php | /member/information-room/:id/view | COVERED (SM-19) | watermark yes; copy/print/PrintScreen/blur deterrence missing (SM-19) |
 | information-room.php | /member/information-room | COVERED | |
-| kyc-print.php | /member/kyc-print, /member/kyc-print/file/:field | PARTIAL | Works, but finds the KYM with an ad-hoc query (`member.js:318-335`: id OR member_id+exact phone) instead of `kym.loadLinkedKyc` (SSOT rule; exact phone compare misses +977 / dashes) (SM-10) |
+| kyc-print.php | /member/kyc-print, /member/kyc-print/file/:field | COVERED (SM-10: `kym.loadLinkedKyc`) | Works, but finds the KYM with an ad-hoc query (`member.js:318-335`: id OR member_id+exact phone) instead of `kym.loadLinkedKyc` (SSOT rule; exact phone compare misses +977 / dashes) (SM-10) |
 | kyc.php | → /apply/kyc | COVERED | |
 | loan-apply.php | /apply/loan | COVERED | |
 | login.php | /member/login, /member/register, /login/2fa (member.js, member-account.js) | COVERED | |
@@ -136,7 +136,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | push-subscribe.php | /member/push/key, /push/subscribe, /push/unsubscribe | COVERED | |
 | scan.php | /member/scan · public/js/member-scan.js | COVERED | |
 | service-request.php | /member/service-request | COVERED | |
-| tracker.php | /member/requests, /member/requests/:module/:id | PARTIAL | Applicant cannot open their own uploaded documents (PHP `coop_upload_gate_member_owns`, `upload-gate.php:155-189`); only the office reply attachment is served (SM-20, P3) |
+| tracker.php | /member/requests, /member/requests/:module/:id | COVERED (SM-20: own documents) | Applicant cannot open their own uploaded documents (PHP `coop_upload_gate_member_owns`, `upload-gate.php:155-189`); only the office reply attachment is served (SM-20, P3) |
 | transactions.php | /member/accounts (CBS push data) | COVERED | PHP was a stub |
 | welfare.php | /apply/welfare + /member/requests | COVERED | |
 | includes/chrome.php, chrome-foot.php | views/layouts/member.ejs | COVERED | |
@@ -167,7 +167,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | `coop_sanitize_icon_class`, `coop_canonical_icon_for_storage`, `coop_canonicalize_icon_db_rows`, `coop_nav_icon_html` | lib/icons.js (faToNode + aliases) | COVERED | |
 | `coop_sanitize_cms_html`, `coop_render_cms_prose` | util.sanitizeHtml / richText | COVERED | |
 | `coop_notice_date_bs`, `coop_notice_date_ad`, `coop_notice_date_normalize_input`, `coop_notice_bs_day_month` | nepali-date isBsLike/toAd/toBs, scripts/normalise-bs-dates.js | COVERED | |
-| `coop_notice_media_src`, `safe_public_upload_path`, `safe_public_media_path`, `safe_media_src`, `coop_resolve_stored_upload_rel`, `coop_stored_upload_exists`, `coop_public_download_url`, `safe_versioned_media_src(_absolute)`, `getAssetUrl`, `coop_versioned_asset_url` | uploads.mediaUrl / resolveStored, /static | PARTIAL | DB-stored `assets/uploads/...` paths map correctly; literal `/assets/uploads/...` URLs inside HTML bodies and external links 404; `assets/images/*` default paths map to `/uploads/assets/images/*` (SM-2) |
+| `coop_notice_media_src`, `safe_public_upload_path`, `safe_public_media_path`, `safe_media_src`, `coop_resolve_stored_upload_rel`, `coop_stored_upload_exists`, `coop_public_download_url`, `safe_versioned_media_src(_absolute)`, `getAssetUrl`, `coop_versioned_asset_url` | uploads.mediaUrl / resolveStored, /static | COVERED (SM-2: `/assets/uploads/*` route, HTML rewrite on migration, `assets/images` defaults → '') | DB-stored `assets/uploads/...` paths map correctly; literal `/assets/uploads/...` URLs inside HTML bodies and external links 404; `assets/images/*` default paths map to `/uploads/assets/images/*` (SM-2) |
 | `safe_http_url`, `coop_safe_cta_url`, `coop_safe_webhook_url` | util.sanitizeHtml, notify.safeHttpsUrl (DNS-pinned) | COVERED | |
 | `coopAuthSecret`, `coopVerifyHmac` | config.sessionSecret HMACs (member-portal signCardLink, member-access fileToken) | COVERED | |
 | `coop_new_tracking_id`, `coop_is_public_tracking_id` | util.trackingId, tracker regex | COVERED | |
@@ -303,7 +303,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | coop-a11y.js (aria-labels for placeholder-only inputs, icon buttons) | partials/field.ejs, admin-field.ejs render real `<label>`s; icon buttons carry aria-label in views | COVERED | fixed at markup level instead of a runtime shim |
 | coop-mobile.js (mobile UX) | public/js/site.js + app.css mobile-first | COVERED | |
 | form-validation.js (10-digit 9XXXXXXXXX, email, inline errors) | public/js/forms.js + server forms.validate / RULES.mobile10 | COVERED | |
-| information-room-viewer.js (block copy/cut/contextmenu/drag, Ctrl+S/P/C/U/A, PrintScreen, blur when hidden) | — | MISSING | SM-19 (P3) |
+| information-room-viewer.js (block copy/cut/contextmenu/drag, Ctrl+S/P/C/U/A, PrintScreen, blur when hidden) | — | COVERED (`public/js/information-room-viewer.js`, SM-19) | SM-19 (P3) |
 | init-uniformity.js (BS date inputs) | public/js/forms.js bsdate + /js/form-data.js | COVERED | |
 | kyc-capture.js (camera, crop/rotate, signature pad, thumb, quality score) | public/js/kyc-capture.js + uploads.saveDataUrl | COVERED | |
 | main.js (popup carousel, loader, back-to-top, counters) | public/js/site.js, app.js, partials/notice-popup.ejs | COVERED | |
@@ -619,13 +619,13 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | `pages.is_new`, `pages.new_until` | "New" badge on dynamic page menu items until a date (`includes/header.php:419-474`); not editable in PHP admin | COVERED (B-15) | P3 (`is_new` exists; neither shown in Node menu nor editable) |
 | `kyc_applications.member_id_generated/member_generated_at/member_generated_by` | legacy stamps from the old kyc-generate-member flow (now a stub in PHP) | NOT-NEEDED | – |
 | `member_program_attendance.is_priority` | shown as "Priority" badge/column (program-attendance.php:85,836) but no PHP caller ever sets it to 1 | NOT-NEEDED | – |
-| `member_program_attendance.device_fingerprint` | stored on QR check-in (program-attendance-helpers.php:432,515) | MISSING | P3 (record `sha256(UA)` prefix from member QR flow; audit value only) |
-| `program_audit_logs.payload_json`, `.ip_address` | void audit stored payload + IP (program-attendance-helpers.php:351) | PARTIAL | P3 (attendance.js:98 omits both) |
+| `member_program_attendance.device_fingerprint` | stored on QR check-in (program-attendance-helpers.php:432,515) | COVERED (B-14) | P3 (record `sha256(UA)` prefix from member QR flow; audit value only) |
+| `program_audit_logs.payload_json`, `.ip_address` | void audit stored payload + IP (program-attendance-helpers.php:351) | COVERED (B-14) | P3 (attendance.js:98 omits both) |
 | `program_occurrences.venue_id` | DDL only, never used in PHP | NOT-NEEDED | – |
 | `visitor_counter.page_visited/ip_address/user_agent/visit_date` | per-hit log (includes/footer.php:47) | NOT-NEEDED | Node aggregates in `visitor_stats`; table only purged. |
 | `notification_templates.variables` | informational list of placeholders | NOT-NEEDED | Node shows placeholders as a hint. |
 | `member_import_jobs.error_message` | job-level failure text | COVERED | `memberImport.setError` on a failed commit request, shown on the job page |
-| `member_marketplace_listings.available_from/available_time_from/available_time_to` | member form fields (member/marketplace.php:121-209) | PARTIAL | shown in admin view only; check member form in matrix A. |
+| `member_marketplace_listings.available_from/available_time_from/available_time_to` | member form fields (member/marketplace.php:121-209) | COVERED (member form: from / until + time / daily hours, `marketplace.js readListing`) | shown in admin view only; check member form in matrix A. |
 | application tables `tracking_id`, `is_read`, `reviewed_by/at`, `resolved_at`, `service_type_np`, `member_portal_id`, `is_member` | | COVERED | used through the generic inbox/submission code (`cols.has(...)`), verified admin-applications.js:248-251, submissions.js:75-84, public.js:924-925. |
 
 ### 6.4 Tables with PHP admin features and where they are edited in Node

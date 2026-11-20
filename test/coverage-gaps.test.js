@@ -703,3 +703,25 @@ test('SM-15: tracker looks up by POST (phone kept out of the URL) and shows emai
   assert.doesNotMatch(r.text, /SMTP 550/, 'no failure reasons in public');
   assert.equal((await c.get('/track?id=LN-TRK-0001&phone=9841600014')).status, 200, 'old GET links still work');
 });
+
+// ---------------------------------------------------------------- §6.3 marketplace availability fields on the member form
+test('§6.3: member marketplace form saves available from / until (B.S. accepted) and daily hours', async () => {
+  await seedMember('MK-1200', '9841600015');
+  const m = await memberClient('MK-1200');
+  const tok = await m.token('/member/marketplace/new');
+  let r = await m.agent.post('/member/marketplace?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('listing_type', 'product').field('category', 'other').field('title', 'Honey').field('description', 'Pure')
+    .field('available_from', '2083-01-01').field('available_until', '2090-01-01').field('available_until_time', '18:30')
+    .field('available_time_from', '09:00').field('available_time_to', '17:00');
+  assert.equal(r.status, 302, r.text && r.text.slice(0, 200));
+  const nd = require('../src/lib/nepali-date');
+  const row = await inA(() => db.one("SELECT available_from::text AS f, available_until::text AS u, available_time_from::text AS tf, available_time_to::text AS tt FROM member_marketplace_listings WHERE title = 'Honey'"));
+  assert.equal(row.f, nd.bsToAd('2083-01-01'));
+  assert.equal(row.u, nd.bsToAd('2090-01-01') + ' 18:30:00');
+  assert.equal(row.tf, '09:00:00');
+  assert.equal(row.tt, '17:00:00');
+  const id = await inA(() => db.value("SELECT id FROM member_marketplace_listings WHERE title = 'Honey'"));
+  const edit = await m.get(`/member/marketplace/${id}/edit`);
+  assert.match(edit.text, new RegExp(`name="available_from" value="${nd.bsToAd('2083-01-01')}"`));
+  assert.match(edit.text, /name="available_time_from" value="09:00"/);
+});
