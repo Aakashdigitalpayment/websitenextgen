@@ -344,3 +344,51 @@ test('members list: KYM filter, stats strip, audience bulk notification', async 
   assert.equal(await inA(() => db.value('SELECT count(*) FROM member_notifications')), before + 4);
   assert.equal(await inA(() => db.value("SELECT count(*) FROM audit_log WHERE action = 'notify_bulk'")), 2);
 });
+
+// ---------------------------------------------------------------- b-9 member import parity
+test('member import: header aliases, membership date (BS), KYM stub soft-fill, ID cards for small jobs, errors CSV', async () => {
+  await inA(() => db.query("INSERT INTO kyc_applications (tracking_id, member_id, full_name, mobile, status, father_name) VALUES ('KY-IMP', 'I-2', 'Existing', '9841700002', 'pending', 'Kept Father')"));
+  const tok = await admin.token('/admin/members/import');
+  const csv = '﻿coop_member_id,member_name,nepali_name,mobile_no,sex,baba_ko_nam,nagarikta_no,sadasyata_miti\n'
+    + 'I-1,Import One,आयात एक,9841700001,M,Father One,11-22-333,2070-01-15\n'
+    + 'I-2,Import Two,आयात दुई,9841700002,F,New Father,44-55,२०७६-०१-१८\n'
+    + 'I-3,,,9841700003,,,,\n'
+    + 'I-4,Bad Date,,9841700004,,,,2070-13-40\n';
+  let r = await admin.agent.post('/admin/members/import?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('mode', 'update').attach('csv', Buffer.from(csv), 'members.csv');
+  assert.equal(r.status, 302, r.text.slice(0, 300));
+  const jobId = Number(r.headers.location.split('/').pop());
+  const errs = await admin.get(`/admin/members/import/${jobId}/errors.csv`);
+  assert.equal(errs.status, 200);
+  assert.match(errs.text, /I-3/);
+  assert.match(errs.text, /membership_date/);
+  assert.doesNotMatch(errs.text, /I-1/);
+  r = await admin.form(`/admin/members/import/${jobId}/commit`, {}, `/admin/members/import/${jobId}`);
+  assert.equal(r.status, 302);
+  const st = await inA(async () => ({
+    m1: await db.one("SELECT * FROM members WHERE sadasyata_number = 'I-1'"),
+    m2: await db.one("SELECT * FROM members WHERE sadasyata_number = 'I-2'"),
+    k1: await db.one("SELECT * FROM kyc_applications WHERE member_id = 'I-1'"),
+    k2: await db.one("SELECT * FROM kyc_applications WHERE member_id = 'I-2'"),
+    cards: await db.value("SELECT count(*) FROM member_id_cards c JOIN members m ON c.member_id = m.id::text WHERE m.sadasyata_number IN ('I-1', 'I-2') AND c.status = 'active'"),
+    job: await db.one('SELECT * FROM member_import_jobs WHERE id = $1', [jobId]),
+  }));
+  assert.equal(st.m1.name_np, 'आयात एक');
+  assert.equal(st.m1.gender, 'male');
+  assert.ok(/^2013-04-2[78]$/.test(st.m1.membership_date), 'BS 2070-01-15 → AD ' + st.m1.membership_date);
+  assert.match(st.m2.membership_date, /^2019-05-0\d/); // Devanagari digits work too
+  // a KYM stub for I-1 (linked), filled with father + citizenship; the existing KYM for I-2 keeps its father
+  assert.equal(st.k1.status, 'incomplete');
+  assert.equal(st.k1.father_name, 'Father One');
+  assert.equal(st.k1.citizenship_no, '11-22-333');
+  assert.equal(st.m1.kyc_application_id, st.k1.id);
+  assert.equal(st.k2.father_name, 'Kept Father');
+  assert.equal(st.k2.citizenship_no, '44-55');
+  assert.equal(st.m2.kyc_application_id, st.k2.id);
+  // small job: an ID card per member
+  assert.equal(st.cards, 2);
+  assert.equal(st.job.cards_count, 2);
+  assert.equal(st.m1.password_hash, null); // never a guessable temp password
+  const sample = await admin.get('/admin/members/import/sample.csv');
+  assert.match(sample.text, /father_name,citizenship_no,membership_date_bs,monthly_saving/);
+});

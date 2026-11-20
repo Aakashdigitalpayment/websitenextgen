@@ -196,12 +196,19 @@ router.get('/members/import/:id', requireAdmin('admin'), ah(async (req, res, nex
   const rows = await db.many(`SELECT * FROM member_import_rows WHERE job_id = $1 ${filter ? 'AND status = $2' : ''} ORDER BY row_num LIMIT 300`, filter ? [job.id, filter] : [job.id]);
   res.render('admin/member-import-job', { title: res.locals.t('आयात', 'Import') + ' #' + job.id, job, rows, counts, filter });
 }));
+router.get('/members/import/:id/errors.csv', requireAdmin('admin'), ah(async (req, res, next) => {
+  const job = await db.one('SELECT id FROM member_import_jobs WHERE id = $1', [util.int(req.params.id)]);
+  if (!job) return next();
+  const rows = await memberImport.errorRows(job.id);
+  await auth.audit(req, 'export', 'member_import_rows', job.id, `Import #${job.id} errors CSV (${rows.length} rows)`);
+  res.type('text/csv; charset=utf-8').attachment(`member-import-${job.id}-errors.csv`).send(util.toCsv(['row_num', 'sadasyata_number', 'full_name', 'mobile', 'status', 'message'], rows));
+}));
 router.post('/members/import/:id/commit', requireAdmin('admin'), ah(async (req, res) => {
   const id = util.int(req.params.id);
   try {
-    const r = await memberImport.commit(id, req.admin.id);
-    await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${r.ok} ok, ${r.skip} skipped, ${r.fail} failed`);
-    flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${r.ok} सफल, ${r.skip} छोडियो, ${r.fail} असफल`, `Import done: ${r.ok} saved, ${r.skip} skipped, ${r.fail} failed`));
+    const r = await memberImport.commit(id, req.admin.id, { tenant: req.tenant });
+    await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${r.ok} ok, ${r.skip} skipped, ${r.fail} failed, ${r.cards} ID cards`);
+    flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${r.ok} सफल, ${r.skip} छोडियो, ${r.fail} असफल, ${r.cards} परिचयपत्र`, `Import done: ${r.ok} saved, ${r.skip} skipped, ${r.fail} failed, ${r.cards} ID cards issued`));
   } catch (e) { flash(req, 'error', e.message); }
   res.redirect('/admin/members/import/' + id);
 }));
