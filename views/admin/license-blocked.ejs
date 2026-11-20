@@ -1,0 +1,22 @@
+<div class="form-card">
+  <h1 style="font-size:1.3rem"><%= t('वेबसाइट सेवाको म्याद सकियो', 'Website licence expired') %></h1>
+  <p class="muted small"><%= t('म्याद', 'Expired on') %>: <%= st.untilBs ? nd.formatBs(st.untilBs, lang) : '' %> <span class="faint">(<%= st.until || '' %>)</span>. <%= t('भुक्तानी गरेपछि तलको फारमबाट सूचना पठाउनुहोस्; प्लेटफर्मले प्रमाणित गरेपछि लगइन खुल्छ।', 'After paying, send the details below; sign-in opens again once the platform verifies the payment.') %></p>
+<% if (locals.pay && (pay.amount || pay.esewa || pay.khalti || pay.bank)) { %><div class="kv mt-2">
+  <% if (pay.amount) { %><div><%= t('नवीकरण रकम', 'Renewal amount') %></div><div>रु. <%= pay.amount %></div><% } %>
+  <% if (pay.esewa) { %><div>eSewa ID</div><div><code><%= pay.esewa %></code></div><% } %>
+  <% if (pay.khalti) { %><div>Khalti ID</div><div><code><%= pay.khalti %></code></div><% } %>
+  <% if (pay.bank) { %><div><%= t('बैंक', 'Bank') %></div><div><%= pay.bank %></div><% } %>
+</div><% } %>
+  <% (locals.flash || []).forEach(m => { %><div class="alert alert-<%= m.type %>"><%= m.message %></div><% }) %>
+  <% if (notices.length) { %><div class="alert alert-info"><%= t('प्रमाणीकरण बाँकी सूचना', 'Notices awaiting verification') %>: <% notices.forEach(n => { %><code><%= n.txn_reference %></code> <% }) %></div><% } %>
+  <form method="post" action="/admin/license/blocked" class="stack mt-2">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="field"><label for="lb_gw"><%= t('भुक्तानी माध्यम', 'Paid via') %></label><select class="select" id="lb_gw" name="gateway"><option value="esewa">eSewa</option><option value="khalti">Khalti</option><option value="bank"><%= t('बैंक', 'Bank') %></option><option value="other"><%= t('अन्य', 'Other') %></option></select></div>
+    <div class="field"><label for="lb_amt"><%= t('रकम (रु.)', 'Amount (Rs.)') %></label><input class="input" id="lb_amt" name="amount" inputmode="decimal" maxlength="40"></div>
+    <div class="field"><label for="lb_txn"><%= t('कारोबार नं. / भौचर नं.', 'Transaction / voucher no.') %> *</label><input class="input" id="lb_txn" name="txn_reference" required maxlength="120"></div>
+    <div class="field"><label for="lb_note"><%= t('टिप्पणी', 'Note') %></label><textarea class="textarea" id="lb_note" name="note" rows="2" maxlength="1000"></textarea></div>
+    <button class="btn btn-primary btn-block"><%= t('भुक्तानी सूचना पठाउनुहोस्', 'Send payment notice') %></button>
+  </form>
+  <p class="small muted mt-2"><%= t('प्रयोगकर्ता', 'User') %>: <%= username %></p>
+</div>
+<p class="text-center small mt-2"><a href="/admin/login"><%= t('← लगइन', '← Sign in') %></a></p>

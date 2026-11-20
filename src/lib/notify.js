@@ -210,12 +210,14 @@ async function adminEvent(mod, vars, generic = 'submitted') {
     const s = await settings.all();
     const v = templateVars(s, { module: mod.title?.[0] || '', ...vars });
     const ev = (mod.adminEvent || mod.key || 'submitted') + ':admin';
-    if (s.notify_admin_emails) {
+    // per-module office alerts (Settings → SMS / email: notify_email_<module> / notify_sms_<module>, on unless '0')
+    const off = ch => mod.key && s[`notify_${ch}_${mod.key}`] === '0';
+    if (s.notify_admin_emails && !off('email')) {
       const adm = await moduleTemplate(mod.adminEvent, generic, 'admin', 'email');
       if (adm) await sendEmail(ev, s.notify_admin_emails, render(adm.subject, v) || 'New notification', render(adm.body, v));
     }
     const phones = String(s.notify_sms_recipients || '').split(/[,;\s]+/).map(normalizePhone).filter(Boolean);
-    if (phones.length) {
+    if (phones.length && !off('sms')) {
       const sms = await moduleTemplate(mod.adminEvent, generic, 'admin', 'sms');
       if (sms) for (const p of [...new Set(phones)]) await sendSms(ev, p, render(sms.body, v).slice(0, 320));
     }

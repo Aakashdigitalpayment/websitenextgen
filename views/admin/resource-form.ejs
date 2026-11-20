@@ -8,9 +8,11 @@
 <% const action = '/admin/r/' + r.key + (item ? '/' + item.id : ''); const multi = r.fileFields.length > 0; %>
 <form class="form-card" method="post" action="<%= action %><%= multi ? '?_csrf=' + encodeURIComponent(csrfToken) : '' %>" <%= multi ? 'enctype=multipart/form-data' : '' %> novalidate>
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-  <div class="form-grid"><% fields.filter(fl => !fl.hidden).forEach(fl => { %><%- include('../partials/admin-field', { field: fl, values, errors, options }) %><% }) %></div>
+  <div class="form-grid"><% fields.filter(fl => !fl.hidden).forEach(fl => { %><%- include('../partials/admin-field', { field: fl, values, errors, options, item, bsDates: locals.bsDates }) %><% }) %></div>
   <div class="form-actions">
     <button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button>
     <a class="btn btn-ghost" href="/admin/r/<%= r.key %>"><%= t('रद्द', 'Cancel') %></a>
   </div>
 </form>
+<% if (locals.bsDates && fields.some(fl => fl.type === 'date')) { %><link rel="stylesheet" href="/static/css/forms.css"><script src="/js/form-data.js" defer></script><script src="/static/js/forms.js" defer></script><% } %>
+<% if (fields.some(fl => fl.type === 'richtext')) { %><script src="/static/js/rich-editor.js" defer></script><% } %>

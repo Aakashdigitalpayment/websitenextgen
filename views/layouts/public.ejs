@@ -1,10 +1,8 @@
 <!doctype html>
-<% /* per-language logo, favicon and slogan (PHP logo_np / logo_en / site_favicon / site_slogan) */
+<% /* per-language logo and favicon (PHP logo_np / logo_en / site_favicon) */
    const siteLogo = (lang === 'en' ? settings.logo_en : settings.logo_np) || settings.logo || settings.site_logo || '';
    const siteIcon = settings.site_favicon || siteLogo;
-   const defaultTagline = 'सदस्यको हितमा, समुदायको साथमा';
-   const npTagline = settings.site_slogan && (!settings.site_tagline || settings.site_tagline === defaultTagline) ? settings.site_slogan : settings.site_tagline || settings.site_slogan || '';
-   const siteTagline = (lang === 'en' && (settings.site_tagline_en || settings.site_slogan_en)) || npTagline; %>
+   const siteTagline = (lang === 'en' && (settings.site_tagline_en || settings.site_slogan_en)) || settings.site_tagline || ''; /* site_slogan → site_tagline: settings.js */ %>
 <html lang="<%= lang === 'en' ? 'en' : 'ne' %>"<% if (locals.theme && theme.attr) { %> data-theme="<%= theme.attr %>"<% } %>>
 <head>
   <meta charset="utf-8">
@@ -15,7 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/site.css">
   <% if (siteIcon) { %><link rel="icon" href="<%= mediaUrl(siteIcon) %>"><% } %>
-  <link rel="apple-touch-icon" href="/pwa-icon/180.png">
+  <link rel="apple-touch-icon" href="/pwa-icon-180.png">
   <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= locals.theme ? theme.brand : brandColor %>">
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
@@ -154,13 +152,13 @@
     </form>
     <div class="flex gap-1 wrap mt-2 small"><% [['/interest-rates', t('ब्याजदर', 'Interest rates')], ['/apply/loan', t('ऋण आवेदन', 'Loan')], ['/notices', t('सूचना', 'Notices')], ['/contact', t('सम्पर्क', 'Contact')], ['/downloads', t('डाउनलोड', 'Downloads')]].forEach(l => { %><a class="tab" href="<%= l[0] %>"><%= l[1] %></a><% }) %></div>
   </dialog>
-  <% const aiOn = (settings.ai_enabled || settings.ai_chat_enabled) === '1'; /* FAQ-only assistant when AI is off but chatbot answers exist (footer.php FAQ widget) */
+  <% const aiOn = settings.ai_enabled === '1'; /* FAQ-only assistant when AI is off but chatbot answers exist (footer.php FAQ widget) */
      if ((aiOn || settings.chat_widget === '1' || (locals.floatWidgets && floatWidgets.chatFaqs)) && (!locals.plan || plan.has('ai_chat'))) { %>
   <div class="chat" data-chat data-csrf="<%= csrfToken %>" data-lang="<%= lang %>">
     <button class="chat-fab btn btn-primary" data-chat-toggle aria-label="<%= t('सहयोग', 'Help') %>"><%- icon('message', 'icon-lg') %></button>
     <div class="chat-panel" hidden role="dialog" aria-label="<%= t('सहयोगी', 'Assistant') %>">
       <div class="chat-head"><strong style="font-weight:600"><%= t('सहयोगी', 'Assistant') %></strong><button class="btn btn-ghost btn-icon" data-chat-toggle aria-label="Close"><%- icon('close') %></button></div>
-      <div class="chat-log" data-chat-log aria-live="polite"><div class="chat-msg bot"><%= settings.ai_welcome || t('नमस्ते! म तपाईंलाई कसरी सहयोग गर्न सक्छु?', 'Hello! How can I help you?') %></div></div>
+      <div class="chat-log" data-chat-log aria-live="polite"><div class="chat-msg bot"><%= (lang === 'en' ? settings.ai_welcome_en : settings.ai_welcome_np) || settings.ai_welcome || t('नमस्ते! म तपाईंलाई कसरी सहयोग गर्न सक्छु?', 'Hello! How can I help you?') %></div></div>
       <div class="chat-chips" data-chat-chips><% [['/apply/appointment', t('भेटघाट', 'Appointment')], ['/apply/account', t('खाता खोल्ने', 'Open account')], ['/apply/grievance', t('गुनासो', 'Grievance')], ['/track', t('आवेदन ट्र्याक', 'Track')]].filter(c => !locals.plan || plan.allows(c[0])).forEach(c => { %><a class="tab" href="<%= c[0] %>"><%= c[1] %></a><% }) %></div>
       <form class="chat-form" data-chat-form><input class="input" name="m" maxlength="500" autocomplete="off" placeholder="<%= t('प्रश्न लेख्नुहोस्…', 'Type your question…') %>" required><button class="btn btn-primary btn-icon" aria-label="Send"><%- icon('right') %></button></form>
       <div class="chat-note"><%= aiOn ? t('AI सहयोगी — पासवर्ड वा OTP कहिल्यै नलेख्नुहोस्।', 'AI assistant — never share passwords or OTPs.') : t('सहयोगी — पासवर्ड वा OTP कहिल्यै नलेख्नुहोस्।', 'Assistant — never share passwords or OTPs.') %></div>

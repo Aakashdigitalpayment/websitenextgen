@@ -978,13 +978,30 @@ router.get('/attend', (req, res) => res.redirect('/member/attend?t=' + encodeURI
 // ---------------------------------------------------------------- PWA
 router.get('/manifest.webmanifest', (req, res) => {
   const s = res.locals.settings;
-  const icon = s.logo ? require('../lib/uploads').mediaUrl(s.logo) : null;
+  const has = s.site_favicon || s.logo;
   res.type('application/manifest+json').send(JSON.stringify({
     name: res.locals.siteName, short_name: (s.pwa_short_name || res.locals.siteName).slice(0, 24), start_url: '/', scope: '/', display: 'standalone',
     background_color: '#fafaf9', theme_color: res.locals.brandColor, lang: 'ne',
-    icons: icon ? [{ src: icon, sizes: '512x512', type: /\.png$/i.test(icon) ? 'image/png' : 'image/jpeg', purpose: 'any' }] : [],
+    icons: has ? [192, 512].map(n => ({ src: `/pwa-icon-${n}.png`, sizes: `${n}x${n}`, type: 'image/png', purpose: 'any' })) : [],
   }));
 });
+// square PNG app icons from the favicon or logo (legacy includes/pwa-icons.php), cached per source file
+router.get('/pwa-icon-:size.png', ah(async (req, res, next) => {
+  const size = Number(req.params.size);
+  const src = res.locals.settings.site_favicon || res.locals.settings.logo;
+  if (![192, 512].includes(size) || !src) return next();
+  const up = require('../lib/uploads');
+  const file = up.resolveStored(req, src);
+  if (!file || !require('fs').existsSync(file) || !/\.(png|jpe?g|webp|gif)$/i.test(file)) return next();
+  const path = require('path'), fs = require('fs');
+  const dir = path.join(up.tenantDir(req), '_pwa');
+  const out = path.join(dir, `${require('crypto').createHash('sha1').update(src + fs.statSync(file).mtimeMs).digest('hex').slice(0, 12)}-${size}.png`);
+  if (!fs.existsSync(out)) {
+    fs.mkdirSync(dir, { recursive: true });
+    await require('sharp')(file).resize(size, size, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' }).png().toFile(out);
+  }
+  res.set({ 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' }).type('image/png').sendFile(path.basename(out), { root: path.resolve(dir) }); // root: the install path may contain dot folders
+}));
 router.get('/offline', (req, res) => res.render('public/error', { title: res.locals.t('इन्टरनेट छैन', 'You are offline'), code: '', message: res.locals.t('इन्टरनेट जडान जाँच गरेर फेरि प्रयास गर्नुहोस्।', 'Check your connection and try again.') }));
 
 // ---------------------------------------------------------------- SEO

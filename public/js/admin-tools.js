@@ -89,4 +89,11 @@
     if (!n || !act) { e.preventDefault(); return; }
     if (act === 'delete' && !window.confirm(f.dataset.confirmDelete || 'Delete?')) e.preventDefault();
   }));
+
+  // ---- copy a plain value (dashboard credential usernames)
+  $$('[data-copy-text]').forEach(b => b.addEventListener('click', () => {
+    if (!navigator.clipboard) return;
+    const old = b.textContent;
+    navigator.clipboard.writeText(b.dataset.copyText).then(() => { b.textContent = '✓'; setTimeout(() => { b.textContent = old; }, 1200); }, () => {});
+  }));
 })();

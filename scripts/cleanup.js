@@ -23,6 +23,10 @@ const RULES = [
   ['api_request_log', "created_at < now() - interval '90 days'"],
   ['api_idempotency', "created_at < now() - interval '2 days'"],
   ['api_webhook_deliveries', "status = 'delivered' AND delivered_at < now() - interval '30 days'"],
+  // logs (legacy cron-cleanup.php): audit kept two years, errors 90 days, imported PHP admin activity one year
+  ['audit_log', "created_at < now() - interval '730 days'"],
+  ['app_error_log', "created_at < now() - interval '90 days'"],
+  ['admin_activity_log', "created_at < now() - interval '365 days'"],
 ];
 
 (async () => {

@@ -9,13 +9,8 @@ const settings = require('./settings');
 const util = require('./util');
 const guard = require('./ai-guard');
 
-/** Settings with the PHP key names as fallbacks (ai_chat_enabled, enc:v1: key) — works with or without the settings.js mapping. */
-async function aiSettings() {
-  const s = { ...(await settings.all()) };
-  if (!s.ai_enabled && s.ai_chat_enabled) s.ai_enabled = s.ai_chat_enabled;
-  if (/^enc:v1:/.test(s.ai_api_key || '')) s.ai_api_key = typeof settings.decryptLegacy === 'function' ? settings.decryptLegacy(s.ai_api_key) : '';
-  return s;
-}
+/** Settings (PHP key names such as ai_chat_enabled and the enc:v1: key are mapped by settings.js at read time). */
+const aiSettings = () => settings.all();
 
 const DEFAULT_MODEL = { gemini: 'gemini-2.5-flash', openai: 'gpt-4o-mini', deepseek: 'deepseek-chat' };
 

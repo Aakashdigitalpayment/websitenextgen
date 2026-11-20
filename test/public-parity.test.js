@@ -262,14 +262,14 @@ test('contact: map from a Google Maps share link or coordinates; mobile shown; u
   await setting('mobile', '9851000000');
   await clearCaches();
   let r = await get('/contact');
-  assert.ok(r.text.includes('src="https://www.google.com/maps?q=27.71,85.32&amp;z=17&amp;output=embed"'), 'embedded map');
+  assert.match(r.text, /<iframe src="https:\/\/www\.google\.com\/maps\?q=27\.71(,|%2C)85\.32&amp;z=17&amp;output=embed"/, 'embedded map');
   assert.ok(r.text.includes('9851000000'));
   await setting('google_map_url', '');
   await setting('map_lat', '27.5');
   await setting('map_lng', '85.1');
   await clearCaches();
   r = await get('/contact');
-  assert.ok(r.text.includes('maps?q=27.5,85.1'));
+  assert.match(r.text, /maps\?q=27\.5(,|%2C)85\.1/);
 });
 
 // ---------------------------------------------------------------- P1-11 calendar
@@ -352,7 +352,7 @@ test('header: login menu with external links, bell, ticker (can be turned off), 
   assert.ok(r.text.includes('hdr-bell') && r.text.includes('class="ticker"'));
   assert.ok(r.text.includes('पुरानो नारा'), 'PHP slogan replaces the default tagline');
   assert.ok(r.text.includes('/success-stories') && r.text.includes('दैनिक बचत') && r.text.includes('Online KYM') === false && r.text.includes('केवाइएम'));
-  assert.ok(r.text.includes('/pwa-icon/180.png'));
+  assert.ok(r.text.includes('/pwa-icon-180.png'));
   r = await get('/notices?lang=en');
   assert.ok(r.text.includes('logos/en.png'), 'English logo');
   // ---- P2-2 site search

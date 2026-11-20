@@ -21,7 +21,7 @@
         <% if (settings.working_hours) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('clock') %><%= settings.working_hours %></li><% } %>
       </ul>
     </div>
-        <% if (locals.mapEmbed) { %>
+    <% if (locals.mapEmbed) { %>
       <iframe src="<%= mapEmbed %>" style="width:100%;height:240px;border:0;border-radius:var(--radius)" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="<%= t('नक्सा', 'Map') %>"></iframe>
     <% } %>
     <% if (locals.mapLink) { %><a class="btn btn-outline btn-block" href="<%= mapLink %>" target="_blank" rel="noopener"><%- icon('pin') %><%= t('गुगल नक्सामा खोल्नुहोस्', 'Open in Google Maps') %></a><% } %>

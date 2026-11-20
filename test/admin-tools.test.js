@@ -78,7 +78,8 @@ test('permission matrix: normalize, resolve, action flags', () => {
   assert.equal(perms.resolve('/r/notices_x'), null);
   assert.equal(perms.resolve('/inbox/loan/3').section, 'inbox:loan');
   assert.equal(perms.resolve('/information-room/logs').section, 'r:information_room_items');
-  assert.ok(perms.resolve('/users').superOnly);
+  assert.ok(perms.resolve('/roles').superOnly);
+  assert.equal(perms.resolve('/users').section, 'admin_users'); // admins manage non-super users (legacy manage-admins.php)
   assert.ok(perms.resolve('/').always);
   const flag = (method, p, body = {}) => perms.actionFlag({ method, path: p, body }, perms.resolve(p));
   assert.equal(flag('GET', '/r/news'), 'v');

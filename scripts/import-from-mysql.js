@@ -105,6 +105,11 @@ async function copyDir(src, dst) {
       }
       report.push([table, `${copied} copied${skipped ? `, ${skipped} skipped` : ''}`]);
     }
+    // PHP setting names → Node names; the PHP app forced 2FA on every admin, so keep that policy
+    const settings = require('../src/lib/settings');
+    const mapped = await settings.mapLegacy(a['cred-key'] || process.env.CREDENTIALS_LEGACY_KEY);
+    await settings.set('admin_2fa_required', '1', { group: 'security', label: 'Require 2FA for every admin (1 = yes)' });
+    if (mapped.length) console.log(`✓ mapped PHP settings: ${mapped.join(', ')}`);
     console.table(report.filter(([, r]) => r !== 'empty in source').map(([t, r]) => ({ table: t, result: r })));
     if (!(await db.value('SELECT count(*) FROM admin_users WHERE deleted_at IS NULL AND is_active = 1'))) {
       console.warn(`! No active admin in ${tenant.slug}. Create one: npm run tenant:admin -- --tenant=${tenant.slug} --username=admin --password=...`);

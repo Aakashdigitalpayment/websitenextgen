@@ -293,6 +293,14 @@ async function migrate(o) {
     step('office credentials', bad ? 'warn' : 'ok', `${ok} re-encrypted${bad ? `, ${bad} could not be decrypted` : ''}`);
   });
 
+  // ---- PHP setting names → Node names (AI, notifications, map, slogan, encrypted AI key); admin 2FA stays mandatory as on PHP
+  await db.withSchema(tenant.schema_name, async () => {
+    const settings = require('./settings');
+    const mapped = await settings.mapLegacy(o.credKey);
+    await settings.set('admin_2fa_required', '1', { group: 'security', label: 'Require 2FA for every admin (1 = yes)' });
+    step('settings', 'ok', `${mapped.length} PHP setting names mapped${mapped.length ? ` (${mapped.slice(0, 8).join(', ')}${mapped.length > 8 ? '…' : ''})` : ''}; admin 2FA required as on the PHP site (Admin → Security policy to change)`);
+  });
+
   // ---- PII (citizenship numbers): PHP pii1:/pii2: → decrypt with the old key → new pii3: format
   await db.withSchema(tenant.schema_name, () => convertPii(o.piiKey, step, warn));
 
