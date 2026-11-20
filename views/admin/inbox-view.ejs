@@ -90,7 +90,7 @@
         </div>
       </div>
     <% } %>
-    <% if (statuses.length || hasRemarks) { %>
+    <% if ((statuses.length || hasRemarks) && canMutate) { %>
     <form class="card" method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/status<%= multipart ? '?_csrf=' + encodeURIComponent(csrfToken) : '' %>" <%- multipart ? 'enctype="multipart/form-data"' : '' %>>
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <h3><%= t('कारबाही', 'Action') %></h3>

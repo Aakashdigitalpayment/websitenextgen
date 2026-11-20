@@ -141,3 +141,94 @@ test('delete guards: in-use rows are deactivated, unused rows deleted with their
   await admin.form(`/admin/r/digital_service_types/${ids.dtBuiltin}`, { slug: 'renamed', name_np: 'मोबाइल', display_order: '0', is_active: '1' }, `/admin/r/digital_service_types/${ids.dtBuiltin}/edit`);
   assert.equal(await inA(() => db.value('SELECT slug FROM digital_service_types WHERE id = $1', [ids.dtBuiltin])), 'mob');
 });
+
+// ---------------------------------------------------------------- b-2 auction bids
+async function staffClient() {
+  const hash = await auth.hashPassword('Staff@12345!');
+  await inA(() => db.query(`INSERT INTO admin_users (username, password, full_name, role, is_active, status, must_change_password)
+                            SELECT 'staff1', $1, 'Staff', 'staff', 1, 'active', 0 WHERE NOT EXISTS (SELECT 1 FROM admin_users WHERE username = 'staff1')`, [hash]));
+  const c = client();
+  const r = await c.form('/admin/login', { username: 'staff1', password: 'Staff@12345!' });
+  assert.equal(r.status, 302);
+  return c;
+}
+
+test('auction bids: exclusive winner, reopen on reject, per-auction view sorted by amount, admin-only changes', async () => {
+  const ids = await inA(async () => {
+    const a = await db.value("INSERT INTO auction_notices (title, status, minimum_price) VALUES ('Plot 7', 'ongoing', 1000) RETURNING id");
+    const other = await db.value("INSERT INTO auction_notices (title, status) VALUES ('Other', 'ongoing') RETURNING id");
+    const bid = amt => db.value("INSERT INTO auction_bids (auction_id, bidder_name, bidder_phone, bid_amount) VALUES ($1, $2, '9800000001', $3) RETURNING id", [a, 'Bidder ' + amt, amt]);
+    const b1 = await bid(1500), b2 = await bid(3000), b3 = await bid(2000);
+    const bx = await db.value("INSERT INTO auction_bids (auction_id, bidder_name, bidder_phone, bid_amount) VALUES ($1, 'Elsewhere', '9800000002', 9999) RETURNING id", [other]);
+    return { a, other, b1, b2, b3, bx };
+  });
+  // per-auction list: only this auction's bids, highest first, title in the header
+  let page = await admin.get('/admin/inbox/bid?auction=' + ids.a);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Plot 7/);
+  assert.doesNotMatch(page.text, /Elsewhere/);
+  const order = ['Bidder 3000', 'Bidder 2000', 'Bidder 1500'].map(n => page.text.indexOf(n));
+  assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], 'sorted by amount');
+  // staff can look but not decide
+  const staff = await staffClient();
+  assert.equal((await staff.get('/admin/inbox/bid?auction=' + ids.a)).status, 200);
+  let r = await staff.form(`/admin/inbox/bid/${ids.b2}/status`, { status: 'accepted' }, '/admin/inbox/bid');
+  assert.equal(r.status, 403);
+  // admin accepts the highest bid
+  r = await admin.form(`/admin/inbox/bid/${ids.b2}/status`, { status: 'accepted' }, `/admin/inbox/bid/${ids.b2}`);
+  assert.equal(r.status, 302);
+  const st = await inA(async () => ({
+    bids: Object.fromEntries((await db.many('SELECT id, status FROM auction_bids')).map(b => [b.id, b.status])),
+    auction: await db.value('SELECT status FROM auction_notices WHERE id = $1', [ids.a]),
+    other: await db.value('SELECT status FROM auction_notices WHERE id = $1', [ids.other]),
+    hist: await db.value("SELECT count(*) FROM request_status_history WHERE module = 'bid' AND new_status = 'rejected'"),
+  }));
+  assert.deepEqual([st.bids[ids.b1], st.bids[ids.b2], st.bids[ids.b3], st.bids[ids.bx]], ['rejected', 'accepted', 'rejected', 'pending']);
+  assert.equal(st.auction, 'completed');
+  assert.equal(st.other, 'ongoing');
+  assert.equal(st.hist, 2);
+  // a completed auction still shows its title in the inbox (admin option source lists every auction)
+  page = await admin.get('/admin/inbox/bid');
+  assert.match(page.text, />Plot 7</);
+  // rejecting the winner reopens the auction
+  await admin.form(`/admin/inbox/bid/${ids.b2}/status`, { status: 'rejected' }, `/admin/inbox/bid/${ids.b2}`);
+  assert.equal(await inA(() => db.value('SELECT status FROM auction_notices WHERE id = $1', [ids.a])), 'ongoing');
+  // the auction list links to its bids
+  page = await admin.get('/admin/r/auction_notices');
+  assert.match(page.text, new RegExp(`/admin/inbox/bid\\?auction=${ids.a}`));
+});
+
+// ---------------------------------------------------------------- b-3 inbox cards / filters / order
+test('inbox: status cards, module filters (whitelisted), job buckets and appointment order', async () => {
+  await inA(async () => {
+    await db.query(`INSERT INTO appointments (tracking_id, name, phone, visit_kind, preferred_date, preferred_time, status) VALUES
+      ('AP-1', 'Org Visit', '9800000011', 'cooperative', '2026-12-01', '10:00', 'pending'),
+      ('AP-2', 'Member Early', '9800000012', 'member', '2026-11-01', '10:00', 'confirmed'),
+      ('AP-3', 'Member Late', '9800000013', 'member', '2027-01-01', '10:00', 'pending')`);
+    await db.query(`INSERT INTO job_applications (tracking_id, career_id, full_name, email, phone, status) VALUES
+      ('JB-1', 0, 'Applicant Pending', 'a@x.np', '9800000021', 'pending'), ('JB-2', 0, 'Applicant Selected', 'b@x.np', '9800000022', 'selected'),
+      ('JB-3', 0, 'Applicant Interviewed', 'c@x.np', '9800000023', 'interviewed')`);
+  });
+  let page = await admin.get('/admin/inbox/appointment');
+  assert.equal(page.status, 200);
+  assert.ok(page.text.indexOf('Member Late') < page.text.indexOf('Org Visit') && page.text.indexOf('Org Visit') < page.text.indexOf('Member Early'), 'preferred_date DESC');
+  assert.match(page.text, /status=pending">[^<]*<b>(2|२)<\/b>/);
+  page = await admin.get('/admin/inbox/appointment?kind=cooperative');
+  assert.match(page.text, /Org Visit/);
+  assert.doesNotMatch(page.text, /Member Late/);
+  page = await admin.get('/admin/inbox/appointment?kind=evil%27--');
+  assert.match(page.text, /Member Late/); // not a known option: ignored
+  // job: active bucket by default (pipeline order), done bucket, explicit status overrides
+  page = await admin.get('/admin/inbox/job');
+  assert.match(page.text, /Applicant Pending/);
+  assert.doesNotMatch(page.text, /Applicant Selected/);
+  assert.ok(page.text.indexOf('Applicant Pending') < page.text.indexOf('Applicant Interviewed'));
+  page = await admin.get('/admin/inbox/job?bucket=done');
+  assert.match(page.text, /Applicant Selected/);
+  assert.doesNotMatch(page.text, /Applicant Pending/);
+  page = await admin.get('/admin/inbox/job?status=selected');
+  assert.match(page.text, /Applicant Selected/);
+  const csv = await admin.get('/admin/inbox/appointment/export.csv?kind=member');
+  assert.equal(csv.status, 200);
+  assert.doesNotMatch(csv.text, /Org Visit/);
+});

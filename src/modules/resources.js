@@ -192,7 +192,8 @@ const resources = {
     T('job_type', 'प्रकार', 'Type'), N('vacancies', 'पद संख्या', 'Vacancies', { list: true }), D('deadline', 'अन्तिम मिति', 'Deadline', { list: true }), T('min_qualification', 'योग्यता', 'Qualification'),
     T('experience_required', 'अनुभव', 'Experience'), T('salary_range', 'तलब', 'Salary'), RT('description_np', 'विवरण', 'Description (Nepali)'), RT('description', 'Description', 'Description (English)'), TA('requirements', 'आवश्यकता', 'Requirements'),
     FILE('attachment', 'विज्ञापन', 'Advertisement'), B('allow_online_apply', 'अनलाइन आवेदन', 'Online apply', { default: 1 }), ACTIVE] },
-  auction_notices: { group: 'engage', icon: 'gavel', title: ['लिलाम', 'Auctions'], order: 'id DESC', fields: [
+  auction_notices: { group: 'engage', icon: 'gavel', title: ['लिलाम', 'Auctions'], order: 'id DESC',
+    rowLinks: [{ href: '/admin/inbox/bid?auction=:id', label: ['बोलपत्र', 'Bids'], icon: 'gavel' }], fields: [
     T('title', 'शीर्षक', 'Title', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('tracking_number', 'सूचना नं.', 'Notice no.'),
     SEL('status', 'स्थिति', 'Status', [['upcoming', 'आगामी', 'Upcoming'], ['ongoing', 'जारी', 'Ongoing'], ['completed', 'सम्पन्न', 'Completed'], ['cancelled', 'रद्द', 'Cancelled']], { default: 'upcoming', list: true }),
     T('property_type', 'सम्पत्ति प्रकार', 'Property type'), T('location', 'स्थान', 'Location'), T('area', 'क्षेत्रफल', 'Area'), N('minimum_price', 'न्यूनतम मूल्य', 'Minimum price', { list: true }),

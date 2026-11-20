@@ -428,19 +428,38 @@ const modules = {
   },
 };
 
+/**
+ * Inbox extras. `filters`: extra list filters ({ name, col | sql with $?, type: 'int', optionsFromField | options }),
+ * values are whitelisted against the options. `listOrder`: ORDER BY for the list. `buckets`: status groups (job pipeline).
+ * `mutateRole`: role needed for any POST on the module (auction bids decide a sale).
+ */
+const RISK = [['low', 'न्यून', 'Low'], ['medium', 'मध्यम', 'Medium'], ['high', 'उच्च', 'High']];
 const EXTRA = {
-  loan: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'loan_application', memberEvent: 'loan', amountCol: 'loan_amount' },
+  loan: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'loan_application', memberEvent: 'loan', amountCol: 'loan_amount', pendingSum: true },
   account: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'account_application', memberEvent: 'account' },
-  kyc: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'kyc_application', memberEvent: 'kyc' },
+  kyc: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'kyc_application', memberEvent: 'kyc',
+    filters: [{ name: 'risk', col: 'risk_category', label: ['सबै जोखिम', 'All risk levels'], options: RISK }] },
   grievance: { adminOnly: true, attachCol: 'admin_attachment', noteCol: 'admin_note', adminEvent: 'grievance', memberEvent: 'grievance' },
-  appointment: { attachCol: 'admin_attachment', adminEvent: 'appointment', memberEvent: 'appointment', dateCol: 'preferred_date' },
-  digital: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'digital_service', memberEvent: 'digital_service' },
-  job: { adminOnly: true, adminEvent: 'job_application' },
-  feedback: { noteCol: 'admin_note' },
-  honor: { adminEvent: 'honor_application', memberEvent: 'honor_application' },
-  welfare: { adminEvent: 'welfare_claim', amountCol: 'claim_amount' },
+  appointment: { attachCol: 'admin_attachment', adminEvent: 'appointment', memberEvent: 'appointment', dateCol: 'preferred_date',
+    listOrder: 'preferred_date DESC NULLS LAST, created_at DESC',
+    filters: [{ name: 'kind', sql: "COALESCE(visit_kind, 'member') = $?", label: ['सबै प्रकार', 'All visit types'], optionsFromField: 'visit_kind' }] },
+  digital: { adminOnly: true, attachCol: 'admin_attachment', adminEvent: 'digital_service', memberEvent: 'digital_service',
+    filters: [{ name: 'type', col: 'service_type', label: ['सबै सेवा', 'All services'], optionsFromField: 'service_type' }] },
+  job: { adminOnly: true, adminEvent: 'job_application',
+    listOrder: "CASE status WHEN 'pending' THEN 1 WHEN 'shortlisted' THEN 2 WHEN 'interviewed' THEN 3 WHEN 'selected' THEN 4 ELSE 5 END, created_at DESC",
+    buckets: { active: ['pending', 'shortlisted', 'interviewed'], done: ['selected', 'rejected'] },
+    filters: [{ name: 'career', col: 'career_id', type: 'int', label: ['सबै पद', 'All positions'], optionsFromField: 'career_id' }] },
+  feedback: { noteCol: 'admin_note', filters: [{ name: 'type', col: 'type', label: ['सबै प्रकार', 'All types'], optionsFromField: 'type' }] },
+  honor: { adminEvent: 'honor_application', memberEvent: 'honor_application',
+    filters: [{ name: 'program', col: 'program_id', type: 'int', label: ['सबै कार्यक्रम', 'All programmes'], optionsFromField: 'program_id' },
+      { name: 'category', col: 'category_id', type: 'int', label: ['सबै विधा', 'All categories'], optionsFromField: 'category_id' }] },
+  welfare: { adminEvent: 'welfare_claim', amountCol: 'claim_amount', pendingSum: true,
+    filters: [{ name: 'type', col: 'claim_type', label: ['सबै प्रकार', 'All claim types'], optionsFromField: 'claim_type' }] },
   membership: { adminEvent: 'membership_application' },
   contact: { adminEvent: 'contact_message' },
+  // legacy auction-bids.php: admin decides; accepting one bid rejects the rest and completes the auction
+  bid: { mutateRole: 'admin', amountCol: 'bid_amount', listOrder: 'bid_amount DESC NULLS LAST, created_at DESC',
+    filters: [{ name: 'auction', col: 'auction_id', type: 'int', label: ['सबै लिलाम', 'All auctions'], optionsFromField: 'auction_id' }] },
 };
 
 for (const [key, m] of Object.entries(modules)) {

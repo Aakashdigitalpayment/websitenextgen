@@ -31,55 +31,106 @@ function getModule(req, res, next) {
   if (!m) return next('route');
   const need = m.adminOnly ? 'admin' : 'staff';
   if (auth.roleLevel(req.admin.role) < auth.roleLevel(need)) return res.status(403).render('admin/denied', { title: 'Access denied' });
+  if (req.method === 'POST' && !canMutate(req, m)) return res.status(403).render('admin/denied', { title: 'Access denied' });
   req.mod = m;
   next();
+}
+const canMutate = (req, m) => !m.mutateRole || auth.roleLevel(req.admin.role) >= auth.roleLevel(m.mutateRole);
+
+/** KYM <-> member link state for the rows on a page (legacy memberSsotLinkStatusLabel). */
+async function kycLinkStatus(rows) {
+  const ids = [...new Set(rows.map(r => kym.normalizeId(r.member_id)).filter(Boolean))];
+  const members = ids.length ? await db.many(`SELECT upper(trim(sadasyata_number)) AS sid, kyc_application_id, (password_hash IS NOT NULL AND password_hash <> '') AS has_pw
+                                              FROM members WHERE upper(trim(sadasyata_number)) = ANY($1) AND deleted_at IS NULL`, [ids]) : [];
+  const bySid = new Map(members.map(x => [x.sid, x]));
+  return Object.fromEntries(rows.map(r => {
+    const mem = bySid.get(kym.normalizeId(r.member_id) || '');
+    const code = !mem ? 'kym_only' : !Number(mem.kyc_application_id) ? 'unlinked_member' : !mem.has_pw ? 'no_password' : 'linked';
+    return [r.id, code];
+  }));
 }
 const back = (req, fallback) => {
   const r = String(req.body._back || '');
   return /^\/admin\/inbox\/[a-z]+(\?[^\s]*)?$/.test(r) ? r : fallback;
 };
 
-async function inboxQuery(req, m) {
+/**
+ * WHERE clause for the list, CSV export and status cards. `base` has every filter except status/bucket,
+ * so the status cards count what the other filters select (e.g. one auction's bids).
+ */
+async function inboxQuery(req, m, options) {
   const cols = await db.columns(m.table);
   const where = [], params = [];
+  const add = (sql, ...vals) => { for (const v of vals) params.push(v); where.push(sql); };
   if (cols.has('deleted_at')) where.push('deleted_at IS NULL');
-  const status = String(req.query.status || '');
-  if (status && cols.has('status')) { params.push(status); where.push(`status = $${params.length}`); }
   const q = String(req.query.q || '').trim().slice(0, 200);
   if (q) {
     params.push('%' + q + '%');
-    const search = [m.nameCol, m.phoneCol, 'email', 'tracking_id', m.memberCol, 'full_name_en', 'national_id_number'].filter((c, i, a) => c && cols.has(c) && a.indexOf(c) === i);
+    const search = [m.nameCol, m.phoneCol, 'email', 'bidder_email', 'tracking_id', m.memberCol, 'full_name_en', 'national_id_number'].filter((c, i, a) => c && cols.has(c) && a.indexOf(c) === i);
     const conds = search.map(c => `${c}::text ILIKE $${params.length}`);
     // exact match on the encrypted citizenship number (deterministic encryption)
     if (cols.has('citizenship_no')) { params.push(q); params.push(pii.encrypt(q, db.currentSchema())); conds.push(`citizenship_no = $${params.length - 1}`, `citizenship_no = $${params.length}`); }
     where.push('(' + conds.join(' OR ') + ')');
   }
   const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) && !Number.isNaN(Date.parse(v));
-  if (isDate(req.query.from)) { params.push(req.query.from); where.push(`created_at >= $${params.length}::date`); }
-  if (isDate(req.query.to)) { params.push(req.query.to); where.push(`created_at < $${params.length}::date + 1`); }
-  if (m.key === 'job' && util.int(req.query.career)) { params.push(util.int(req.query.career)); where.push(`career_id = $${params.length}`); }
+  if (isDate(req.query.from)) add(`created_at >= $${params.length + 1}::date`, req.query.from);
+  if (isDate(req.query.to)) add(`created_at < $${params.length + 1}::date + 1`, req.query.to);
   if (cols.has('is_read') && req.query.unread === '1') where.push('is_read = 0');
-  if (m.key === 'kyc' && ['low', 'medium', 'high'].includes(req.query.risk)) { params.push(req.query.risk); where.push(`risk_category = $${params.length}`); }
-  return { w: where.length ? 'WHERE ' + where.join(' AND ') : '', params, cols, status, q };
+  // declarative module filters: the value must be one of the filter's options
+  const filterValues = {};
+  for (const f of m.filters || []) {
+    const raw = String(req.query[f.name] ?? '').trim();
+    if (!raw) continue;
+    const opts = f.options || (options && options[f.optionsFromField]) || [];
+    if (!opts.some(o => String(o[0]) === raw)) continue;
+    filterValues[f.name] = raw;
+    if (f.where) { where.push(f.where[raw]); continue; }
+    const v = f.type === 'int' ? util.int(raw) : raw;
+    add(f.sql ? f.sql.replace('$?', '$' + (params.length + 1)) : `${db.ident(f.col)} = $${params.length + 1}`, v);
+  }
+  const base = { w: where.length ? 'WHERE ' + where.join(' AND ') : '', params: [...params] };
+  const status = String(req.query.status || '');
+  let bucket = '';
+  if (status && cols.has('status')) add(`status = $${params.length + 1}`, status);
+  else if (m.buckets) {
+    bucket = Object.hasOwn(m.buckets, req.query.bucket) || req.query.bucket === 'all' ? req.query.bucket : 'active';
+    if (bucket !== 'all') add(`status = ANY($${params.length + 1})`, m.buckets[bucket]);
+  }
+  return { w: where.length ? 'WHERE ' + where.join(' AND ') : '', params, cols, status, q, base, bucket, filterValues };
+}
+
+/** Status cards above the list: count per status (+ unread, + pending amount for money modules). */
+async function statusCounts(m, cols, base) {
+  if (!cols.has('status') || m.noStatus) return null;
+  const rows = await db.many(`SELECT status, count(*) AS n FROM ${m.table} ${base.w} GROUP BY status`, base.params);
+  const out = { by: Object.fromEntries(rows.map(r => [r.status, r.n])), total: rows.reduce((a, r) => a + r.n, 0) };
+  const extra = [];
+  if (cols.has('is_read')) extra.push('count(*) FILTER (WHERE is_read = 0) AS unread');
+  if (m.pendingSum && cols.has(m.amountCol)) extra.push(`COALESCE(sum(${db.ident(m.amountCol)}) FILTER (WHERE status = 'pending'), 0) AS pending_amount`);
+  if (extra.length) Object.assign(out, await db.one(`SELECT ${extra.join(', ')} FROM ${m.table} ${base.w}`, base.params));
+  return out;
 }
 
 // ---------------------------------------------------------------- list
 router.get('/inbox/:module', getModule, ah(async (req, res) => {
   const m = req.mod;
-  const { w, params, cols, status, q } = await inboxQuery(req, m);
+  const options = await forms.resolveOptions(m, { admin: true });
+  const { w, params, cols, status, q, base, bucket, filterValues } = await inboxQuery(req, m, options);
   const total = await db.value(`SELECT count(*) FROM ${m.table} ${w}`, params);
   const pg = util.paginate(total, util.int(req.query.page, 1), 25);
-  const rows = await db.many(`SELECT * FROM ${m.table} ${w} ORDER BY created_at DESC NULLS LAST, id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params);
+  const rows = await db.many(`SELECT * FROM ${m.table} ${w} ORDER BY ${m.listOrder || 'created_at DESC NULLS LAST'}, id DESC LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params);
   const statuses = cols.has('status') && !m.noStatus ? await forms.statusesFor(m.table) : [];
-  const options = await forms.resolveOptions(m);
-  const careers = m.key === 'job' ? await db.many('SELECT id, title, title_np FROM careers WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 200') : [];
-  res.render('admin/inbox-list', { title: res.locals.t(...m.title), m, rows, pg, statuses, status, q, options, hasRead: cols.has('is_read'), careers, canDelete: auth.roleLevel(req.admin.role) >= ADMIN });
+  const counts = await statusCounts(m, cols, base);
+  const extra = m.key === 'kyc' ? { linkStatus: await kycLinkStatus(rows) } : {};
+  const auction = m.key === 'bid' && filterValues.auction ? await db.one('SELECT id, title, title_en, status, minimum_price FROM auction_notices WHERE id = $1', [util.int(filterValues.auction)]) : null;
+  res.render('admin/inbox-list', { title: res.locals.t(...m.title), m, rows, pg, statuses, status, q, options, hasRead: cols.has('is_read'), counts, bucket, filterValues, auction,
+    canDelete: auth.roleLevel(req.admin.role) >= ADMIN, canMutate: canMutate(req, m), ...extra });
 }));
 
 router.get('/inbox/:module/export.csv', getModule, ah(async (req, res) => {
   const m = req.mod;
-  const { w, params } = await inboxQuery(req, m);
-  const rows = await db.many(`SELECT * FROM ${m.table} ${w} ORDER BY created_at DESC NULLS LAST LIMIT 10000`, params);
+  const { w, params } = await inboxQuery(req, m, await forms.resolveOptions(m, { admin: true }));
+  const rows = await db.many(`SELECT * FROM ${m.table} ${w} ORDER BY ${m.listOrder || 'created_at DESC NULLS LAST'}, id DESC LIMIT 10000`, params);
   const { header, values } = await exportsLib.table(m, rows);
   await auth.audit(req, 'export', m.table, null, `CSV export (${rows.length} rows)`);
   res.type('text/csv; charset=utf-8').attachment(`${m.key}-${new Date().toISOString().slice(0, 10)}.csv`).send('﻿' + util.toCsv(header, values));
@@ -131,14 +182,14 @@ router.get('/inbox/:module/:id', getModule, ah(async (req, res, next) => {
   if (cols.has('is_read') && !row.is_read) await db.query(`UPDATE ${m.table} SET is_read = 1 WHERE id = $1`, [row.id]);
   const history = await db.many('SELECT * FROM request_status_history WHERE module = $1 AND request_id = $2 ORDER BY created_at DESC', [m.key, row.id]);
   const statuses = cols.has('status') && !m.noStatus ? await forms.statusesFor(m.table) : [];
-  const options = await forms.resolveOptions(m);
+  const options = await forms.resolveOptions(m, { admin: true });
   const extra = {};
   if (m.key === 'kyc') {
     extra.linkedMember = row.member_id ? await kym.findMemberBySadasyata(row.member_id) : null;
     extra.hasMonthlySaving = (await db.columns('members')).has('monthly_saving_regular');
   }
   if (m.key === 'membership' && row.member_pk) extra.linkedMember = await db.one('SELECT id, name, sadasyata_number FROM members WHERE id = $1', [row.member_pk]);
-  res.render('admin/inbox-view', { title: res.locals.t(...m.title), m, row, history, statuses, options, hasRemarks: cols.has(m.remarksCol), hasRead: cols.has('is_read'),
+  res.render('admin/inbox-view', { title: res.locals.t(...m.title), m, row, history, statuses, options, hasRemarks: cols.has(m.remarksCol), hasRead: cols.has('is_read'), canMutate: canMutate(req, m),
     display: forms.displayData(m, row), attachCol: m.attachCol && cols.has(m.attachCol) ? m.attachCol : null, noteCol: m.noteCol && cols.has(m.noteCol) ? m.noteCol : null, ...extra });
 }));
 
@@ -146,7 +197,7 @@ router.get('/inbox/:module/:id/print', getModule, ah(async (req, res, next) => {
   const m = req.mod;
   const row = await loadRow(m, req.params.id);
   if (!row) return next();
-  const options = await forms.resolveOptions(m);
+  const options = await forms.resolveOptions(m, { admin: true });
   await auth.audit(req, 'print', m.table, row.id, `Print ${m.title[1]} #${row.id}`);
   res.render('admin/inbox-print', { layout: false, m, row, options, display: forms.displayData(m, row), s: await settings.all(), autoprint: req.query.autoprint === '1' });
 }));
@@ -161,6 +212,26 @@ router.get('/inbox/:module/:id/export.csv', getModule, ah(async (req, res, next)
 }));
 
 // ---------------------------------------------------------------- status change (shared by the form, quick select and bulk)
+/**
+ * Auction bids (legacy auction-bids.php): accepting a bid rejects every other bid on that auction and completes it;
+ * rejecting the accepted bid, when no accepted bid is left, reopens the auction. Runs inside changeStatus' transaction.
+ */
+async function bidSideEffects(req, row, status) {
+  const actor = req.admin.full_name || req.admin.username;
+  if (status === 'accepted' && row.status !== 'accepted') {
+    const others = await db.many("SELECT id, status AS old_status FROM auction_bids WHERE auction_id = $1 AND id <> $2 AND status <> 'rejected' FOR UPDATE", [row.auction_id, row.id]);
+    await db.query("UPDATE auction_bids SET status = 'rejected' WHERE id = ANY($1)", [others.map(o => o.id)]);
+    for (const o of others) {
+      await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at)
+                      VALUES ('bid', $1, $2, 'rejected', $3, $4, $5, now())`, [o.id, o.old_status, `Auto: bid #${row.id} accepted`, req.admin.id, actor]);
+    }
+    await db.query("UPDATE auction_notices SET status = 'completed', updated_at = now() WHERE id = $1", [row.auction_id]);
+  } else if (row.status === 'accepted' && status && status !== 'accepted'
+    && !(await db.value("SELECT 1 FROM auction_bids WHERE auction_id = $1 AND status = 'accepted' AND id <> $2", [row.auction_id, row.id]))) {
+    await db.query("UPDATE auction_notices SET status = 'ongoing', updated_at = now() WHERE id = $1 AND status = 'completed'", [row.auction_id]);
+  }
+}
+
 async function changeStatus(req, m, row, { status, comment = '', note, attachment, notifyApplicant = false, risk, memberId, approvedAmount } = {}) {
   const statuses = await forms.statusesFor(m.table);
   const cols = await db.columns(m.table);
@@ -190,6 +261,7 @@ async function changeStatus(req, m, row, { status, comment = '', note, attachmen
     await db.update(m.table, row.id, await db.pick(m.table, data));
     await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), 0, 0)`, [m.key, row.id, row.status || null, data.status || row.status || null, comment || null, req.admin.id, req.admin.full_name || req.admin.username]);
+    if (m.key === 'bid') await bidSideEffects(req, row, data.status);
     const memberKey = (m.memberCol && row[m.memberCol]) || row[m.phoneCol];
     if (memberKey) {
       const member = await db.one('SELECT id FROM members WHERE deleted_at IS NULL AND (sadasyata_number = $1 OR member_card_no = $1 OR phone = $1) LIMIT 1', [String(memberKey)]);
