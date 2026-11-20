@@ -83,4 +83,27 @@ function icon(name, cls = '') {
   return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
 }
 
-module.exports = { icon, faToNode, names: Object.keys(P) };
+/**
+ * Built-in icon for an admin-entered icon name (PHP stored Font Awesome classes like "fas fa-piggy-bank" or Lucide names).
+ * Falls back to `fallback` when nothing maps.
+ */
+const ALIASES = [
+  [/piggy|saving|wallet|coins?|money-bill|cash|deposit/, 'wallet'], [/hand-holding-usd|loan|credit|banknote|rupee|dollar/, 'banknote'],
+  [/mobile|phone|sms/, 'phone'], [/envelope|mail/, 'mail'], [/map|location|marker/, 'pin'], [/clock|time/, 'clock'],
+  [/users|people|group|handshake|team/, 'users'], [/user/, 'user'], [/shield|lock|secure|safe/, 'shield'], [/heart|care|health|insurance/, 'heart'],
+  [/chart|graph|trend|growth|analytics/, 'chart'], [/percent/, 'percent'], [/calculator/, 'calculator'], [/calendar|date/, 'calendar'],
+  [/star|award|trophy|medal|crown/, 'award'], [/globe|internet|online|web|wifi/, 'globe'], [/building|bank|university|home|house/, 'building'],
+  [/file|doc|pdf/, 'file'], [/download/, 'download'], [/bell|notif/, 'bell'], [/qr/, 'qr'], [/store|shop|cart/, 'store'],
+  [/briefcase|job|business/, 'briefcase'], [/bolt|fast|speed|rocket/, 'star'], [/check|thumbs|ok|tick/, 'check'], [/message|chat|comment/, 'message'],
+];
+function iconFor(raw, fallback = 'check') {
+  const v = String(raw || '').toLowerCase().replace(/\b(fas|far|fab|fa-solid|fa-regular|fa)\b/g, '').replace(/fa-/g, '').trim();
+  if (!v) return fallback;
+  if (Object.hasOwn(P, v)) return v;
+  const fa = faToNode(raw);
+  if (fa !== 'info') return fa;
+  const hit = ALIASES.find(([re]) => re.test(v));
+  return hit ? hit[1] : fallback;
+}
+
+module.exports = { icon, iconFor, faToNode, names: Object.keys(P) };

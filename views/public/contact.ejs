@@ -16,13 +16,21 @@
       <ul class="list small">
         <% if (settings.address) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('pin') %><%= settings.address %></li><% } %>
         <% if (settings.phone) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('phone') %><a href="tel:<%= settings.phone %>"><%= settings.phone %></a></li><% } %>
+        <% if (settings.mobile) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('phone') %><a href="tel:<%= settings.mobile %>"><%= settings.mobile %></a> <span class="faint"><%= t('(मोबाइल)', '(mobile)') %></span></li><% } %>
         <% if (settings.email) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('mail') %><a href="mailto:<%= settings.email %>"><%= settings.email %></a></li><% } %>
         <% if (settings.working_hours) { %><li class="flex gap-1" style="padding:8px 0"><%- icon('clock') %><%= settings.working_hours %></li><% } %>
       </ul>
     </div>
-    <% if (settings.map_embed_url && /^https:\/\/(www\.)?google\.com\/maps(\/embed|\?)/.test(settings.map_embed_url)) { %>
-      <iframe src="<%= settings.map_embed_url %>" style="width:100%;height:240px;border:0;border-radius:var(--radius)" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map"></iframe>
+    <% if (locals.mapEmbed) { %>
+      <iframe src="<%= mapEmbed %>" style="width:100%;height:240px;border:0;border-radius:var(--radius)" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="<%= t('नक्सा', 'Map') %>"></iframe>
     <% } %>
+    <% if (locals.mapLink) { %><a class="btn btn-outline btn-block" href="<%= mapLink %>" target="_blank" rel="noopener"><%- icon('pin') %><%= t('गुगल नक्सामा खोल्नुहोस्', 'Open in Google Maps') %></a><% } %>
+    <div class="grid grid-2 contact-cards">
+      <% [[settings.internet_banking_url, 'globe', t('इ-बैंकिङ', 'Internet banking'), true], ['/apply/appointment', 'calendar', t('भेटघाट समय', 'Book appointment')], ['/apply/loan', 'banknote', t('ऋण आवेदन', 'Apply for loan')], ['/apply/grievance', 'message', t('गुनासो दर्ता', 'File a grievance')]]
+        .filter(c => c[3] ? /^https:\/\/[^\s"'<>]+$/i.test(String(c[0] || '')) : (!locals.plan || plan.allows(c[0]))).forEach(c => { %>
+        <a class="card card-link card-flat small" href="<%= c[0] %>"<%- c[3] ? ' target="_blank" rel="noopener"' : '' %>><span class="icon-tile"><%- icon(c[1]) %></span><%= c[2] %></a>
+      <% }) %>
+    </div>
     <% if (centers.length > 1) { %><a class="btn btn-outline btn-block" href="/service-centers"><%= t('सबै शाखा हेर्नुहोस्', 'See all branches') %></a><% } %>
   </aside>
 </div></section>

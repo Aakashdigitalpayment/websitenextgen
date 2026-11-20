@@ -78,13 +78,13 @@ function description(s, pageDesc, en) {
 
 /**
  * Share image: page image → admin seo_og_image (1200×630) → logo (raster; Facebook/WhatsApp ignore SVG)
- * → generated SVG card (/share-og.svg) when there is no logo at all.
+ * → generated 1200×630 PNG card (/share-og.png, rendered from the SVG card).
  */
 function shareImage(req, s, pageImage) {
   if (pageImage) return absolute(req, mediaUrl(pageImage) || pageImage);
   if (s.seo_og_image) return absolute(req, mediaUrl(s.seo_og_image));
-  if (s.logo && /\.(png|jpe?g|webp|gif)$/i.test(s.logo)) return absolute(req, mediaUrl(s.logo));
-  return absolute(req, '/share-og.svg');
+  // PNG card (logo + name + tagline): Facebook / WhatsApp ignore SVG og:images; /share-og.svg stays as the fallback
+  return absolute(req, '/share-og.png');
 }
 
 const clock = raw => {

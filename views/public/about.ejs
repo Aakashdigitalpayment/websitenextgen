@@ -1,30 +1,83 @@
 <%- include('../partials/page-head', { crumbs: [] }) %>
-<section class="section">
-  <div class="container layout-side">
-    <div class="prose">
-      <%- util.richText(settings.about_content || settings.about_short || t('संस्थाको परिचय चाँडै राखिनेछ।', 'Our introduction will be added soon.')) %>
-      <% const history = lang === 'en' ? settings.history_content_en || settings.history_content_np : settings.history_content_np || settings.history_content_en; %>
-      <% if (history) { %><h2><%= t('हाम्रो इतिहास', 'Our history') %></h2><% if (settings.history_photo) { %><img src="<%= mediaUrl(settings.history_photo) %>"<%- srcset(settings.history_photo, '(max-width: 900px) 100vw, 700px') %> alt="" loading="lazy"><% } %><%- util.richText(history) %><% } %>
-    </div>
-    <aside class="card">
-      <h3><%= t('संक्षिप्त जानकारी', 'At a glance') %></h3>
-      <div class="kv" style="grid-template-columns:1fr 1fr">
-        <% if (settings.established_year) { %><div><%= t('स्थापना', 'Established') %></div><div><%= num(settings.established_year) %></div><% } %>
-        <% if (settings.registration_no) { %><div><%= t('दर्ता नं.', 'Registration') %></div><div><%= num(settings.registration_no) %></div><% } %>
-        <% if (settings.address) { %><div><%= t('ठेगाना', 'Address') %></div><div><%= settings.address %></div><% } %>
-        <% if (settings.phone) { %><div><%= t('फोन', 'Phone') %></div><div><%= settings.phone %></div><% } %>
-      </div>
-      <div class="flex gap-1 wrap mt-2">
-        <a class="btn btn-soft btn-sm" href="/vision-mission"><%= t('दृष्टिकोण', 'Vision') %></a>
-        <a class="btn btn-soft btn-sm" href="/team"><%= t('टिम', 'Team') %></a>
-        <a class="btn btn-soft btn-sm" href="/reports"><%= t('प्रतिवेदन', 'Reports') %></a>
-      </div>
-    </aside>
+<% const en = lang === 'en';
+   const pickS = (np, enK) => (en ? settings[enK] || settings[np] : settings[np] || settings[enK]) || '';
+   const intro = aboutPage ? f(aboutPage, 'content') : (settings.about_content || settings.about_short || '');
+   const sideImg = settings.about_intro_image || settings.about_page_image || settings.history_photo || '';
+   const history = pickS('history_content_np', 'history_content_en');
+   const values = pickS('values_content_np', 'values_content_en') || settings.values_content || '';
+   const valuesTitle = pickS('values_content_title_np', 'values_content_title_en') || t('हाम्रो मूल मान्यताहरू', 'Our core values');
+   const statsBand = [[settings.total_members, t('सदस्य', 'Members')], [settings.years_experience, t('वर्षको अनुभव', 'Years of service')], [settings.total_services, t('सेवाहरू', 'Services')], [settings.satisfaction_rate && String(settings.satisfaction_rate).replace(/%$/, '') + '%', t('सन्तुष्टि', 'Satisfaction')]].filter(x => x[0]); %>
+<section class="section"><div class="container layout-side">
+  <div>
+    <% if (sideImg) { %><img class="about-img" src="<%= mediaUrl(sideImg) %>"<%- srcset(sideImg, '(max-width: 900px) 100vw, 760px') %> alt="<%= siteName %>" decoding="async"><% } %>
+    <div class="prose"><%- util.richText(intro || t('संस्थाको परिचय चाँडै राखिनेछ।', 'Our introduction will be added soon.')) %></div>
   </div>
-</section>
-<% if (features.length) { %>
-<section class="section" style="padding-top:0"><div class="container">
-  <h2><%= t('हाम्रो विशेषता', 'What sets us apart') %></h2>
-  <div class="grid grid-3 mt-2"><% features.forEach(fe => { %><div class="card card-flat"><span class="icon-tile"><%- icon('check') %></span><h3><%= f(fe, 'title') %></h3><p class="muted"><%= lang === 'en' ? (fe.desc_en || fe.desc_np) : (fe.desc_np || fe.desc_en) %></p></div><% }) %></div>
+  <aside class="card">
+    <h3><%= t('संक्षिप्त जानकारी', 'At a glance') %></h3>
+    <div class="kv" style="grid-template-columns:1fr 1fr">
+      <% if (settings.established_year) { %><div><%= t('स्थापना', 'Established') %></div><div><%= num(settings.established_year) %></div><% } %>
+      <% if (settings.registration_no) { %><div><%= t('दर्ता नं.', 'Registration') %></div><div><%= num(settings.registration_no) %></div><% } %>
+      <% if (settings.address) { %><div><%= t('ठेगाना', 'Address') %></div><div><%= settings.address %></div><% } %>
+      <% if (settings.phone) { %><div><%= t('फोन', 'Phone') %></div><div><%= settings.phone %></div><% } %>
+    </div>
+    <nav class="flex gap-1 wrap mt-2" aria-label="<%= t('यस पृष्ठमा', 'On this page') %>">
+      <% if (history) { %><a class="btn btn-soft btn-sm" href="#history"><%= t('इतिहास', 'History') %></a><% } %>
+      <a class="btn btn-soft btn-sm" href="#values"><%= t('मूल मान्यता', 'Values') %></a>
+      <% if (boardChart.length) { %><a class="btn btn-soft btn-sm" href="#board"><%= t('सञ्चालक समिति', 'Board') %></a><% } %>
+      <% if (features.length) { %><a class="btn btn-soft btn-sm" href="#why"><%= t('किन हामी?', 'Why us?') %></a><% } %>
+    </nav>
+  </aside>
+</div></section>
+
+<% if (statsBand.length) { %>
+<section class="section-sm"><div class="container"><div class="stats">
+  <% statsBand.forEach(s => { %><div class="stat"><div class="stat-value"><%= num(s[0]) %></div><div class="stat-label"><%= s[1] %></div></div><% }) %>
+</div></div></section>
+<% } %>
+
+<% if (history) { %>
+<section class="section" id="history" style="padding-top:0"><div class="container layout-side">
+  <div><h2><%= t('हाम्रो इतिहास', 'Our history') %><% if (settings.established_year) { %> <span class="badge badge-brand"><%= t('स्थापना ' + num(settings.established_year), 'Since ' + settings.established_year) %></span><% } %></h2>
+    <div class="prose mt-2"><%- util.richText(history) %></div></div>
+  <% if (settings.history_photo && settings.history_photo !== sideImg) { %><img class="about-img" src="<%= mediaUrl(settings.history_photo) %>"<%- srcset(settings.history_photo, '380px') %> alt="" loading="lazy"><% } %>
 </div></section>
 <% } %>
+
+<section class="section" id="values" style="padding-top:0"><div class="container">
+  <h2><%= valuesTitle %></h2>
+  <% if (values) { %><div class="prose mt-2"><%- util.richText(values) %></div><% } else { %>
+  <div class="grid grid-4 mt-2">
+    <% [['shield', 'इमानदारिता', 'Integrity', 'हरेक कारोबारमा इमानदार र जिम्मेवार।', 'Honest and accountable in every transaction.'],
+        ['eye', 'पारदर्शिता', 'Transparency', 'सदस्यलाई खुला र स्पष्ट जानकारी।', 'Open, clear information for members.'],
+        ['users', 'सहकारिता', 'Cooperation', 'सदस्य र समुदायसँग मिलेर अघि बढ्ने।', 'Moving forward together with members and community.'],
+        ['star', 'उत्कृष्टता', 'Excellence', 'गुणस्तरीय र छिटो सेवा।', 'Quality, timely service.']].forEach(v => { %>
+      <div class="card card-flat"><span class="icon-tile"><%- icon(v[0]) %></span><h3><%= t(v[1], v[2]) %></h3><p class="muted small"><%= t(v[3], v[4]) %></p></div>
+    <% }) %>
+  </div><% } %>
+</div></section>
+
+<% if (boardChart.length) { %>
+<section class="section" id="board" style="padding-top:0"><div class="container">
+  <h2><%= t('सञ्चालक समिति', 'Board of directors') %></h2>
+  <div class="org-chart mt-2"><% boardChart.forEach(([row, list]) => { %><div class="org-row org-row-<%= row %>"><% list.forEach(p => { %><%- include('../partials/person-card', { p }) %><% }) %></div><% }) %></div>
+</div></section>
+<% } %>
+
+<% if (features.length) { %>
+<section class="section" id="why" style="padding-top:0"><div class="container">
+  <h2><%= t('किन हामीलाई छान्ने?', 'Why choose us?') %></h2>
+  <div class="grid grid-3 mt-2"><% features.forEach(fe => { %><div class="card card-flat"><span class="icon-tile"><%- icon(iconFor(fe.icon, 'check')) %></span><h3><%= f(fe, 'title') %></h3><p class="muted"><%= lang === 'en' ? (fe.desc_en || fe.desc_np) : (fe.desc_np || fe.desc_en) %></p></div><% }) %></div>
+</div></section>
+<% } %>
+
+<section class="section" style="padding-top:0"><div class="container">
+  <h2><%= t('हाम्रो बारेमा थप', 'More about us') %></h2>
+  <div class="grid grid-3 mt-2">
+    <% leaders.forEach(l => { %><a class="card card-link" href="<%= l.href %>"><span class="icon-tile"><%- icon('message') %></span><h3><%= l.who === 'chairman' ? t('अध्यक्षको सन्देश', "Chairperson's message") : t('प्रमुख कार्यकारीको सन्देश', "CEO's message") %></h3><p class="muted small"><%= l.name %></p></a><% }) %>
+    <a class="card card-link" href="/vision-mission"><span class="icon-tile"><%- icon('eye') %></span><h3><%= t('दृष्टिकोण र लक्ष्य', 'Vision & mission') %></h3></a>
+    <a class="card card-link" href="/institutional-profile"><span class="icon-tile"><%- icon('chart') %></span><h3><%= t('संस्थागत विवरण', 'Institutional profile') %></h3></a>
+    <a class="card card-link" href="/success-stories"><span class="icon-tile"><%- icon('heart') %></span><h3><%= t('सदस्यको सफलताको कथा', 'Member success stories') %></h3></a>
+    <a class="card card-link" href="/team"><span class="icon-tile"><%- icon('users') %></span><h3><%= t('हाम्रो टिम', 'Our team') %></h3></a>
+    <a class="card card-link" href="/reports"><span class="icon-tile"><%- icon('file') %></span><h3><%= t('प्रतिवेदन', 'Reports') %></h3></a>
+  </div>
+</div></section>

@@ -123,6 +123,7 @@ const resources = {
     T('slug', 'URL slug', 'URL slug', { list: true, hint: 'e.g. loan-policy → /page/loan-policy (खाली = शीर्षकबाट / blank = from the title)' }),
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('title', 'शीर्षक (पुरानो)', 'Title (legacy)', { hidden: true }),
     RT('content_np', 'सामग्री (नेपाली)', 'Content (Nepali)'), RT('content', 'सामग्री (English)', 'Content (English)'),
+    IMG('featured_image', 'मुख्य फोटो', 'Featured image'), T('meta_keywords', 'ट्याग (अल्पविरामले छुट्याउनुहोस्)', 'Tags (comma separated)'),
     B('show_in_menu', 'मेनुमा देखाउने', 'Show in menu', { list: true }), SEL('menu_position', 'मेनु', 'Menu', [['about', 'हाम्रो बारेमा', 'About'], ['services', 'सेवाहरू', 'Services'], ['more', 'सूचना', 'Updates'], ['footer', 'फुटर', 'Footer']]),
     ICON('menu_icon', 'मेनु आइकन', 'Menu icon'), N('menu_order', 'क्रम', 'Order', { default: 0 }), ACTIVE],
   // legacy pages.php: blank slug → from the title; a footer page shown in the menu goes under About

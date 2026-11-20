@@ -7,6 +7,10 @@
 const db = require('../db');
 const settings = require('./settings');
 const util = require('./util');
+const guard = require('./ai-guard');
+
+/** Settings (PHP key names such as ai_chat_enabled and the enc:v1: key are mapped by settings.js at read time). */
+const aiSettings = () => settings.all();
 
 const DEFAULT_MODEL = { gemini: 'gemini-2.5-flash', openai: 'gpt-4o-mini', deepseek: 'deepseek-chat' };
 
@@ -37,8 +41,66 @@ async function instantAnswer(message, lang) {
   return a ? { answer: util.stripTags(a), score: best.score } : null;
 }
 
-async function context(lang) {
-  const s = await settings.all();
+/** Instant answers from the site's own data (ai-chat-instant.php): CEO / chairman, interest rates, member count. */
+async function dataAnswer(message, lang) {
+  const q = norm(message), en = lang === 'en';
+  const s = await aiSettings();
+  const who = /\b(ceo|chief executive|manager)\b|प्रमुख\s*कार्यकारी|सीईओ|प्रबन्धक/i.test(q) ? 'ceo' : /\b(chair(man|person)?|president)\b|अध्यक्ष/i.test(q) && !/उपाध्यक्ष|vice/i.test(q) ? 'chairman' : null;
+  if (who) {
+    const l = await require('./team').leader(who, s, lang);
+    if (l && l.name) {
+      const bits = [en ? `Our ${l.designation} is ${l.name}.` : `हाम्रो ${l.designation} ${l.name} हुनुहुन्छ।`];
+      if (l.message) bits.push(en ? `Read the message: ${l.href}` : `सन्देश: ${l.href}`);
+      return { answer: bits.join(' '), source: 'data', links: [l.href] };
+    }
+  }
+  if (/interest|rate|byaj|ब्याज|ब्याजदर/i.test(q)) {
+    const rates = await db.many('SELECT category, name, name_np, rate FROM interest_rates WHERE is_active = 1 ORDER BY category DESC, display_order, id LIMIT 12');
+    if (rates.length) {
+      const fmt = cat => rates.filter(r => r.category === cat).slice(0, 6).map(r => `${en ? r.name || r.name_np : r.name_np || r.name} ${Number(r.rate)}%`).join(', ');
+      const sv = fmt('saving'), ln = fmt('loan');
+      const ans = en ? [sv && `Saving: ${sv}.`, ln && `Loan: ${ln}.`, 'Full list: /interest-rates'] : [sv && `बचत: ${sv}।`, ln && `ऋण: ${ln}।`, 'पूरा सूची: /interest-rates'];
+      return { answer: ans.filter(Boolean).join(' '), source: 'data', links: ['/interest-rates'] };
+    }
+  }
+  if (/how many members|member count|total members|कति\s*(जना\s*)?सदस्य|सदस्य\s*संख्या/i.test(q)) {
+    const n = await db.value("SELECT total_members FROM institutional_profile WHERE is_active = 1 AND access_level = 'none' AND total_members > 0 ORDER BY fiscal_year DESC, report_month DESC NULLS LAST, id DESC LIMIT 1");
+    if (n) return { answer: en ? `We have ${Number(n).toLocaleString('en-IN')} members (latest institutional profile).` : `हाम्रो सहकारीमा ${Number(n).toLocaleString('en-IN')} सदस्य हुनुहुन्छ (पछिल्लो संस्थागत विवरण)।`, source: 'data', links: ['/institutional-profile'] };
+  }
+  return null;
+}
+
+/** Public content scored by word overlap with the question (ai_chat_collect_candidates), kept within ~5,200 characters. */
+async function retrieve(message) {
+  const qw = new Set(words(message).filter(w => w.length > 2));
+  if (!qw.size) return [];
+  const [news, notices, pages, products, downloads, careers] = await Promise.all([
+    db.many('SELECT title, title_np, content, content_np FROM news WHERE is_active = 1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 40'),
+    db.many('SELECT title, title_np, content, content_np FROM notices WHERE is_active = 1 AND deleted_at IS NULL ORDER BY id DESC LIMIT 40'),
+    db.many('SELECT title, title_np, content, content_np FROM pages WHERE is_active = 1 LIMIT 40'),
+    db.many('SELECT name, name_np, description, description_np FROM service_products WHERE is_active = 1 LIMIT 60').catch(() => []),
+    db.many('SELECT title, title_np FROM downloads WHERE is_active = 1 AND deleted_at IS NULL LIMIT 40'),
+    db.many('SELECT title, title_np, department, deadline FROM careers WHERE is_active = 1 AND deleted_at IS NULL LIMIT 20'),
+  ]);
+  const cands = [
+    ...news.map(r => ['News', r.title_np || r.title, r.content_np || r.content]), ...notices.map(r => ['Notice', r.title_np || r.title, r.content_np || r.content]),
+    ...pages.map(r => ['Page', r.title_np || r.title, r.content_np || r.content]), ...products.map(r => ['Product', r.name_np || r.name, r.description_np || r.description]),
+    ...downloads.map(r => ['Download', r.title_np || r.title, '']), ...careers.map(r => ['Job', r.title_np || r.title, [r.department, r.deadline].filter(Boolean).join(' ')]),
+  ].map(([kind, title, body]) => {
+    const text = util.stripTags(body || '');
+    const tw = new Set(words(title + ' ' + text.slice(0, 1500)));
+    let score = 0;
+    for (const w of qw) if (tw.has(w)) score++;
+    return { score, line: `${kind}: ${title}${text ? ' — ' + util.excerpt(text, 400) : ''}` };
+  }).filter(c => c.score > 0).sort((a, b) => b.score - a.score);
+  const out = [];
+  let size = 0;
+  for (const c of cands) { if (size + c.line.length > 5200) break; out.push(c.line); size += c.line.length; }
+  return out;
+}
+
+async function context(lang, message = '') {
+  const s = await aiSettings();
   const [rates, services, faqs, centers] = await Promise.all([
     db.many('SELECT category, name, name_np, rate FROM interest_rates WHERE is_active = 1 ORDER BY category, display_order LIMIT 30'),
     db.many('SELECT title, title_np, description_np, description FROM services WHERE is_active = 1 ORDER BY display_order LIMIT 20'),
@@ -54,12 +116,13 @@ async function context(lang) {
     centers.length && 'Branches: ' + centers.map(c => `${c.name_np || c.name}, ${c.address || ''} ${c.phone || ''} ${c.opening_hours || ''}`).join(' | '),
     faqs.length && 'Known answers: ' + faqs.map(f => `Q: ${f.question} A: ${util.stripTags(f.answer)}`).join(' | '),
     s.ai_extra_context && `Extra: ${s.ai_extra_context}`,
+    ...(await retrieve(message)).map(l => 'Relevant: ' + l),
     'Website pages: /apply/account (open account), /apply/loan, /apply/kyc, /apply/grievance, /apply/appointment, /track (application status), /interest-rates, /emi-calculator, /contact, /member/login.',
   ].filter(Boolean);
   return `You are the helpful website assistant for this cooperative. Answer in ${lang === 'en' ? 'English' : 'Nepali (Devanagari)'} unless the user writes in another language, in 1–4 short sentences.
 Use ONLY the facts below. If you do not know (e.g. account balances, personal data, loan approval decisions), say so and give the phone number or the relevant website page. Never ask for passwords, PINs or OTPs. Never invent rates or fees.
 
-${lines.join('\n')}`;
+${guard.redact(lines.join('\n'))}`;
 }
 
 async function httpJson(url, headers, body) {
@@ -101,20 +164,34 @@ function underBudget(limit) {
 
 /** @returns {Promise<{answer:string, source:'faq'|'ai'|'fallback'}>} history comes from the server-side session only */
 async function reply(message, history = [], lang = 'np') {
-  const s = await settings.all();
+  const s = await aiSettings();
+  const links = suggestLinks(message);
+  // refuse requests for passwords, PINs, balances, private member data and jailbreak attempts before anything else
+  if (guard.isSensitive(message)) return { answer: guard.refusal(lang), source: 'guard', links: ['/member/login', '/contact'] };
+  const data = await dataAnswer(message, lang);
+  if (data) return data;
   const instant = await instantAnswer(message, lang);
-  if (instant && instant.score >= 3) return { answer: instant.answer, source: 'faq' };
+  if (instant && instant.score >= 3) return { answer: guard.redact(instant.answer), source: 'faq', links };
   const provider = ['gemini', 'openai', 'deepseek'].includes(s.ai_provider) ? s.ai_provider : 'gemini';
   if (s.ai_enabled === '1' && s.ai_api_key && underBudget(Number(s.ai_daily_limit) || 300)) {
     try {
-      const clean = history.filter(h => h && ['user', 'assistant'].includes(h.role) && typeof h.content === 'string').map(h => ({ role: h.role, content: h.content.slice(0, 1000) }));
-      const text = await askProvider(provider, s.ai_api_key, s.ai_model || DEFAULT_MODEL[provider], await context(lang), clean, message);
-      if (text.trim()) return { answer: text.trim().slice(0, 2000), source: 'ai' };
+      const clean = history.filter(h => h && ['user', 'assistant'].includes(h.role) && typeof h.content === 'string').map(h => ({ role: h.role, content: guard.redact(h.content.slice(0, 1000)) }));
+      const text = (await askProvider(provider, s.ai_api_key, s.ai_model || DEFAULT_MODEL[provider], await context(lang, message), clean, guard.redact(message))).trim();
+      // post-checks: never pass on a leaked secret / balance or an echo of the instructions
+      if (text && !guard.answerLeaks(text) && !guard.looksLikePromptLeak(text)) return { answer: guard.redact(text).slice(0, 2000), source: 'ai', links };
     } catch (e) { console.error('ai-chat:', e.message); }
   }
-  if (instant) return { answer: instant.answer, source: 'faq' };
+  if (instant) return { answer: guard.redact(instant.answer), source: 'faq', links };
   const phone = s.phone ? (lang === 'en' ? ` Call us on ${s.phone}.` : ` फोन: ${s.phone}`) : '';
-  return { answer: (lang === 'en' ? 'Sorry, I could not find an answer. Please see our FAQs or contact the office.' : 'माफ गर्नुहोस्, उत्तर भेटिएन। FAQ हेर्नुहोस् वा कार्यालयमा सम्पर्क गर्नुहोस्।') + phone, source: 'fallback' };
+  return { answer: (lang === 'en' ? 'Sorry, I could not find an answer. Please see our FAQs or contact the office.' : 'माफ गर्नुहोस्, उत्तर भेटिएन। FAQ हेर्नुहोस् वा कार्यालयमा सम्पर्क गर्नुहोस्।') + phone, source: 'fallback', links: links.length ? links : ['/faqs', '/contact'] };
 }
 
-module.exports = { reply, instantAnswer, context, DEFAULT_MODEL };
+/** Up to 3 site pages that match the question's words (shown as chips under the answer). */
+function suggestLinks(message) {
+  const idx = require('./search-index');
+  const seen = new Set();
+  for (const w of words(message)) for (const p of idx.match(w)) { if (seen.size < 3) seen.add(p.href); }
+  return [...seen];
+}
+
+module.exports = { reply, instantAnswer, dataAnswer, context, retrieve, suggestLinks, DEFAULT_MODEL };

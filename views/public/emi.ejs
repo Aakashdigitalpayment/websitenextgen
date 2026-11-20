@@ -1,21 +1,43 @@
 <%- include('../partials/page-head', { lead: t('मासिक किस्ता, कुल ब्याज र भुक्तानी तालिका हेर्नुहोस्।', 'See your monthly instalment, total interest and repayment schedule.') }) %>
-<section class="section"><div class="container layout-side" style="grid-template-columns:360px 1fr">
-  <form class="form-card" method="get" data-emi>
+<% const rs = v => 'Rs. ' + Math.round(v).toLocaleString('en-IN');
+   const qs = o => { const p = new URLSearchParams({ amount, rate, unit, [unit === 'years' ? 'years' : 'months']: tenure, view, ...o }); if (p.get('view') === 'monthly') p.delete('view'); return '?' + p.toString(); }; %>
+<section class="section"><div class="container layout-side emi-layout">
+  <form class="form-card no-print" method="get" data-emi>
+    <div class="flex gap-1 wrap mb-2" aria-label="<%= t('ऋणको प्रकार', 'Loan type') %>">
+      <% presets.forEach(p => { %><a class="tab" href="<%= qs({ rate: p[2] }) %>" data-emi-rate="<%= p[2] %>"><%= t(p[0], p[1]) %> · <%= num(p[2]) %>%</a><% }) %>
+    </div>
     <div class="stack">
-      <div class="field"><label for="amount"><%= t('ऋण रकम (रु.)', 'Loan amount (Rs.)') %></label><input class="input" id="amount" name="amount" inputmode="decimal" value="<%= amount %>"></div>
-      <div class="field"><label for="rate"><%= t('वार्षिक ब्याजदर (%)', 'Annual rate (%)') %></label><input class="input" id="rate" name="rate" inputmode="decimal" value="<%= rate %>"></div>
-      <div class="field"><label for="months"><%= t('अवधि (महिना)', 'Tenure (months)') %></label><input class="input" id="months" name="months" inputmode="numeric" value="<%= months %>"></div>
+      <div class="field"><label for="amount"><%= t('ऋण रकम (रु.)', 'Loan amount (Rs.)') %></label><input class="input" id="amount" name="amount" inputmode="decimal" value="<%= amount %>">
+        <input type="range" min="10000" max="10000000" step="10000" value="<%= Math.min(amount, 10000000) %>" data-sync="amount" aria-label="<%= t('ऋण रकम', 'Loan amount') %>"></div>
+      <div class="field"><label for="rate"><%= t('वार्षिक ब्याजदर (%)', 'Annual rate (%)') %></label><input class="input" id="rate" name="rate" inputmode="decimal" value="<%= rate %>">
+        <input type="range" min="1" max="30" step="0.25" value="<%= rate %>" data-sync="rate" aria-label="<%= t('ब्याजदर', 'Rate') %>"></div>
+      <div class="field">
+        <div class="flex justify-between items-center"><label for="tenure"><%= unit === 'years' ? t('अवधि (वर्ष)', 'Tenure (years)') : t('अवधि (महिना)', 'Tenure (months)') %></label>
+          <span class="small"><a class="<%= unit === 'months' ? 'tab active' : 'tab' %>" href="?amount=<%= amount %>&rate=<%= rate %>&unit=months&months=<%= unit === 'years' ? tenure * 12 : tenure %>"><%= t('महिना', 'Months') %></a> <a class="<%= unit === 'years' ? 'tab active' : 'tab' %>" href="?amount=<%= amount %>&rate=<%= rate %>&unit=years&years=<%= unit === 'years' ? tenure : Math.max(1, Math.round(tenure / 12)) %>"><%= t('वर्ष', 'Years') %></a></span></div>
+        <input type="hidden" name="unit" value="<%= unit %>">
+        <input class="input" id="tenure" name="<%= unit === 'years' ? 'years' : 'months' %>" inputmode="numeric" value="<%= tenure %>" data-emi-tenure data-unit="<%= unit %>">
+        <input type="range" min="1" max="<%= unit === 'years' ? 30 : 360 %>" value="<%= tenure %>" data-sync="tenure" aria-label="<%= t('अवधि', 'Tenure') %>"></div>
       <button class="btn btn-primary btn-block"><%= t('तालिका हेर्नुहोस्', 'Show schedule') %></button>
     </div>
   </form>
   <div>
     <div class="grid grid-3">
-      <div class="card card-flat"><div class="small muted"><%= t('मासिक किस्ता', 'Monthly EMI') %></div><div class="stat-value" data-emi-monthly>Rs. <%= Math.round(emi).toLocaleString('en-IN') %></div></div>
-      <div class="card card-flat"><div class="small muted"><%= t('कुल ब्याज', 'Total interest') %></div><div class="stat-value" data-emi-interest>Rs. <%= Math.round(total - amount).toLocaleString('en-IN') %></div></div>
-      <div class="card card-flat"><div class="small muted"><%= t('कुल भुक्तानी', 'Total payment') %></div><div class="stat-value" data-emi-total>Rs. <%= Math.round(total).toLocaleString('en-IN') %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('मासिक किस्ता', 'Monthly EMI') %></div><div class="stat-value" data-emi-monthly><%= rs(emi) %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('कुल ब्याज', 'Total interest') %></div><div class="stat-value" data-emi-interest><%= rs(total - amount) %></div></div>
+      <div class="card card-flat"><div class="small muted"><%= t('कुल भुक्तानी', 'Total payment') %></div><div class="stat-value" data-emi-total><%= rs(total) %></div></div>
     </div>
-    <div class="table-wrap mt-3" style="max-height:480px;overflow:auto"><table class="table"><thead><tr><th>#</th><th class="num"><%= t('किस्ता', 'EMI') %></th><th class="num"><%= t('साँवा', 'Principal') %></th><th class="num"><%= t('ब्याज', 'Interest') %></th><th class="num"><%= t('बाँकी', 'Balance') %></th></tr></thead><tbody>
-      <% schedule.forEach(r => { %><tr><td><%= r.i %></td><td class="num"><%= Math.round(r.emi).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.principal).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.interest).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.bal).toLocaleString('en-IN') %></td></tr><% }) %>
+    <div class="emi-bar mt-2" role="img" aria-label="<%= t('साँवा ' + principalPct + '%, ब्याज ' + (100 - principalPct) + '%', 'Principal ' + principalPct + '%, interest ' + (100 - principalPct) + '%') %>">
+      <span class="emi-bar-p" style="width:<%= principalPct %>%" data-emi-bar></span><span class="emi-bar-i"></span>
+    </div>
+    <div class="flex justify-between small muted mt-1"><span><span class="dot dot-coop"></span> <%= t('साँवा', 'Principal') %> <span data-emi-pct><%= num(principalPct) %></span>%</span><span><%= t('ब्याज', 'Interest') %> <span class="dot dot-festival"></span></span></div>
+
+    <div class="flex justify-between items-center mt-3 gap-1 wrap no-print">
+      <nav class="tabs mb-0"><a class="tab <%= view === 'monthly' ? 'active' : '' %>" href="<%= qs({ view: 'monthly' }) %>"><%= t('मासिक', 'Monthly') %></a><a class="tab <%= view === 'yearly' ? 'active' : '' %>" href="<%= qs({ view: 'yearly' }) %>"><%= t('वार्षिक सारांश', 'Yearly summary') %></a></nav>
+      <button type="button" class="btn btn-ghost btn-sm" data-print><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button>
+    </div>
+    <div class="table-wrap mt-2 emi-table"><table class="table"><thead><tr><th>#</th><th><%= view === 'yearly' ? t('अवधि', 'Period') : t('महिना', 'Month') %></th><th class="num"><%= t('किस्ता', 'EMI') %></th><th class="num"><%= t('साँवा', 'Principal') %></th><th class="num"><%= t('ब्याज', 'Interest') %></th><th class="num"><%= t('बाँकी', 'Balance') %></th></tr></thead><tbody>
+      <% (view === 'yearly' ? yearly : schedule).forEach(r => { %><tr><td><%= num(r.i) %></td><td class="small"><%= r.label %></td><td class="num"><%= Math.round(r.emi).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.principal).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.interest).toLocaleString('en-IN') %></td><td class="num"><%= Math.round(r.bal).toLocaleString('en-IN') %></td></tr><% }) %>
     </tbody></table></div>
+    <div class="alert alert-info mt-3 no-print"><%- icon('info') %><span><%= t('सुझाव: लामो अवधिमा मासिक किस्ता घट्छ तर कुल ब्याज बढ्छ। अतिरिक्त रकम तिर्दा ब्याज बचत हुन्छ। यो अनुमान मात्र हो — अन्तिम विवरण कार्यालयबाट लिनुहोस्।', 'Tip: a longer tenure lowers the EMI but raises the total interest; prepaying saves interest. This is an estimate — confirm with the office.') %></span></div>
   </div>
 </div></section>

@@ -6,6 +6,10 @@
         <div><div class="person-name"><%= f(s, 'member_name') %></div><div class="small muted"><%= f(s, 'profession') %><%= s.location ? ' · ' + f(s, 'location') : '' %></div></div></div>
       <h3><%= lang === 'en' ? (s.headline_en || s.headline_np) : s.headline_np %></h3>
       <div class="muted"><%- util.richText(lang === 'en' ? (s.story_en || s.story_np) : s.story_np) %></div>
+      <% const help = lang === 'en' ? (s.institution_help_en || s.institution_help_np) : (s.institution_help_np || s.institution_help_en); if (help) { %>
+        <div class="alert alert-info mt-2" style="display:block"><b style="font-weight:600"><%= t('संस्थाले कसरी सहयोग गर्‍यो', 'How the cooperative helped') %></b><div class="mt-1"><%- util.richText(help) %></div></div>
+      <% } %>
+      <% if (s.member_since) { %><div class="small faint mt-1"><%= t('सदस्य बनेको: ', 'Member since: ') %><%= /^\d{4}-\d{2}-\d{2}/.test(String(s.member_since)) ? bsDate(s.member_since) : num(s.member_since) %></div><% } %>
     </article>
   <% }) %>
 </div><% if (!stories.length) { %><div class="empty"><%= t('कथा चाँडै।', 'Coming soon.') %></div><% } %></div></section>

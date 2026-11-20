@@ -1,12 +1,5 @@
 <%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]] }) %>
-<% const card = p => { %>
-  <div class="card person">
-    <div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>"<%- srcset(p.photo, '240px') %> alt="<%= f(p, 'name') %>" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
-    <div class="person-name"><%= f(p, 'name') %></div>
-    <div class="person-role"><%= f(p, 'position') %></div>
-    <% if (p.phone) { %><div class="small mt-1"><a href="tel:<%= p.phone %>"><%= p.phone %></a></div><% } %>
-  </div>
-<% } %>
+<% const card = p => { %><%- include('../partials/person-card', { p }) %><% } %>
 <section class="section"><div class="container">
   <% if (menus.length > 1) { %><div class="tabs"><a class="tab <%= !cat ? 'active' : '' %>" href="/team"><%= t('सबै', 'All') %></a><% menus.forEach(m => { %><a class="tab <%= cat && cat.slug === m.slug ? 'active' : '' %>" href="/team?menu=<%= encodeURIComponent(m.slug) %>"><%= f(m, 'name') %></a><% }) %></div><% } %>
   <% if (!sections.length && !officers.length) { %><div class="empty"><%= t('टिम विवरण चाँडै।', 'Team details coming soon.') %></div><% } %>
@@ -22,7 +15,7 @@
   <% if (officers.length) { %>
     <h2 class="mt-4" id="contact-officers"><%= t('सूचना तथा गुनासो अधिकारी', 'Information & grievance officers') %></h2>
     <div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('जिम्मेवारी', 'Role') %></th><th><%= t('सम्पर्क', 'Contact') %></th></tr></thead><tbody>
-      <% officers.forEach(o => { %><tr><td><%= f(o, 'name') %></td><td><%= [o.is_information_officer ? t('सूचना अधिकारी', 'Information officer') : '', o.is_grievance_officer ? t('गुनासो सुन्ने अधिकारी', 'Grievance officer') : ''].filter(Boolean).join(', ') %></td><td><%= o.phone || '' %> <%= o.email || '' %></td></tr><% }) %>
+      <% officers.forEach(o => { %><tr><td><%= f(o, 'name') %></td><td><%= [Number(o.is_chairman) ? t('अध्यक्ष', 'Chairperson') : '', Number(o.is_ceo) ? t('प्रमुख कार्यकारी अधिकृत', 'CEO') : '', Number(o.is_information_officer) ? t('सूचना अधिकारी', 'Information officer') : '', Number(o.is_grievance_officer) ? t('गुनासो सुन्ने अधिकारी', 'Grievance officer') : ''].filter(Boolean).join(', ') %></td><td><% if (o.phone) { %><a href="tel:<%= o.phone %>"><%= o.phone %></a><% } %> <% if (o.email) { %><a href="mailto:<%= o.email %>"><%= o.email %></a><% } %></td></tr><% }) %>
     </tbody></table></div>
   <% } %>
 </div></section>

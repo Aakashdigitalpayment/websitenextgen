@@ -103,7 +103,7 @@ function createApp() {
       },
       num: v => (lang === 'np' ? nd.toNepaliDigits(v) : String(v ?? '')),
       money: v => util.money(v, lang),
-      bsDate: ad => (ad ? nd.formatBs(nd.adToBs(ad instanceof Date ? ad : String(ad).slice(0, 10)), lang) : ''),
+      bsDate: ad => (ad ? nd.formatBs(nd.toBs(ad), lang) : ''), // BS values typed into DATE columns stay BS
     });
   };
   app.use((req, res, next) => {
@@ -268,7 +268,7 @@ function createApp() {
   // 404
   app.use((req, res) => {
     res.status(404).render(req.path.startsWith('/admin') && req.admin ? 'admin/error' : 'public/error',
-      { title: 'Not found', code: 404, message: res.locals.t('तपाईंले खोजेको पृष्ठ भेटिएन।', 'The page you are looking for was not found.') });
+      { title: res.locals.t ? res.locals.t('पृष्ठ भेटिएन', 'Page not found') : 'Not found', code: 404, message: res.locals.t('तपाईंले खोजेको पृष्ठ भेटिएन।', 'The page you are looking for was not found.') });
   });
 
   // errors

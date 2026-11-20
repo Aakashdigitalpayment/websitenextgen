@@ -1,4 +1,8 @@
 <!doctype html>
+<% /* per-language logo and favicon (PHP logo_np / logo_en / site_favicon) */
+   const siteLogo = (lang === 'en' ? settings.logo_en : settings.logo_np) || settings.logo || settings.site_logo || '';
+   const siteIcon = settings.site_favicon || siteLogo;
+   const siteTagline = (lang === 'en' && (settings.site_tagline_en || settings.site_slogan_en)) || settings.site_tagline || ''; /* site_slogan → site_tagline: settings.js */ %>
 <html lang="<%= lang === 'en' ? 'en' : 'ne' %>"<% if (locals.theme && theme.attr) { %> data-theme="<%= theme.attr %>"<% } %>>
 <head>
   <meta charset="utf-8">
@@ -7,9 +11,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css">
-  <% const siteLogo = (lang === 'en' ? settings.logo_en : settings.logo_np) || settings.logo; const favicon = settings.site_favicon || siteLogo; %>
-  <% if (favicon) { %><link rel="icon" href="<%= mediaUrl(favicon) %>"><% } %>
+  <link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/site.css">
+  <% if (siteIcon) { %><link rel="icon" href="<%= mediaUrl(siteIcon) %>"><% } %>
+  <link rel="apple-touch-icon" href="/pwa-icon-180.png">
   <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= locals.theme ? theme.brand : brandColor %>">
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
@@ -40,7 +44,7 @@
         <% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
         <span>
           <span class="brand-name"><%= siteName %></span>
-          <% if (settings.site_tagline) { %><span class="brand-sub" style="display:block"><%= settings.site_tagline %></span><% } %>
+          <% if (siteTagline) { %><span class="brand-sub" style="display:block"><%= siteTagline %></span><% } %>
         </span>
       </a>
       <button class="btn btn-ghost btn-icon nav-toggle" aria-label="Menu" aria-expanded="false" data-nav-toggle><%- icon('menu') %></button>
@@ -50,7 +54,7 @@
             <% if (item.children && item.children.length) { %>
               <button class="nav-link <%= isActive(item.href) && item.href !== '/' ? 'active' : '' %>" aria-haspopup="true"><%= t(...item.label) %><%- icon('chevron') %></button>
               <div class="dropdown">
-                <% item.children.forEach(c => { %><a href="<%= c.href %>"><%= t(...c.label) %></a><% }) %>
+                <% item.children.forEach(c => { %><% if (c.heading) { %><a class="dropdown-heading" href="<%= c.href %>"><%= t(...c.label) %></a><% } else { %><a href="<%= c.href %>"<%- c.indent ? ' class="dropdown-sub"' : '' %>><%= t(...c.label) %><% if (c.badge) { %> <span class="badge badge-ok"><%= num(c.badge) %></span><% } %></a><% } %><% }) %>
               </div>
             <% } else { %>
               <a class="nav-link <%= isActive(item.href) ? 'active' : '' %>" href="<%= item.href %>"><%= t(...item.label) %></a>
@@ -58,16 +62,19 @@
           </div>
         <% }) %>
         <div class="header-actions">
-          <% if (locals.plan && !plan.has('member_portal')) { %>
-          <% } else if (locals.member) { %>
-            <a class="btn btn-primary btn-sm" href="/member"><%- icon('user') %><span class="btn-text"><%= t('मेरो खाता', 'My account') %></span></a>
-          <% } else { %>
-            <a class="btn btn-outline btn-sm" href="/member/login"><%- icon('user') %><span class="btn-text"><%= t('सदस्य लगइन', 'Member login') %></span></a>
-          <% } %>
+          <%- include('../partials/header-extras') %>
         </div>
       </nav>
     </div>
   </header>
+  <% const tick = settings.notice_ticker_enabled === '0' ? [] : (locals.latestNotices || []); if (tick.length) { %>
+  <div class="ticker" role="region" aria-label="<%= t('पछिल्ला सूचना', 'Latest notices') %>">
+    <div class="container">
+      <a class="ticker-label" href="/notices"><%- icon('bell') %><%= t('सूचना', 'Notices') %></a>
+      <div class="ticker-track"><ul class="ticker-list"><% tick.forEach(n => { %><li><a href="/notices/<%= n.id %>"><%= util.excerpt(f(n, 'title'), 90) %></a></li><% }) %></ul></div>
+    </div>
+  </div>
+  <% } %>
 
   <main id="main">
     <% if (locals.flash && flash.length) { %>
@@ -84,10 +91,11 @@
             <% if (siteLogo) { %><img src="<%= mediaUrl(siteLogo) %>"<%- srcset(siteLogo, '160px') %> alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
             <span class="brand-name"><%= siteName %></span>
           </a>
-          <p class="mt-2"><%= util.excerpt(settings.about_short, 200) %></p>
+          <% if (siteTagline) { %><p class="mt-2 small" style="font-weight:500"><%= siteTagline %></p><% } %>
+          <div class="mt-1 footer-about"><%- util.richText(util.excerpt(settings.about_short, 220)) %></div>
           <div class="socials">
-            <% [['facebook_url','facebook'],['youtube_url','youtube'],['instagram_url','instagram']].forEach(([k, ic]) => { if (settings[k]) { %>
-              <a href="<%= settings[k] %>" target="_blank" rel="noopener" aria-label="<%= ic %>"><%- icon(ic) %></a>
+            <% [['facebook_url','facebook'],['youtube_url','youtube'],['instagram_url','instagram'],['twitter_url','globe']].forEach(([k, ic]) => { if (/^https?:\/\/[^\s"'<>]+$/i.test(settings[k] || '')) { %>
+              <a href="<%= settings[k] %>" target="_blank" rel="noopener" aria-label="<%= k === 'twitter_url' ? 'X' : ic %>"><%- icon(ic) %></a>
             <% } }) %>
             <% if (settings.whatsapp_number) { %><a href="https://wa.me/<%= String(settings.whatsapp_number).replace(/\D/g,'') %>" target="_blank" rel="noopener" aria-label="WhatsApp"><%- icon('whatsapp') %></a><% } %>
           </div>
@@ -118,28 +126,46 @@
           <ul>
             <% if (settings.address) { %><li class="flex gap-1"><%- icon('pin') %><span><%= settings.address %></span></li><% } %>
             <% if (settings.phone) { %><li class="flex gap-1"><%- icon('phone') %><a href="tel:<%= settings.phone %>"><%= settings.phone %></a></li><% } %>
+            <% if (settings.mobile) { %><li class="flex gap-1"><%- icon('phone') %><a href="tel:<%= settings.mobile %>"><%= settings.mobile %></a></li><% } %>
             <% if (settings.email) { %><li class="flex gap-1"><%- icon('mail') %><a href="mailto:<%= settings.email %>"><%= settings.email %></a></li><% } %>
           </ul>
         </div>
       </div>
       <div class="footer-bottom">
         <span>© <%= num(new Date().getFullYear()) %> <%= siteName %>. <%= t('सर्वाधिकार सुरक्षित।', 'All rights reserved.') %></span>
-        <span><% if (settings.supported_name) { %><%= t('सहयोग', 'Supported by') %>: <% if (/^https:\/\//i.test(settings.supported_url || '')) { %><a href="<%= settings.supported_url %>" target="_blank" rel="noopener"><%= settings.supported_name %></a><% } else { %><%= settings.supported_name %><% } %> · <% } %><a href="/sitemap.xml">Sitemap</a> · <a href="/admin">Admin</a></span>
+        <span class="footer-links">
+          <a href="/page/privacy-policy"><%= t('गोपनीयता नीति', 'Privacy policy') %></a> · <a href="/page/terms-of-service"><%= t('सेवाका सर्तहरू', 'Terms of service') %></a> · <a href="/page/cookie-policy"><%= t('कुकी नीति', 'Cookie policy') %></a> · <a href="/sitemap.xml">Sitemap</a> · <a href="/admin">Admin</a>
+        </span>
+        <% if (locals.visitorStats) { %><span class="small faint"><%= t('कुल आगन्तुक ', 'Visitors ') + num(Number(visitorStats.total).toLocaleString('en-IN')) %> · <%= t('आज ', 'Today ') + num(visitorStats.today) %></span><% } %>
+        <% if (settings.supported_name) { %><span class="small faint"><%= t('सहयोग: ', 'Supported by ') %><% if (/^https:\/\/[^\s"'<>]+$/i.test(settings.supported_url || '')) { %><a href="<%= settings.supported_url %>" target="_blank" rel="noopener"><%= settings.supported_name %></a><% } else { %><%= settings.supported_name %><% } %></span><% } %>
       </div>
     </div>
   </footer>
   <%- include('../partials/float-widgets') %>
-  <% if ((settings.ai_enabled === '1' || settings.chat_widget === '1') && (!locals.plan || plan.has('ai_chat'))) { %>
+  <%- include('../partials/notice-popup') %>
+  <dialog class="search-dialog" data-search-dialog aria-label="<%= t('खोज्नुहोस्', 'Search') %>">
+    <form method="get" action="/search" role="search" class="flex gap-1">
+      <input class="input grow" type="search" name="q" minlength="2" maxlength="80" required placeholder="<%= t('सेवा, सूचना, ब्याजदर… खोज्नुहोस्', 'Search services, notices, rates…') %>" aria-label="<%= t('खोज', 'Search') %>">
+      <button type="button" class="btn btn-ghost btn-icon" data-search-mic hidden aria-label="<%= t('बोलेर खोज्नुहोस्', 'Voice search') %>" data-lang="<%= lang === 'en' ? 'en-US' : 'ne-NP' %>"><%- icon('message') %></button>
+      <button class="btn btn-primary"><%- icon('search') %><span class="btn-text"><%= t('खोज', 'Search') %></span></button>
+      <button type="button" class="btn btn-ghost btn-icon" data-search-close aria-label="<%= t('बन्द गर्नुहोस्', 'Close') %>"><%- icon('close') %></button>
+    </form>
+    <div class="flex gap-1 wrap mt-2 small"><% [['/interest-rates', t('ब्याजदर', 'Interest rates')], ['/apply/loan', t('ऋण आवेदन', 'Loan')], ['/notices', t('सूचना', 'Notices')], ['/contact', t('सम्पर्क', 'Contact')], ['/downloads', t('डाउनलोड', 'Downloads')]].forEach(l => { %><a class="tab" href="<%= l[0] %>"><%= l[1] %></a><% }) %></div>
+  </dialog>
+  <% const aiOn = settings.ai_enabled === '1'; /* FAQ-only assistant when AI is off but chatbot answers exist (footer.php FAQ widget) */
+     if ((aiOn || settings.chat_widget === '1' || (locals.floatWidgets && floatWidgets.chatFaqs)) && (!locals.plan || plan.has('ai_chat'))) { %>
   <div class="chat" data-chat data-csrf="<%= csrfToken %>" data-lang="<%= lang %>">
     <button class="chat-fab btn btn-primary" data-chat-toggle aria-label="<%= t('सहयोग', 'Help') %>"><%- icon('message', 'icon-lg') %></button>
     <div class="chat-panel" hidden role="dialog" aria-label="<%= t('सहयोगी', 'Assistant') %>">
       <div class="chat-head"><strong style="font-weight:600"><%= t('सहयोगी', 'Assistant') %></strong><button class="btn btn-ghost btn-icon" data-chat-toggle aria-label="Close"><%- icon('close') %></button></div>
       <div class="chat-log" data-chat-log aria-live="polite"><div class="chat-msg bot"><%= (lang === 'en' ? settings.ai_welcome_en : settings.ai_welcome_np) || settings.ai_welcome || t('नमस्ते! म तपाईंलाई कसरी सहयोग गर्न सक्छु?', 'Hello! How can I help you?') %></div></div>
+      <div class="chat-chips" data-chat-chips><% [['/apply/appointment', t('भेटघाट', 'Appointment')], ['/apply/account', t('खाता खोल्ने', 'Open account')], ['/apply/grievance', t('गुनासो', 'Grievance')], ['/track', t('आवेदन ट्र्याक', 'Track')]].filter(c => !locals.plan || plan.allows(c[0])).forEach(c => { %><a class="tab" href="<%= c[0] %>"><%= c[1] %></a><% }) %></div>
       <form class="chat-form" data-chat-form><input class="input" name="m" maxlength="500" autocomplete="off" placeholder="<%= t('प्रश्न लेख्नुहोस्…', 'Type your question…') %>" required><button class="btn btn-primary btn-icon" aria-label="Send"><%- icon('right') %></button></form>
-      <div class="chat-note"><%= t('AI सहयोगी — पासवर्ड वा OTP कहिल्यै नलेख्नुहोस्।', 'AI assistant — never share passwords or OTPs.') %></div>
+      <div class="chat-note"><%= aiOn ? t('AI सहयोगी — पासवर्ड वा OTP कहिल्यै नलेख्नुहोस्।', 'AI assistant — never share passwords or OTPs.') : t('सहयोगी — पासवर्ड वा OTP कहिल्यै नलेख्नुहोस्।', 'Assistant — never share passwords or OTPs.') %></div>
     </div>
   </div>
   <% } %>
   <script src="/static/js/app.js" defer></script>
+  <script src="/static/js/site.js" defer></script>
 </body>
 </html>
