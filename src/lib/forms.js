@@ -75,7 +75,8 @@ const optionSources = {
     return rows.map(r => [String(r.id), r.name_np, r.name_en || r.name_np, { requires_nominee: !!Number(r.requires_nominee), requires_document: !!Number(r.requires_document), programs: r.programs.map(String) }]);
   },
   async careers() {
-    const rows = await db.many(`SELECT id, title, title_np FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND (deadline IS NULL OR deadline >= CURRENT_DATE) ORDER BY id DESC`);
+    const rows = await db.many(`SELECT id, title, title_np FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND COALESCE(allow_online_apply, 1) = 1
+                                AND (deadline IS NULL OR deadline >= CURRENT_DATE) ORDER BY id DESC`);
     return rows.map(r => [String(r.id), r.title_np || r.title, r.title || r.title_np]);
   },
   async districts() { return DISTRICTS.map(d => [d, d, d]); },

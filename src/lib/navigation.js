@@ -10,10 +10,11 @@ async function build() {
   const hit = cache.get(schema);
   if (hit && Date.now() - hit.at < TTL) return hit.data;
 
-  const [committees, pages, teamMenus] = await Promise.all([
+  const [committees, pages, teamMenus, honorOpen] = await Promise.all([
     db.many('SELECT id, name, name_np FROM committee_types WHERE is_active = 1 AND show_in_navbar = 1 ORDER BY display_order, id'),
     db.many(`SELECT slug, title, title_np, title_en, menu_position FROM pages WHERE is_active = 1 AND show_in_menu = 1 ORDER BY menu_order, id`),
     require('./team').navCategories().catch(() => []),
+    require('./forms').optionSources.honorPrograms().then(r => r.length > 0).catch(() => false),
   ]);
   const pageLinks = pos => pages.filter(p => (p.menu_position || 'more') === pos)
     .map(p => ({ href: '/page/' + encodeURIComponent(p.slug), label: [p.title_np || p.title, p.title_en || p.title] }));
@@ -50,6 +51,7 @@ async function build() {
       { href: '/apply/appointment', label: ['भेटघाट', 'Appointment'] },
       { href: '/apply/welfare', label: ['कल्याण दाबी', 'Welfare claim'] },
       { href: '/apply/grievance', label: ['गुनासो', 'Grievance'] },
+      ...(honorOpen ? [{ href: '/apply/honor', label: ['सम्मान आवेदन', 'Honour application'] }] : []), // only while a programme is open
       { href: '/track', label: ['आवेदनको स्थिति', 'Track application'] },
     ] },
     { label: ['सूचना', 'Updates'], href: '/notices', children: [

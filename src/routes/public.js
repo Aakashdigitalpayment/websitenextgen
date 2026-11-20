@@ -337,7 +337,7 @@ router.get('/careers', ah(async (req, res) => {
 router.get('/careers/:id', ah(async (req, res, next) => {
   const job = await db.one(`SELECT * FROM careers WHERE id = $1 AND ${ACTIVE} AND ${NOT_DELETED}`, [util.int(req.params.id)]);
   if (!job) return next();
-  const open = !job.deadline || job.deadline >= new Date().toISOString().slice(0, 10);
+  const open = (!job.deadline || job.deadline >= new Date().toISOString().slice(0, 10)) && Number(job.allow_online_apply ?? 1) === 1;
   res.render('public/career-detail', { title: res.locals.f(job, 'title'), job, open });
 }));
 
@@ -433,10 +433,17 @@ router.post('/contact', submitLimiter, ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- applications (generic form engine)
-router.get('/apply', (req, res) => {
-  const list = Object.values(modules).filter(m => !m.hidden);
+router.get('/apply', ah(async (req, res) => {
+  const honorOpen = (await forms.optionSources.honorPrograms()).length > 0;
+  const list = Object.values(modules).filter(m => !m.hidden || (m.key === 'honor' && honorOpen));
   res.render('public/apply-index', { title: res.locals.t('अनलाइन सेवा', 'Online services'), list });
-});
+}));
+
+/** honor-apply.php: no open programme → "applications closed" with the upcoming ones (opens / closes in B.S.). */
+async function renderHonorClosed(req, res, status = 200) {
+  const upcoming = await db.many('SELECT * FROM honor_programs WHERE is_active = 1 AND opens_at > now() ORDER BY opens_at LIMIT 10');
+  res.status(status).render('public/honor-closed', { title: res.locals.t(...modules.honor.title), mod: modules.honor, upcoming });
+}
 
 const prefillFromMember = (member, mod) => {
   if (!member) return {};
@@ -506,6 +513,12 @@ router.post('/apply/kyc/reset', (req, res) => { delete req.session.kymGate; res.
 
 async function renderForm(req, res, mod, values = {}, errors = {}, status = 200) {
   const options = await forms.resolveOptions(mod);
+  let activeProgram = null;
+  if (mod.key === 'honor') {
+    if (!options.program_id.length) return renderHonorClosed(req, res, status);
+    const pick = String(values.program_id || req.query.program || options.program_id[0][0]);
+    activeProgram = await db.one('SELECT * FROM honor_programs WHERE id = $1', [Number(options.program_id.find(o => o[0] === pick)?.[0] || options.program_id[0][0])]);
+  }
   let existingDocs = {};
   let locked = null, lockedValues = null;
   if (mod.key === 'kyc' && !req.member) {
@@ -542,7 +555,7 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
   res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...(mod.memberGate ? {} : prefillFromMember(req.member, mod)), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number,
-    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked, guestEmailRequired: !!(mod.guestEmail && !req.member) });
+    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked, guestEmailRequired: !!(mod.guestEmail && !req.member), activeProgram });
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {

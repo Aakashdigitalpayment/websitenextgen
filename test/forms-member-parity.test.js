@@ -387,3 +387,48 @@ test('tracker details grid + stages; welfare approved amount; member request det
   assert.equal((await c.get('/member/requests/loan/' + other.id)).status, 404, 'not the member’s request');
   assert.ok(m.id);
 });
+
+// ---------------------------------------------------------------- P2-9 / P2-10 honour programme state, job rules
+test('honour: closed state lists upcoming programmes; open programme banner, menu link and business note', async () => {
+  const c = client(HB);
+  await inB(() => db.query("INSERT INTO honor_programs (title_np, title_en, opens_at, closes_at, is_active) VALUES ('आगामी सम्मान', 'Coming award', now() + interval '10 days', now() + interval '20 days', 1)"));
+  let r = await c.get('/apply/honor');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /आगामी सम्मान|Coming award/);
+  assert.doesNotMatch(r.text, /name="applicant_name"/);
+  assert.doesNotMatch((await c.get('/apply')).text, /href="\/apply\/honor"/);
+  await inB(() => db.query("INSERT INTO honor_programs (title_np, title_en, opens_at, closes_at, instructions_np, is_active) VALUES ('खुला सम्मान', 'Open award', now() - interval '1 day', now() + interval '5 days', 'निर्देशन यहाँ', 1)"));
+  require('../src/lib/navigation');
+  await inB(() => require('../src/lib/navigation').invalidate());
+  r = await c.get('/apply/honor');
+  assert.match(r.text, /खुला सम्मान/);
+  assert.match(r.text, /निर्देशन यहाँ/);
+  assert.match(r.text, /name="business_note"/);
+  assert.match((await c.get('/apply')).text, /href="\/apply\/honor"/);
+  assert.match((await c.get('/about')).text, /href="\/apply\/honor"/, 'menu link while open');
+});
+
+test('job: closed / not-online positions refused, one application per email or phone', async () => {
+  const [open, offline] = await inB(async () => [
+    await db.one("INSERT INTO careers (title, is_active, allow_online_apply, deadline) VALUES ('Clerk', 1, 1, CURRENT_DATE + 10) RETURNING id"),
+    await db.one("INSERT INTO careers (title, is_active, allow_online_apply, deadline) VALUES ('Paper only', 1, 0, CURRENT_DATE + 10) RETURNING id"),
+  ]);
+  const c = client(HB);
+  const page = await c.get('/apply/job');
+  assert.match(page.text, /Clerk/);
+  assert.doesNotMatch(page.text, /Paper only/);
+  const job = { career_id: String(open.id), full_name: 'Job Seeker', phone: '9841940001', email: 'Seek@example.com', education: 'BBS' };
+  const post = async data => {
+    const tok = await c.token('/apply/job');
+    let r = c.agent.post('/apply/job?_csrf=' + encodeURIComponent(tok)).set('Host', HB).field('_csrf', tok);
+    for (const [k, v] of Object.entries(data)) r = r.field(k, v);
+    return r.attach('resume_path', Buffer.from('%PDF-1.4 cv'), 'cv.pdf');
+  };
+  let r = await post({ ...job, career_id: String(offline.id) });
+  assert.equal(r.status, 422);
+  r = await post(job);
+  assert.equal(r.status, 302, errs(r));
+  r = await post({ ...job, phone: '9841940002', email: 'seek@EXAMPLE.com' });
+  assert.equal(r.status, 422, 'duplicate email');
+  assert.match(r.text, /पहिले नै आवेदन/);
+});

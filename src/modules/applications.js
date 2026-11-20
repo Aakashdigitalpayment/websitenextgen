@@ -394,6 +394,7 @@ const modules = {
       { name: 'nominee_relation', label: ['नाता', 'Relation'] },
       { name: 'institution', label: ['शिक्षण संस्था', 'Institution'] },
       { name: 'exam_year', label: ['परीक्षा वर्ष', 'Exam year'] },
+      { name: 'business_note', label: ['खाता / उत्पादन नोट (ऐच्छिक)', 'Account / product note (optional)'] },
       { name: 'description', label: ['विवरण', 'Details'], type: 'textarea', rows: 3 },
       { name: 'attachment', label: ['प्रमाणपत्र', 'Certificate'], type: 'file', kind: 'any', requiredIf: { field: 'category_id', meta: 'requires_document' } },
     ] }],
@@ -418,6 +419,7 @@ const modules = {
       { name: 'resume_path', label: ['बायोडाटा (PDF)', 'CV (PDF)'], type: 'file', kind: 'doc', required: true },
       { name: 'photo_path', label: ['फोटो', 'Photo'], type: 'image' },
       { name: 'citizenship_path', label: ['नागरिकता', 'Citizenship'], type: 'file', kind: 'any' },
+      { name: 'certificates_path', label: ['शैक्षिक प्रमाणपत्र', 'Certificates'], type: 'file', kind: 'any' },
     ] }],
   },
 

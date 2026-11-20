@@ -49,6 +49,19 @@ const hooks = {
     return null;
   },
 
+  /** career-detail.php: the position takes online applications (active, allowed, before the deadline); one application per email / phone. */
+  async job(ctx) {
+    const d = ctx.data;
+    const c = await db.one(`SELECT id FROM careers WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(allow_online_apply, 1) = 1
+                            AND (deadline IS NULL OR deadline >= CURRENT_DATE)`, [Number(d.career_id) || 0]);
+    if (!c) return fail(ctx.lang, ['यस पदको अनलाइन आवेदन बन्द छ।', 'Online applications for this position are closed.'], 'career_id');
+    if (d.email) d.email = String(d.email).trim().toLowerCase();
+    const dup = await db.value(`SELECT 1 FROM job_applications WHERE career_id = $1 AND deleted_at IS NULL AND (lower(email) = $2 OR ${require('./member-portal').phoneDigitsSql('phone')} = $3) LIMIT 1`,
+      [c.id, d.email || '-', kym.normalizeMobile(d.phone).slice(-10) || '-']);
+    if (dup) return fail(ctx.lang, ['तपाईंले यस पदको लागि पहिले नै आवेदन दिनुभएको छ।', 'You have already applied for this position.'], 'email');
+    return null;
+  },
+
   /** grievance.php: an anonymous grievance may leave the name empty (mobile and email stay required). */
   async grievance(ctx) {
     if (!ctx.data.name) ctx.data.name = 'गोप्य';

@@ -2,6 +2,13 @@
 <link rel="stylesheet" href="/static/css/forms.css">
 <section class="section"><div class="container <%= mod.wide ? 'maxw-lg' : 'maxw-md' %>" style="margin-left:0">
   <% if (Object.keys(errors).length) { %><div class="alert alert-error"><%- icon('alert') %><span><%= errors._upload || t('कृपया रातो चिन्ह लागेका विवरण सच्याउनुहोस्।', 'Please correct the highlighted fields.') %></span></div><% } %>
+  <% if (locals.activeProgram) { const p = activeProgram; %>
+    <div class="card mb-3" style="border-color:var(--brand-line)"><div class="flex gap-2 items-center"><span class="icon-tile" style="margin:0"><%- icon('award') %></span>
+      <div class="grow"><h3 class="mb-0"><%= f(p, 'title') %></h3><div class="small muted"><%= [p.event_label, p.fiscal_year ? t('आ.व. ', 'FY ') + p.fiscal_year : ''].filter(Boolean).join(' · ') %></div></div>
+      <% if (p.closes_at) { %><span class="badge badge-warn"><%= t('बन्द हुने: ', 'Closes: ') %><%= bsDate(p.closes_at) %></span><% } %></div>
+      <% const ins = lang === 'en' ? (p.instructions_en || p.instructions_np) : (p.instructions_np || p.instructions_en); if (ins) { %><div class="prose small mt-2"><%- util.richText(ins) %></div><% } %>
+    </div>
+  <% } %>
   <% if (locals.kymGateOk) { %>
     <div class="alert alert-success"><%- icon('check') %><span class="grow"><%= t('प्रमाणित भयो। तल खाली विवरण भर्नुहोस्; लक भएका विवरण जस्ताको त्यस्तै रहन्छन्।', 'Verified. Fill in the empty fields below; locked fields stay as they are.') %> (<code><%= lockedValues.member_id %></code>)</span>
       <form method="post" action="/apply/kyc/reset" class="inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm"><%= t('अर्को सदस्य', 'Another member') %></button></form></div>
