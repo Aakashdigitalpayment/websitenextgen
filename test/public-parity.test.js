@@ -477,6 +477,10 @@ test('P3: auction status translated with chips, download category labels and cou
   assert.ok(r.text.includes('फारमहरू') && r.text.includes('७ पटक डाउनलोड') && r.text.includes('ft-pdf'));
   r = await get('/service-centers');
   assert.ok(r.text.includes('सेवा केन्द्र'));
+  r = await get('/date-converter?by=2081&bm=1&bd=1');
+  assert.ok(r.text.includes('2024-04-13 AD') && r.text.includes('शनिबार'), 'BS selects + weekday');
+  r = await get('/date-converter?bs=' + encodeURIComponent('२०८१-०१-०१'));
+  assert.ok(r.text.includes('2024-04-13 AD'), 'Nepali digits');
   r = await get('/no-such-page-here');
   assert.equal(r.status, 404);
   assert.ok(r.text.includes('पृष्ठ भेटिएन') && r.text.includes('href="/interest-rates"'));

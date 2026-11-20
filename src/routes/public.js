@@ -669,11 +669,19 @@ router.get('/emi-calculator', ah(async (req, res) => {
     principalPct: total ? Math.round(amount / total * 100) : 100 });
 }));
 
+// date-converter.php: BS year / month / day selects (or a typed date, Nepali digits accepted), weekday in the result
 router.get('/date-converter', (req, res) => {
   const out = {};
-  if (req.query.bs) out.ad = nd.bsToAd(req.query.bs) || 'invalid';
-  if (req.query.ad) out.bs = nd.adToBs(req.query.ad) || 'invalid';
-  res.render('public/date-converter', { title: res.locals.t('मिति परिवर्तन', 'Date converter'), out, today: nd.todayBs() });
+  const [ty, tm, td] = nd.todayBs().split('-').map(Number);
+  const sel = { y: util.int(req.query.by, ty), m: util.int(req.query.bm, tm), d: util.int(req.query.bd, td) };
+  let bsIn = req.query.bs ? nd.toLatinDigits(String(req.query.bs)).trim().slice(0, 12) : '';
+  if (!bsIn && req.query.by) bsIn = `${sel.y}-${sel.m}-${sel.d}`;
+  if (bsIn) { out.ad = nd.bsToAd(bsIn) || 'invalid'; const p = nd.parse(bsIn); if (p) Object.assign(sel, { y: p[0], m: p[1], d: p[2] }); }
+  if (req.query.ad) out.bs = nd.adToBs(nd.toLatinDigits(String(req.query.ad)).slice(0, 12)) || 'invalid';
+  const weekday = ad => (ad && ad !== 'invalid' ? new Date(ad + 'T00:00:00Z').getUTCDay() : null);
+  res.render('public/date-converter', { title: res.locals.t('मिति परिवर्तन', 'Date converter'), out, today: nd.todayBs(), sel,
+    years: Array.from({ length: nd.MAX_YEAR - nd.MIN_YEAR + 1 }, (_, i) => nd.MIN_YEAR + i), days: (nd.monthLengths(sel.y) || [32])[Math.min(11, Math.max(0, sel.m - 1))] || 32,
+    wdAd: weekday(out.ad), wdBs: weekday(req.query.ad ? nd.toLatinDigits(String(req.query.ad)).slice(0, 10) : null) });
 });
 
 // sahakari-patro.php: co-op events (once / monthly within its year / yearly), built-in festivals and holidays (2082–2084), selected day, next month
