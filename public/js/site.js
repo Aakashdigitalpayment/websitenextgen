@@ -77,6 +77,35 @@
     dots.forEach((d, n) => d.addEventListener('click', () => show(n)));
   }
 
+  // ---------------------------------------------------------------- header menus (<details>): one open at a time, close outside / Escape
+  const menus = $$('[data-menu]');
+  menus.forEach(d => d.addEventListener('toggle', () => { if (d.open) menus.forEach(o => { if (o !== d) o.open = false; }); }));
+  document.addEventListener('click', e => menus.forEach(d => { if (d.open && !d.contains(e.target)) d.open = false; }));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') menus.forEach(d => { if (d.open) { d.open = false; const s = d.querySelector('summary'); if (s) s.focus(); } }); });
+
+  // ---------------------------------------------------------------- site search dialog (+ voice input where supported)
+  const sdlg = $('[data-search-dialog]');
+  if (sdlg && typeof sdlg.showModal === 'function') {
+    $$('[data-search-open]').forEach(a => a.addEventListener('click', e => {
+      e.preventDefault(); sdlg.showModal(); const i = $('input[name=q]', sdlg); if (i) i.focus();
+    }));
+    $$('[data-search-close]', sdlg).forEach(b => b.addEventListener('click', () => sdlg.close()));
+    sdlg.addEventListener('click', e => { if (e.target === sdlg) sdlg.close(); });
+  }
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  $$('[data-search-mic]').forEach(btn => {
+    if (!Rec) return;
+    btn.hidden = false;
+    btn.addEventListener('click', () => {
+      const rec = new Rec(); rec.lang = btn.dataset.lang || 'ne-NP'; rec.interimResults = false; rec.maxAlternatives = 1;
+      const form = btn.closest('form'), input = form && form.querySelector('input[name=q]');
+      btn.classList.add('btn-soft');
+      rec.onresult = ev => { const text = ev.results[0][0].transcript; if (input && text) { input.value = text; form.submit(); } };
+      rec.onend = () => btn.classList.remove('btn-soft');
+      try { rec.start(); } catch (e) { btn.classList.remove('btn-soft'); }
+    });
+  });
+
   // ---------------------------------------------------------------- legacy about.php#anchors → their own pages
   if (location.pathname === '/about' && location.hash) {
     const h = location.hash.toLowerCase();

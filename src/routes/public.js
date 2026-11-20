@@ -58,7 +58,10 @@ router.use((req, res, next) => {
     // never interrupt an application form or the offline page
     res.locals.popups = /^\/(apply|offline|track|verify|attend)(\/|$)/.test(req.path) ? [] : data.popups;
     res.locals.latestNotices = data.latest;
-    next();
+    if (!req.member) return next();
+    // unread badge on the login menu (one indexed count per page for signed-in members)
+    return db.value('SELECT count(*) FROM member_notifications WHERE member_id = $1 AND is_read = 0', [req.member.id])
+      .then(n => { res.locals.memberUnread = Number(n) || 0; next(); });
   }).catch(next);
 });
 

@@ -120,7 +120,8 @@ test('popup notices: carousel of up to 5 on every public page, not on forms; exp
   const m = r.text.match(/data-notice-popup="([^"]+)"/);
   assert.ok(m, 'popup on /about');
   assert.equal(m[1].split('-').length, 5, 'at most 5 slides');
-  assert.ok(!r.text.includes('Expired popup'));
+  const popHtml = r.text.slice(r.text.indexOf('data-notice-popup'), r.text.indexOf('data-search-dialog'));
+  assert.ok(!popHtml.includes('Expired popup'));
   assert.match(r.text, /View full notice|पूरा सूचना हेर्नुहोस्/);
   assert.ok(!/<script>/.test(r.text), 'no inline scripts');
   r = await get('/apply/loan');
@@ -301,4 +302,32 @@ test('notice detail: image attachment inline, "View full notice", missing file m
   assert.ok(r.text.includes('facebook.com/sharer'));
   r = await get('/notices/' + b);
   assert.ok(r.text.includes('संलग्न फाइल उपलब्ध छैन'));
+});
+
+// ---------------------------------------------------------------- P2-1 header
+test('header: login menu with external links, bell, ticker (can be turned off), nav additions, per-language logo and slogan', async () => {
+  await setting('internet_banking_url', 'https://ebank.example.com');
+  await setting('web_login_url', 'javascript:alert(1)');
+  await setting('site_slogan', 'पुरानो नारा');
+  await setting('site_tagline', 'सदस्यको हितमा, समुदायको साथमा');
+  await setting('logo_en', 'logos/en.png');
+  await inA(async () => {
+    const cat = await db.value("INSERT INTO service_categories (name, name_np, is_active) VALUES ('Savings', 'बचत', 1) RETURNING id");
+    await db.value("INSERT INTO service_categories (name, name_np, is_active) VALUES ('Loans', 'ऋण', 1)");
+    await db.query("INSERT INTO services (title, title_np, service_category_id, is_active) VALUES ('Daily saving', 'दैनिक बचत', $1, 1)", [cat]);
+  });
+  await clearCaches();
+  let r = await get('/notices');
+  assert.ok(r.text.includes('https://ebank.example.com'), 'e-banking link');
+  assert.ok(!r.text.includes('javascript:alert'), 'unsafe link dropped');
+  assert.ok(r.text.includes('hdr-bell') && r.text.includes('class="ticker"'));
+  assert.ok(r.text.includes('पुरानो नारा'), 'PHP slogan replaces the default tagline');
+  assert.ok(r.text.includes('/success-stories') && r.text.includes('दैनिक बचत') && r.text.includes('Online KYM') === false && r.text.includes('केवाइएम'));
+  assert.ok(r.text.includes('/pwa-icon/180.png'));
+  r = await get('/notices?lang=en');
+  assert.ok(r.text.includes('logos/en.png'), 'English logo');
+  await setting('notice_ticker_enabled', '0');
+  await clearCaches();
+  r = await get('/notices');
+  assert.ok(!r.text.includes('class="ticker"'));
 });
