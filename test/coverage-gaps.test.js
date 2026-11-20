@@ -661,3 +661,24 @@ test('SM-21: a TOTP step is accepted once per account, across processes (stored 
     assert.equal(await totp.claimStep('pg_user', 1, step), false, 'table whitelist');
   });
 });
+
+// ---------------------------------------------------------------- SM-13 social in-app browser / crawler bounce
+test('SM-13: crawlers and cold Facebook in-app opens of a report file land on the page; our own links go through', async () => {
+  const dir = path.join(config.uploadDir, A, 'reports');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'pub.pdf'), '%PDF-1.4 pub');
+  const id = await inA(() => db.value("INSERT INTO reports (title, title_np, file_path, access_level, is_active) VALUES ('Pub', 'सार्वजनिक', 'reports/pub.pdf', 'none', 1) RETURNING id"));
+  const get = (url, ua, ref) => { const r = request(app).get(url).set('Host', HA).set('User-Agent', ua); return ref ? r.set('Referer', ref) : r; };
+  let r = await get(`/reports/${id}/file`, 'facebookexternalhit/1.1');
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.location, '/reports?id=' + id);
+  r = await get(`/reports/${id}/file?nav=1`, 'facebookexternalhit/1.1');
+  assert.equal(r.status, 302, 'crawlers always get the page');
+  r = await get(`/reports/${id}/file`, 'Mozilla/5.0 [FBAN/FBIOS;FBAV/400.0]');
+  assert.equal(r.status, 302);
+  assert.equal((await get(`/reports/${id}/file?nav=1`, 'Mozilla/5.0 [FBAN/FBIOS;FBAV/400.0]')).status, 200);
+  assert.equal((await get(`/reports/${id}/file`, 'Mozilla/5.0 [FBAN/FBIOS]', `http://${HA}/reports`)).status, 200, 'same-site referer');
+  assert.equal((await get(`/reports/${id}/file`, 'Mozilla/5.0 (X11; Linux) Firefox/120')).status, 200, 'normal browsers unchanged');
+  await inA(() => require('../src/lib/public-cache').clear());
+  assert.match((await client().get('/reports')).text, new RegExp(`/reports/${id}/file\\?nav=1`));
+});

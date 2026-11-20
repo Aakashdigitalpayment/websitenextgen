@@ -54,7 +54,7 @@
         <% const profit = has(r, 'net_profit') ? r.net_profit : has(r, 'profit_loss') ? r.profit_loss : null; if (profit !== null) { %><div><%= t('खुद नाफा/नोक्सान', 'Net profit / loss') %></div><div><%= rs(profit) %></div><% } %>
       </div>
       <% if (r.report_note) { %><p class="small muted mt-2"><%= r.report_note %></p><% } %>
-      <% if (r.attachment_path) { %><a class="btn btn-outline btn-sm mt-2 no-print" href="/institutional-profile/<%= r.id %>/file" target="_blank" rel="noopener"><%- icon('file') %><%= t('प्रतिवेदन हेर्नुहोस्', 'View report') %></a><% } %>
+      <% if (r.attachment_path) { %><a class="btn btn-outline btn-sm mt-2 no-print" href="/institutional-profile/<%= r.id %>/file?nav=1" target="_blank" rel="noopener"><%- icon('file') %><%= t('प्रतिवेदन हेर्नुहोस्', 'View report') %></a><% } %>
     </div>
     <% }) %>
   </div>

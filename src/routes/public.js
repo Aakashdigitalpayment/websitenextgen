@@ -406,7 +406,7 @@ router.get('/reports', ah(async (req, res) => {
   }
   // signed short-lived links for unlocked members-only files (Facebook's in-app browser drops cookies)
   const fileUrl = (r, dl) => '/reports/' + r.id + '/file' + (() => {
-    const p = new URLSearchParams();
+    const p = new URLSearchParams({ nav: '1' }); // our own links are never bounced to the page (memberAccess.socialBounce)
     if (dl) p.set('dl', '1');
     if (memberAccess.normalizeLevel(r.access_level) === 'member' && memberOk) p.set('t', memberAccess.fileToken(req, 'report', r.id));
     const s = p.toString();
@@ -431,6 +431,8 @@ router.post('/reports/unlock', unlockLimiter, ah(async (req, res) => {
 router.get('/reports/:id/file', ah(async (req, res, next) => {
   const item = await db.one('SELECT * FROM reports WHERE id = $1', [util.int(req.params.id)]);
   if (!item || !item.file_path || (!Number(item.is_active) && !req.admin)) return next();
+  const bounce = memberAccess.socialBounce(req, '/reports?id=' + item.id);
+  if (bounce) return res.redirect(302, bounce);
   const level = memberAccess.normalizeLevel(item.access_level);
   if (!memberAccess.canOpen(req, level) && !memberAccess.checkFileToken(req, 'report', item.id, req.query.t)) {
     return res.status(403).render('public/error', { title: res.locals.t('सदस्यका लागि मात्र', 'Members only'), code: 403, message: res.locals.t('यो प्रतिवेदन सदस्यका लागि मात्र हो। लगइन गर्नुहोस् वा सदस्यता नम्बरले खोल्नुहोस्।', 'This report is for members only. Log in or unlock it with your membership number.') });
@@ -486,6 +488,8 @@ router.get('/institutional-profile', ah(async (req, res) => {
 router.get('/institutional-profile/:id/file', ah(async (req, res, next) => {
   const row = await db.one('SELECT id, fiscal_year, attachment_path, access_level, is_active FROM institutional_profile WHERE id = $1', [util.int(req.params.id)]);
   if (!row || !row.attachment_path || (!Number(row.is_active) && !req.admin)) return next();
+  const bounce = memberAccess.socialBounce(req, '/institutional-profile' + (row.fiscal_year ? '?fy=' + encodeURIComponent(row.fiscal_year) : ''));
+  if (bounce) return res.redirect(302, bounce);
   if (!memberAccess.canOpen(req, row.access_level) && !memberAccess.checkFileToken(req, 'profile', row.id, req.query.t)) return res.redirect('/member/login?next=' + encodeURIComponent(req.originalUrl));
   require('../lib/uploads').sendStored(req, res, next, row.attachment_path);
 }));
