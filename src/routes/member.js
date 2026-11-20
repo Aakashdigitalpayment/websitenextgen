@@ -313,14 +313,20 @@ router.get('/certificate', ah(async (req, res) => {
   const verifyCode = card?.verification_code || '';
   const target = `${req.protocol}://${req.get('host')}/verify${verifyCode ? '?code=' + encodeURIComponent(verifyCode) : ''}`;
   const sinceAd = (m.approved_at || m.created_at) ? new Date(m.approved_at || m.created_at).toISOString().slice(0, 10) : null;
-  res.render('member/certificate', { layout: false, qr: await QRCode.toDataURL(target, { margin: 1, width: 200 }), verifyCode: verifyCode || '—', since: sinceAd ? nd.adToBs(sinceAd) : null });
+  // member/certificate.php: identity from the linked KYM (SSOT) — photo, father's name, DOB, address, citizenship, account type
+  const kyc = await ownKyc(m);
+  const cit = String(kyc?.citizenship_no || '').trim();
+  const dobBs = kyc?.dob_bs || (kyc?.dob_ad ? nd.adToBs(new Date(kyc.dob_ad).toISOString().slice(0, 10)) : '');
+  const details = kyc ? {
+    fatherName: kyc.father_name || '', dobBs: dobBs || '', address: kyc.permanent_address || '', accountType: kyc.account_type || '',
+    citizenship: cit ? '•'.repeat(Math.max(0, Math.min(cit.length - 4, 8))) + cit.slice(-4) : '', // PII: masked except the last 4
+    phone: kyc.mobile || m.phone || '', email: kyc.email || m.email || '', hasPhoto: !!kyc.photo,
+  } : { phone: m.phone || '', email: m.email || '', hasPhoto: false };
+  res.render('member/certificate', { layout: false, qr: await QRCode.toDataURL(target, { margin: 1, width: 200 }), verifyCode: verifyCode || '—', since: sinceAd ? nd.adToBs(sinceAd) : null, details });
 }));
 
-async function ownKyc(m) {
-  const keys = [m.sadasyata_number, m.member_card_no].filter(Boolean);
-  return db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3) AND mobile = $4))
-                 ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
-}
+/** The member's own KYM (SSOT: kym.loadLinkedKyc — kyc_application_id, else the KYM with this Member ID). */
+const ownKyc = m => require('../lib/kym').loadLinkedKyc(m);
 router.get('/kyc-print/file/:field', ah(async (req, res, next) => {
   const field = modules.kyc.fileFields.find(f => f.name === req.params.field);
   const k = field ? await ownKyc(req.member) : null;
@@ -329,10 +335,7 @@ router.get('/kyc-print/file/:field', ah(async (req, res, next) => {
 }));
 
 router.get('/kyc-print', ah(async (req, res) => {
-  const m = req.member;
-  const keys = [m.sadasyata_number, m.member_card_no].filter(Boolean);
-  const k = await db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3) AND mobile = $4))
-                          ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
+  const k = await ownKyc(req.member);
   if (!k) { flash(req, 'info', res.locals.t('तपाईंको KYC फारम भेटिएन। पहिले KYC भर्नुहोस्।', 'No KYC form found. Please fill in the KYC form first.')); return res.redirect('/apply/kyc'); }
   const mod = modules.kyc;
   const forms = require('../lib/forms');

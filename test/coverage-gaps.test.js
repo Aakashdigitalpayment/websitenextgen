@@ -200,3 +200,26 @@ test('SM-6: card lookup by code without dashes or by card number; SM-7: verify.p
   assert.equal(r.status, 301);
   assert.equal(r.headers.location, '/verify?partner=HOSP1');
 });
+
+async function memberClient(sid) {
+  await inA(async () => db.query('UPDATE members SET password_hash = $1 WHERE sadasyata_number = $2', [await require('bcryptjs').hash('Member@12345', 4), sid]));
+  const c = client();
+  const r = await c.form('/member/login', { identifier: sid, password: 'Member@12345' });
+  assert.equal(r.status, 302, 'member login ' + sid);
+  return c;
+}
+
+// ---------------------------------------------------------------- SM-8 certificate KYM details
+test('SM-8: membership certificate shows the linked KYM details, citizenship masked', async () => {
+  await seedMember('CT-0400', '9841600004', { kycName: 'Gita Rai' });
+  await inA(() => db.query("UPDATE kyc_applications SET account_type = 'Saving' WHERE member_id = 'CT-0400'"));
+  const c = await memberClient('CT-0400');
+  const r = await c.get('/member/certificate');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /Father of Gita Rai/);
+  assert.match(r.text, /Kathmandu-5/);
+  assert.match(r.text, /Saving/);
+  assert.match(r.text, /•+4567/);
+  assert.doesNotMatch(r.text, /11-22-3334567/, 'citizenship number is masked');
+  assert.match(r.text, /src="\/member\/kyc-print\/file\/photo"/);
+});

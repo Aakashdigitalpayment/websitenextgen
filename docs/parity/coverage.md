@@ -112,7 +112,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | apply-frame.php | /apply (direct, no iframe) | NOT-NEEDED | iframe wrapper |
 | appointment.php | /apply/appointment | COVERED | |
 | attend.php | GET/POST /member/attend (QR token, window, eligibility, pending request) | COVERED | |
-| certificate.php | GET /member/certificate · views/member/certificate.ejs | PARTIAL | Node prints name / Member ID / since / QR only. PHP reads the linked KYM (`certificate.php:18-46`) and prints photo, father's name, DOB, permanent address, citizenship no., account type, KYM phone/email (SM-8) |
+| certificate.php | GET /member/certificate · views/member/certificate.ejs | COVERED | KYM details added (SM-8). Was: Node prints name / Member ID / since / QR only. PHP reads the linked KYM (`certificate.php:18-46`) and prints photo, father's name, DOB, permanent address, citizenship no., account type, KYM phone/email (SM-8) |
 | check-availability.php | GET /member/check-availability | COVERED | |
 | digital-service.php | /apply/digital | COVERED | |
 | election-vote.php | /member/elections/:id | COVERED | |
@@ -347,7 +347,7 @@ PHP `normalizeCardLookupKey` (`card-verify-helpers.php:296-306`) and lookup `:56
 **SM-7 · Partner-desk QR codes lose the partner.** — **COVERED**: `legacy-urls.js` `verify.php` keeps `partner`, `partner_id`, `code`, `mode`. Test: `test/coverage-gaps.test.js`.
 `legacy-urls.js` `'verify.php': () => '/verify'` drops `?partner=CODE` / `?partner_id=` (PHP `verify.php:337-338`), although Node `/verify` supports both. Spec: `'verify.php': q => '/verify' + keep(q, ['partner', 'partner_id', 'code'])`. Test.
 
-**SM-8 · Membership certificate lacks KYM details.**
+**SM-8 · Membership certificate lacks KYM details.** — **COVERED**: `routes/member.js` GET /certificate loads `kym.loadLinkedKyc` and `views/member/certificate.ejs` prints photo (owner-only `/member/kyc-print/file/photo`), father's name, DOB (BS), permanent address, citizenship (masked except last 4), account type, mobile, email. Test: `test/coverage-gaps.test.js`.
 PHP `member/certificate.php:18-46,139-180`: photo, father's name, DOB, permanent address, citizenship no., account type, phone/email from the linked KYM. Node `member.js:309-317` + `certificate.ejs` print none of them. Spec: load `kym.loadLinkedKyc(req.member)` and pass `kyc`; render the photo through `/member/kyc-print/file/photo` (owner-only), mask citizenship except last 4 (CLAUDE.md PII rule), show DOB in BS via `nd`. Bilingual labels.
 
 **SM-9 · Any staff user can void any attendance.**
@@ -358,7 +358,7 @@ Node `admin-applications.js:271-275` finds the member by `memberCol` value OR ex
 
 ### P3
 
-**SM-10 · SSOT: member KYM lookups not through `kym.loadLinkedKyc`.** `routes/member.js:318-335` (`ownKyc`, `/kyc-print`) query `kyc_applications` by id OR `member_id = ANY(...) AND mobile = m.phone` (exact string). Replace with `kym.loadLinkedKyc(req.member)` (PHP `member-portal-identity.php`, `memberSsotLoadLinkedKyc`).
+**SM-10 · SSOT: member KYM lookups not through `kym.loadLinkedKyc`.** — **COVERED**: `ownKyc` and `/kyc-print` in `routes/member.js` now use `kym.loadLinkedKyc`. `routes/member.js:318-335` (`ownKyc`, `/kyc-print`) query `kyc_applications` by id OR `member_id = ANY(...) AND mobile = m.phone` (exact string). Replace with `kym.loadLinkedKyc(req.member)` (PHP `member-portal-identity.php`, `memberSsotLoadLinkedKyc`).
 
 **SM-13 · Social in-app browser / crawler bounce for document links.** PHP `public-member-access.php:598-660` sends Facebook/Instagram in-app browsers and link-preview crawlers (facebookexternalhit, WhatsApp, Twitterbot…) from `report-file.php?id=` / `institutional-profile-file.php?id=` to the HTML page (OG card) unless `?nav=1` or same-site referer. Add `memberAccess.bounceSocial(req, res, pageUrl)` and call it in `/reports/:id/file` and `/institutional-profile/:id/file`; add `nav=1` to in-page links.
 
