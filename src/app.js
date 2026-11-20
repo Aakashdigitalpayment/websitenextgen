@@ -164,6 +164,8 @@ function createApp() {
     let rel;
     try { rel = path.posix.normalize('/' + decodeURIComponent(req.path)).replace(/^\/+/, ''); } catch { return res.status(400).end(); }
     if (/^_private(\/|$)/i.test(rel) || /(^|\/)_private(\/|$)/i.test(decodeURIComponent(req.path))) return res.status(404).end();
+    // folders the PHP upload gate protected (KYC, loan, welfare …): never public, even if a file was left there
+    if (require('./lib/uploads').isGated(rel)) return res.status(404).end();
     express.static(tenantDir(req), { maxAge: config.isProd ? '30d' : 0, dotfiles: 'deny', index: false,
       setHeaders: r => r.set('X-Content-Type-Options', 'nosniff').set('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'") })(req, res, next);
   });
@@ -253,6 +255,18 @@ function createApp() {
     const svg = require('./lib/starter-art').render(String(req.params.name).replace(/\.svg$/, ''), res.locals.theme && res.locals.theme.brand);
     if (!svg) return next();
     res.set('Cache-Control', 'private, max-age=600').set('Vary', 'Cookie').type('image/svg+xml').send(svg);
+  });
+
+  // legacy PHP upload URLs (/assets/uploads/<folder>/<file>) embedded in migrated pages and shared links
+  app.get('/assets/uploads/*rest', (req, res) => {
+    const up = require('./lib/uploads');
+    const rel = path.posix.normalize('/' + [].concat(req.params.rest || []).join('/')).replace(/^\/+/, '');
+    if (!rel || /(^|\/)_private(\/|$)/i.test(rel) || rel.split('/').some(p => p.startsWith('.'))) return res.status(404).end();
+    const q = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+    const enc = rel.split('/').map(encodeURIComponent).join('/');
+    // personal documents: staff only (the private file route checks the role); never a public redirect
+    if (up.isGated(rel)) return req.admin ? res.redirect(302, '/admin/files/_private/' + enc) : res.status(404).end();
+    res.redirect(301, '/uploads/' + enc + q);
   });
 
   app.use('/admin', require('./routes/admin'));

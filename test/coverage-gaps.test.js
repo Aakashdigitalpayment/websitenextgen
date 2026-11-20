@@ -107,3 +107,61 @@ test('SM-1: PHP derived CVV (name + Member ID) verifies; Node 4-digit CVV still 
   for (let i = 0; i < 5; i++) r = await c.form('/verify', { mode: 'code', code: 'TST-CVVA-BBBB', cvv: 'SUJ0124' });
   assert.match(r.text, /LOCK/, 'wrong derived CVV counts toward the lock');
 });
+
+// ---------------------------------------------------------------- SM-2 legacy /assets/uploads URLs
+test('SM-2: /assets/uploads/<public folder> redirects to /uploads; gated folders are never public', async () => {
+  const up = require('../src/lib/uploads');
+  const dir = path.join(config.uploadDir, A);
+  fs.mkdirSync(path.join(dir, 'news'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'news', 'x.jpg'), 'img');
+  let r = await client().get('/assets/uploads/news/x.jpg?v=2');
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.location, '/uploads/news/x.jpg?v=2');
+  assert.equal((await client().get('/uploads/news/x.jpg')).status, 200);
+  assert.equal((await client().get('/assets/uploads/kyc/x.jpg')).status, 404);
+  assert.equal((await client().get('/assets/uploads/admin-replies/r.pdf')).status, 404);
+  assert.equal((await client().get('/assets/uploads/_private/kyc/x.jpg')).status, 404);
+  const admin = await adminClient();
+  r = await admin.get('/assets/uploads/kyc/x.jpg');
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.location, '/admin/files/_private/kyc/x.jpg');
+  assert.equal(up.mediaUrl('assets/images/logo.png'), '');
+  assert.equal(up.mediaUrl('assets/uploads/loan/a.pdf'), '/admin/files/_private/loan/a.pdf');
+});
+
+// ---------------------------------------------------------------- SM-3 gated folders → private storage
+test('SM-3: migration moves every file of the PHP-gated folders to private storage and rewrites stored paths', async () => {
+  const mig = require('../src/lib/site-migration');
+  const dir = path.join(config.uploadDir, A);
+  const put = (rel, body = 'x') => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), body); };
+  for (const f of ['kyc/a.jpg', 'kyc/orphan.jpg', 'loan/b.pdf', 'loan/c.pdf', 'admin-replies/r.pdf', 'welfare_claims/sub/w.pdf', 'news/n.jpg']) put(f);
+  assert.equal((await client().get('/uploads/kyc/orphan.jpg')).status, 404, 'gated folder blocked even before the move');
+  const ids = await inA(async () => {
+    await require('../src/lib/settings').set('site_url', 'https://www.oldcoop.example');
+    const loan = await db.value(`INSERT INTO loan_applications (full_name, mobile, documents, admin_attachment) VALUES ('L', '9841000000', 'assets/uploads/loan/b.pdf, loan/c.pdf', 'admin-replies/r.pdf') RETURNING id`);
+    const news = await db.value(`INSERT INTO news (title, content) VALUES ('N', $1) RETURNING id`,
+      ['<p><img src="https://oldcoop.example/assets/uploads/news/n.jpg"> <a href="/assets/uploads/kyc/a.jpg">doc</a> see loan/b.pdf in text</p>']);
+    return { loan, news };
+  });
+  const r = await inA(() => mig.protectGatedUploads(dir));
+  assert.ok(r.moved >= 6, 'moved ' + r.moved);
+  for (const f of ['kyc/a.jpg', 'kyc/orphan.jpg', 'loan/b.pdf', 'loan/c.pdf', 'admin-replies/r.pdf', 'welfare_claims/sub/w.pdf']) {
+    assert.ok(fs.existsSync(path.join(dir, '_private', f)), f + ' is private');
+    assert.ok(!fs.existsSync(path.join(dir, f)), f + ' left the public folder');
+  }
+  assert.ok(fs.existsSync(path.join(dir, 'news/n.jpg')), 'public folders stay');
+  const loan = await inA(() => db.one('SELECT documents, admin_attachment FROM loan_applications WHERE id = $1', [ids.loan]));
+  assert.equal(loan.documents, '_private/loan/b.pdf,_private/loan/c.pdf');
+  assert.equal(loan.admin_attachment, '_private/admin-replies/r.pdf');
+  const news = await inA(() => db.value('SELECT content FROM news WHERE id = $1', [ids.news]));
+  assert.match(news, /src="\/uploads\/news\/n\.jpg"/);
+  assert.match(news, /href="\/admin\/files\/_private\/kyc\/a\.jpg"/);
+  assert.match(news, /see loan\/b\.pdf in text/, 'free text untouched');
+  // re-run is a no-op
+  const again = await inA(() => mig.protectGatedUploads(dir));
+  assert.equal(again.moved, 0);
+  assert.equal(await inA(() => db.value('SELECT documents FROM loan_applications WHERE id = $1', [ids.loan])), '_private/loan/b.pdf,_private/loan/c.pdf');
+  assert.ok(mig.fileColumns().loan_applications.some(c => c.col === 'admin_attachment' && c.private));
+  const admin = await adminClient();
+  assert.equal((await admin.get('/admin/files/_private/loan/c.pdf')).status, 200);
+});

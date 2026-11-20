@@ -84,7 +84,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | report-file.php | /reports/:id/file (?dl=1, view_only, members-only token) | PARTIAL | social in-app/crawler bounce (`public-member-access.php:598-660`) missing; members-only files stay at their public /uploads path until first opened (SM-5, SM-13) |
 | reports.php | /reports (type/year/month filters, unlock) | COVERED | |
 | robots.php | /robots.txt | COVERED | |
-| router.php | Express routing + lib/legacy-urls.js (publicRedirects, extensionlessRedirects, memberRedirects) | PARTIAL | `/assets/uploads/**` legacy URLs are not served or redirected (SM-2); gated-folder rule (→ upload-file.php) has no equivalent for migrated files (SM-3) |
+| router.php | Express routing + lib/legacy-urls.js (publicRedirects, extensionlessRedirects, memberRedirects); app.js `/assets/uploads/*` | COVERED | `/assets/uploads/**` redirect + gated-folder rule (SM-2, SM-3) |
 | sahakari-patro.php | /calendar | PARTIAL | Page covered (P1-11). Legacy `?cal_year=&cal_month=&sel_day=` dropped (SM-17). Rashifal/lagna/gunmilan tabs P3 "recommend not porting" (1-public) |
 | service-centers.php | /service-centers | COVERED | |
 | services.php | /services, /services/:id | COVERED | |
@@ -99,7 +99,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | vision-mission.php | /vision-mission | COVERED | |
 | why-choose.php | /about#why | COVERED | |
 | sw.js | public/sw.js (served by app.js:71) | PARTIAL | Offline fallback + push + notificationclick ported. PHP cached member pages (PAGES_CACHE) and showed `/member/offline.php` with cached name/unread; Node deliberately never caches member/admin HTML (privacy). Not recorded in docs/parity → record as deliberate (SM-18). |
-| .htaccess | Express (static only from /static, deny rules implicit), legacy-urls (extensionless, index.php→/), helmet | PARTIAL | Same as router.php: `/assets/uploads/...` (SM-2), gated folders (SM-3). Cache headers/compression handled by Express/nginx (deploy/) |
+| .htaccess | Express (static only from /static, deny rules implicit), legacy-urls (extensionless, index.php→/), helmet | COVERED | `/assets/uploads/...` (SM-2) and gated folders (SM-3) done in app.js. Cache headers/compression handled by Express/nginx (deploy/) |
 | version.txt | package.json version | NOT-NEEDED | |
 
 ## 2. `member/`
@@ -326,17 +326,17 @@ PHP (`includes/card-verify-helpers.php:89-120 deriveMemberCardCvv`, `:203-230 cv
 Node: `routes/public-members.js:177` `cvv = toLatinDigits(...).slice(0, 4)` and `card.cvv !== cvv`; `lib/member-portal.js:375` strips every non-digit and keeps 4; `views/public/verify.ejs:16,25` `inputmode="numeric" maxlength="4"`. A migrated card with `cvv='SUJ0123'` can never verify; five honest tries lock it (`cardFailure`).
 Spec: in `lib/member-portal.js` add `deriveCardCvv(fullName, memberNo)` (port exactly, incl. Devanagari 3-char + 'X' padding, last-4 digits zero-padded) and `cvvMatches(input, stored, derived)` (trim, remove whitespace, upper-case, constant-time compare per candidate). Use it in both POST /verify paths (code+CVV and name+ID+mobile) with derived = `deriveCardCvv(kyc.full_name_en||kyc.full_name||member.name, member.sadasyata_number||member.member_card_no||member.id)`. Accept up to 20 chars of input; change both inputs to `maxlength="20"` text (no `inputmode=numeric`). Keep 4-digit random CVVs issued by Node working (stored candidate). Tests: PHP-style card with derived CVV verifies; wrong derived CVV counts toward the lock; lowercase input accepted.
 
-**SM-2 · Legacy `/assets/uploads/...` URLs 404.**
+**SM-2 · Legacy `/assets/uploads/...` URLs 404.** — **COVERED**: `src/app.js` `GET /assets/uploads/*rest` → 301 `/uploads/…` (query kept); gated folders → 404 (302 to `/admin/files/_private/…` for signed-in staff); `uploads.mediaUrl` maps gated legacy paths to the private route and `assets/images/…` theme defaults to ''; migration rewrites `src=/href=` links (relative or the old `site_url` host) in every text column (`site-migration.protectGatedUploads`). Test: `test/coverage-gaps.test.js`.
 PHP served `assets/uploads/<folder>/<file>` directly (`.htaccess`, `router.php:36-49`); those URLs are embedded in migrated HTML (news/notice/page bodies, CMS rich text, AI-chat context), in links shared on social media, and in settings like `assets/images/logo.png`. Node maps DB *paths* (`uploads.mediaUrl`) but has no route for the URL and `site-migration.js` does not rewrite HTML bodies.
 Spec: in `src/app.js` before the public router add `app.get('/assets/uploads/*rest', …)` → 301 to `/uploads/<rest>` for non-gated folders; for gated folders (list in SM-3) → 404 (or `/admin/files/_private/<rest>` when `req.admin`). Optionally rewrite `src="(https?://old-host)?/?assets/uploads/` → `/uploads/` in rich-text columns during migration (`site-migration.js`, after copy). Also make `mediaUrl` treat `assets/images/…` defaults as `/static/img/…` or empty. Test: GET /assets/uploads/news/x.jpg → 301 /uploads/news/x.jpg; GET /assets/uploads/kyc/x.jpg → 404.
 
-**SM-3 · Confidential files in gated folders stay public after migration.**
+**SM-3 · Confidential files in gated folders stay public after migration.** — **COVERED**: `uploads.GATED_FOLDERS`/`isGated` (one list); `site-migration.protectGatedUploads` moves each gated folder wholesale to `_private/<folder>` (orphans included) and rewrites every single/comma-separated stored path in all text columns; the privatise step now handles comma lists; `admin_attachment` added to `fileColumns()`; `/uploads` returns 404 for gated folders; `resolveStored` falls back to the private copy for un-rewritten legacy paths. Fix-up for tenants already migrated: `node scripts/privatise-uploads.js --tenant=<slug>|--all`. Test: `test/coverage-gaps.test.js`.
 PHP gated `kyc, loan, accounts, welfare_claims, grievances, digital_services, honor_applications, appointments, admin-replies, job-applications, hrm` (`includes/upload-gate.php:21-27`, `.htaccess` rule) for every file in those folders. Node `site-migration.js:243-271` privatises only files referenced by single-path module/resource file columns: comma lists (`loan_applications.documents`, `member_welfare_claims.supporting_documents` — counted as "missing"), `admin_attachment` (office replies, not a field), KYC paths not modelled as fields, and orphan files remain under `uploads/<tenant>/<folder>/` and are served by the public `/uploads` static route (`app.js:163-168`).
 Spec: in `site-migration.js` after "copy uploads": move each gated folder wholesale to `_private/<folder>` (fs.renameSync dir), then for every text column of every module/resource table plus `admin_attachment`, `supporting_documents`, `documents`, rewrite each comma-separated path that starts with a gated folder to `_private/…` (SQL `regexp_replace`). Also add `admin_attachment` to `fileColumns()` as private. Add a defensive rule in the `/uploads` middleware: 404 for first segment in the gated list. Test with a fixture tenant.
 
 ### P2
 
-**SM-4 · (merged into SM-3)** — `admin_attachment` office replies of migrated rows publicly reachable.
+**SM-4 · (merged into SM-3)** — `admin_attachment` office replies of migrated rows publicly reachable. — **COVERED** with SM-3.
 
 **SM-5 · Members-only reports / institutional-profile files are public until first opened.**
 `routes/public.js:441-452` moves a members-only report into `_private` lazily on first access; until then `/uploads/reports/<file>` serves it to anyone. Spec: privatise rows with `access_level='member'` during migration and in the resource save hook (resources.js `reports`, `institutional_profile` afterSave: move file to `_private` when level = member, back when public).

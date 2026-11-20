@@ -17,6 +17,17 @@ const IMAGE = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 const DOCS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'];
 const MIME_OK = /^(image\/(jpeg|png|webp|gif)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\..+|vnd\.ms-excel|vnd\.ms-powerpoint|octet-stream)|text\/(plain|csv))$/;
 const FOLDER_RE = /^[a-z0-9_-]{1,40}$/;
+/**
+ * PHP upload gate (includes/upload-gate.php): folders under assets/uploads/ that hold personal documents.
+ * Migrated files in these folders live under _private/<folder>/ and are never served by the public /uploads route.
+ */
+const GATED_FOLDERS = ['kyc', 'loan', 'accounts', 'welfare_claims', 'grievances', 'digital_services',
+  'honor_applications', 'appointments', 'admin-replies', 'job-applications', 'hrm'];
+const GATED_RE = new RegExp('^(' + GATED_FOLDERS.map(f => f.replace(/[-_]/g, m => '\\' + m)).join('|') + ')/', 'i');
+/** Stored/relative path → path relative to the tenant folder ("assets/uploads/x" and "/uploads/x" → "x"). */
+const relOf = stored => String(stored || '').trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+/** True for a legacy path inside one of the PHP-gated folders (e.g. "kyc/x.jpg"). */
+const isGated = stored => GATED_RE.test(relOf(stored));
 
 function tenantDir(req) {
   return path.join(config.uploadDir, req.tenant.slug);
@@ -128,9 +139,11 @@ function mediaUrl(stored) {
   const s = String(stored).trim().replace(/\\/g, '/');
   if (/^https?:\/\//i.test(s)) return s;
   if (/^starter:[a-z]+$/.test(s)) return '/starter-art/' + s.slice(8) + '.svg';
+  if (/^\/?assets\/(images|img)\//i.test(s)) return ''; // PHP theme defaults (assets/images/logo.png) are not migrated
   const rel = s.replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
   if (rel.includes('..')) return '';
   if (rel.startsWith('_private/')) return '/admin/files/' + rel.split('/').map(encodeURIComponent).join('/'); // staff-only route
+  if (isGated(rel)) return '/admin/files/_private/' + rel.split('/').map(encodeURIComponent).join('/'); // PHP-gated folder → private
   return '/uploads/' + rel.split('/').map(encodeURIComponent).join('/');
 }
 
@@ -148,7 +161,13 @@ function resolveStored(req, stored) {
   const base = path.resolve(tenantDir(req));
   const rel = String(stored || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
   const file = path.resolve(base, rel);
-  return file.startsWith(base + path.sep) ? file : null;
+  if (!file.startsWith(base + path.sep)) return null;
+  // a legacy path into a PHP-gated folder whose file was moved to private storage by the site migration
+  if (isGated(rel) && !fs.existsSync(file)) {
+    const priv = path.resolve(base, '_private', rel);
+    if (priv.startsWith(base + path.sep) && fs.existsSync(priv)) return priv;
+  }
+  return file;
 }
 
 /** Send a stored file with safe headers (images inline, everything else as a download). */
@@ -179,4 +198,4 @@ function srcsetAttr(req, stored, sizes = '100vw') {
   return set ? ` srcset="${esc(set)}" sizes="${esc(sizes)}"` : '';
 }
 
-module.exports = { upload, saveDataUrl, mediaUrl, remove, tenantDir, resolveStored, sendStored, srcsetAttr };
+module.exports = { upload, saveDataUrl, mediaUrl, remove, tenantDir, resolveStored, sendStored, srcsetAttr, GATED_FOLDERS, isGated, relOf };

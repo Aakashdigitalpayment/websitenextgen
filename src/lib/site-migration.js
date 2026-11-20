@@ -79,10 +79,68 @@ const MOJIBAKE = /à¤|à¥|Ã¤|Ã¥|â€/;
 function fileColumns() {
   const map = {};
   const add = (table, col, priv) => { (map[table] = map[table] || []).push({ col, private: priv }); };
-  for (const m of Object.values(modules)) for (const f of m.fileFields) add(m.table, f.name, true);
+  for (const m of Object.values(modules)) {
+    for (const f of m.fileFields) add(m.table, f.name, true);
+    add(m.table, 'admin_attachment', true); // office replies (admin-applications.js) are confidential too
+  }
   for (const r of Object.values(resources)) for (const f of r.fileFields) add(r.table, f.name, !!r.privateFiles);
   add('members', 'avatar_url', false);
   return map;
+}
+
+// ---------------------------------------------------------------- PHP-gated folders → private storage (SM-3)
+/** Move every file of a gated folder (src) into dst, keeping sub-paths; existing targets are kept. */
+function moveTree(src, dst) {
+  let n = 0;
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    const a = path.join(src, e.name), b = path.join(dst, e.name);
+    if (e.isSymbolicLink()) { fs.rmSync(a, { force: true }); continue; }
+    if (e.isDirectory()) { n += moveTree(a, b); continue; }
+    fs.mkdirSync(dst, { recursive: true });
+    if (fs.existsSync(b)) fs.rmSync(a, { force: true }); else { fs.renameSync(a, b); n++; }
+  }
+  fs.rmSync(src, { recursive: true, force: true });
+  return n;
+}
+const sqlRe = s => s.replace(/[-_]/g, m => '\\' + m);
+/**
+ * The PHP upload gate (includes/upload-gate.php) protected whole folders (KYC, loan, welfare, office replies …).
+ * Move each of them wholesale to _private/<folder> — files referenced by any column, comma lists and orphans alike —
+ * then point every stored path (single or comma-separated, with or without "assets/uploads/") at the private copy.
+ * Also rewrites links to /assets/uploads/ inside rich text to /uploads/ (public folders only).
+ * Runs inside the tenant schema; safe to re-run (scripts/privatise-uploads.js for tenants migrated earlier).
+ * @returns {Promise<{moved:number, folders:string[], rows:number, html:number}>}
+ */
+async function protectGatedUploads(dest) {
+  const { GATED_FOLDERS } = require('./uploads');
+  const out = { moved: 0, folders: [], rows: 0, html: 0 };
+  for (const f of GATED_FOLDERS) {
+    const dir = path.join(dest, f);
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+    out.moved += moveTree(dir, path.join(dest, '_private', f));
+    out.folders.push(f);
+  }
+  const alt = GATED_FOLDERS.map(sqlRe).join('|');
+  // a value that is only paths: one or more comma-separated tokens without spaces
+  const onlyPaths = `^\\s*[^\\s,]+(\\s*,\\s*[^\\s,]+)*\\s*$`;
+  const hit = `(^|,)\\s*/?(assets/)?(uploads/)?(${alt})/`;
+  const cols = await db.many(`SELECT table_name, column_name FROM information_schema.columns
+                              WHERE table_schema = current_schema() AND data_type IN ('text', 'character varying')`);
+  const site = String(await require('./settings').get('site_url', '') || '').replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  const host = site ? `(?:https?://(?:www\\.)?${site.replace(/^www\./i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?` : '';
+  for (const { table_name: t, column_name: c } of cols) {
+    if (/^(schema_migrations|audit_log|app_error_log)$/.test(t)) continue;
+    const col = db.ident(c), tbl = db.ident(t);
+    const r = await db.query(`UPDATE ${tbl} SET ${col} = regexp_replace(${col}, $1, '\\1_private/\\2/', 'gi')
+                              WHERE ${col} ~* $2 AND ${col} ~ $3`, [`(^|,)\\s*/?(?:assets/)?(?:uploads/)?(${alt})/`, hit, onlyPaths]).catch(() => ({ rowCount: 0 }));
+    out.rows += r.rowCount;
+    // rich text: src="/assets/uploads/news/x.jpg" (or the old site's absolute URL) → /uploads/news/x.jpg; gated folders → private route
+    const h = await db.query(`UPDATE ${tbl} SET ${col} = regexp_replace(regexp_replace(${col}, $1, '\\1/admin/files/_private/\\2/', 'gi'), $2, '\\1/uploads/', 'gi')
+                              WHERE ${col} ~* '(src|href)\\s*=\\s*["'']' AND ${col} ~* 'assets/uploads/'`,
+    [`((?:src|href)\\s*=\\s*["'])${host}/?assets/uploads/(${alt})/`, `((?:src|href)\\s*=\\s*["'])${host}/?assets/uploads/`]).catch(() => ({ rowCount: 0 }));
+    out.html += h.rowCount;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- sources
@@ -239,6 +297,15 @@ async function migrate(o) {
     step('copy uploads', 'ok', `${copied} files${skipped ? `, ${skipped} unsafe files skipped` : ''}`);
   }
 
+  // ---- PHP-gated folders (KYC, loan, welfare, office replies …) → private storage, every file and every stored path
+  if (o.uploads) {
+    await db.withSchema(tenant.schema_name, async () => {
+      const g = await protectGatedUploads(dest);
+      report.files.gated = g;
+      step('protect gated folders', 'ok', `${g.moved} files in ${g.folders.length} folders moved to private storage; ${g.rows} stored paths and ${g.html} rich-text links updated`);
+    });
+  }
+
   // ---- privatise confidential files (application documents, information room)
   await db.withSchema(tenant.schema_name, async () => {
     const cols = fileColumns();
@@ -250,18 +317,23 @@ async function migrate(o) {
         if (!tcols.has(col)) continue;
         const rows = await db.many(`SELECT id, ${db.ident(col)} AS v FROM ${db.ident(table)} WHERE ${db.ident(col)} IS NOT NULL AND ${db.ident(col)} <> ''`);
         for (const r of rows) {
-          if (/^https?:\/\//i.test(r.v)) continue;
-          const rel = String(r.v).replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
-          const abs = path.resolve(dest, rel);
-          if (!abs.startsWith(path.resolve(dest) + path.sep)) continue;
-          if (!fs.existsSync(abs)) { missing++; if (missingList.length < 50) missingList.push(`${table}.${col} #${r.id}: ${r.v}`); continue; }
-          if (priv && !rel.startsWith('_private/')) {
+          // single paths and comma-separated lists (loan documents, welfare supporting documents)
+          const parts = String(r.v).split(',').map(x => x.trim()).filter(Boolean);
+          let changed = false;
+          const next = parts.map(v => {
+            if (/^https?:\/\//i.test(v)) return v;
+            const rel = v.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+            const abs = path.resolve(dest, rel);
+            if (!abs.startsWith(path.resolve(dest) + path.sep)) return v;
+            if (!fs.existsSync(abs)) { missing++; if (missingList.length < 50) missingList.push(`${table}.${col} #${r.id}: ${v}`); return v; }
+            if (!priv || rel.startsWith('_private/')) return v;
             const target = path.join(dest, '_private', rel);
             fs.mkdirSync(path.dirname(target), { recursive: true });
             fs.renameSync(abs, target);
-            await db.query(`UPDATE ${db.ident(table)} SET ${db.ident(col)} = $1 WHERE id = $2`, ['_private/' + rel, r.id]);
-            moved++;
-          }
+            moved++; changed = true;
+            return '_private/' + rel;
+          });
+          if (changed) await db.query(`UPDATE ${db.ident(table)} SET ${db.ident(col)} = $1 WHERE id = $2`, [next.join(','), r.id]);
         }
       }
     }
@@ -400,4 +472,4 @@ async function convertPii(oldKey, step = () => {}, warn = () => {}) {
   return { ok, bad, found };
 }
 
-module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii };
+module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii, protectGatedUploads };
