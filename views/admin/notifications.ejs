@@ -7,7 +7,7 @@
       <div class="field"><label><%= t('माध्यम', 'Channel') %></label><select class="select" name="channel"><option value="sms">SMS</option><option value="email"><%= t('इमेल', 'Email') %></option></select></div>
       <div class="field"><label><%= t('फोन वा इमेल', 'Phone or email') %></label><input class="input" name="to" required></div>
     </div>
-    <button class="btn btn-primary mt-2"><%= t('पठाउनुहोस्', 'Send test') %></button>
+    <button type="submit" class="btn btn-primary mt-2"><%= t('पठाउनुहोस्', 'Send test') %></button>
   </form>
   <form class="card" method="post" action="/admin/notifications/push">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -19,7 +19,7 @@
       <div class="field"><label><%= t('सन्देश', 'Message') %></label><textarea class="textarea" name="body" rows="2" maxlength="300"></textarea></div>
       <div class="field"><label><%= t('लिङ्क (ऐच्छिक)', 'Link (optional)') %></label><input class="input" name="url" placeholder="/notices"></div>
     </div>
-    <button class="btn btn-primary mt-2" data-confirm="<%= t('सबै सदस्यलाई पठाउने?', 'Send to all members?') %>"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button>
+    <button type="submit" class="btn btn-primary mt-2" data-confirm="<%= t('सबै सदस्यलाई पठाउने?', 'Send to all members?') %>"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button>
   </form>
 </div>
 <div class="grid grid-2 mb-3">
@@ -30,11 +30,11 @@
       <div class="field"><label for="tpl_id"><%= t('ढाँचा', 'Template') %></label><select class="select" id="tpl_id" name="template_id" required><option value="">—</option><% (locals.templates || []).forEach(x => { %><option value="<%= x.id %>"><%= x.event_type %> · <%= x.audience %> · <%= x.channel %></option><% }) %></select></div>
       <div class="field"><label for="tpl_to"><%= t('फोन वा इमेल', 'Phone or email') %></label><input class="input" id="tpl_to" name="to" required></div>
     </div>
-    <button class="btn btn-outline mt-2"><%= t('नमुना पठाउनुहोस्', 'Send sample') %></button>
+    <button type="submit" class="btn btn-outline mt-2"><%= t('नमुना पठाउनुहोस्', 'Send sample') %></button>
   </form>
   <div class="card">
     <h3><%= t('Push लग (पछिल्ला ५०)', 'Push log (last 50)') %></h3>
-    <form method="post" action="/admin/notifications/push/clear-expired" class="mb-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('९० दिनभन्दा पुराना push उपकरण हटाउने?', 'Remove push subscriptions older than 90 days?') %>"><%- icon('trash') %><%= t('पुराना उपकरण हटाउनुहोस्', 'Clear old subscriptions') %></button></form>
+    <form method="post" action="/admin/notifications/push/clear-expired" class="mb-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-ghost btn-sm" data-confirm="<%= t('९० दिनभन्दा पुराना push उपकरण हटाउने?', 'Remove push subscriptions older than 90 days?') %>"><%- icon('trash') %><%= t('पुराना उपकरण हटाउनुहोस्', 'Clear old subscriptions') %></button></form>
     <% if (!(locals.pushLog || []).length) { %><p class="muted small"><%= t('अहिलेसम्म छैन।', 'Nothing yet.') %></p><% } else { %>
     <div class="table-wrap"><table class="table"><tbody><% pushLog.forEach(l => { %><tr><td class="small"><%= bsDate(l.sent_at) %></td><td class="small"><%= l.name_np || l.name || '#' + l.member_id %></td><td class="small"><%= util.excerpt(l.title || '', 40) %></td><td><span class="badge <%= l.http_code >= 200 && l.http_code < 300 ? 'badge-ok' : 'badge-bad' %>"><%= l.http_code %></span></td></tr><% }) %></tbody></table></div><% } %>
   </div>

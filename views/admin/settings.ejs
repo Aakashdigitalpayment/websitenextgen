@@ -45,7 +45,7 @@
         <td><input type="checkbox" name="notify_sms_<%= m.key %>" value="1" aria-label="sms <%= m.key %>" <%= (values['notify_sms_' + m.key] ?? '1') !== '0' ? 'checked' : '' %>></td></tr><% }) %>
     </tbody></table></div>
   <% } %>
-  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save settings') %></button></div>
+  <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save settings') %></button></div>
 </form>
 <% } %>
 <% if (defs.some(d => d.type === 'richtext')) { %><script src="/static/js/rich-editor.js" defer></script><% } %>

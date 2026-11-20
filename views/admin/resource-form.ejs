@@ -10,7 +10,7 @@
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <div class="form-grid"><% fields.filter(fl => !fl.hidden).forEach(fl => { %><%- include('../partials/admin-field', { field: fl, values, errors, options, item, bsDates: locals.bsDates }) %><% }) %></div>
   <div class="form-actions">
-    <button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button>
+    <button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button>
     <a class="btn btn-ghost" href="/admin/r/<%= r.key %>"><%= t('रद्द', 'Cancel') %></a>
   </div>
 </form>

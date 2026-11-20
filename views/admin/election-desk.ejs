@@ -20,7 +20,7 @@
           <div class="choices"><% list.forEach(c => { %><label class="choice"><input type="<%= max > 1 ? 'checkbox' : 'radio' %>" name="pos_<%= p.id %>" value="<%= c.id %>"> <%= f(c, 'name') %></label><% }) %>
           <% if (!list.length) { %><span class="small muted"><%= t('उम्मेदवार छैन।', 'No candidates.') %></span><% } %></div></fieldset>
       <% }) %>
-      <button class="btn btn-primary" data-confirm="<%= t('पक्का गर्ने?', 'Confirm?') %>"><%- icon('check') %><%= t('पुष्टि गर्नुहोस्', 'Confirm') %></button>
+      <button type="submit" class="btn btn-primary" data-confirm="<%= t('पक्का गर्ने?', 'Confirm?') %>"><%- icon('check') %><%= t('पुष्टि गर्नुहोस्', 'Confirm') %></button>
     </form><% } %>
   </div>
   <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('मतदाता सूची (पछिल्ला)', 'Recent voters') %></h3>

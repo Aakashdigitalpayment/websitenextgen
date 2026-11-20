@@ -11,5 +11,5 @@
     <div class="field"><label><%= t('बचतको ब्याजमा कर (%)', 'Tax on deposit interest (%)') %></label><input class="input" name="deposit_tax_rate" inputmode="decimal" value="<%= settings.deposit_tax_rate || '5' %>"><div class="field-hint"><%= t('गणकमा पूर्वनिर्धारित रूपमा प्रयोग हुन्छ।', 'Default for the calculators.') %></div></div>
     <div class="field span-2"><label><%= t('थप विवरण (नेपाली)', 'Additional text (Nepali)') %></label><textarea class="textarea" name="protection_extra_np" rows="5"><%= settings.protection_extra_np || '' %></textarea></div>
   </div>
-  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+  <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
 </form>

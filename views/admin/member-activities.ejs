@@ -4,7 +4,7 @@
 <form class="toolbar" method="get">
   <label class="small"><%= t('देखि', 'From') %> <input class="input" type="date" name="from" value="<%= from %>"></label>
   <label class="small"><%= t('सम्म', 'To') %> <input class="input" type="date" name="to" value="<%= to %>"></label>
-  <button class="btn btn-outline"><%- icon('search') %><%= t('फिल्टर', 'Filter') %></button>
+  <button type="submit" class="btn btn-outline"><%- icon('search') %><%= t('फिल्टर', 'Filter') %></button>
   <% if (from || to) { %><a class="btn btn-ghost" href="/admin/members/<%= item.id %>/activities"><%= t('सबै', 'Clear') %></a><% } %>
 </form>
 <% const summary = {}; rows.forEach(r => { const k = t(...r.type); summary[k] = (summary[k] || 0) + 1; }); %>

@@ -6,7 +6,7 @@
   <input class="input" name="from" value="<%= f.from %>" placeholder="<%= t('देखि (वि.सं./AD)', 'From (BS/AD)') %>" aria-label="from">
   <input class="input" name="to" value="<%= f.to %>" placeholder="<%= t('सम्म (वि.सं./AD)', 'To (BS/AD)') %>" aria-label="to">
   <input class="input" name="q" value="<%= f.q %>" placeholder="<%= t('खोज्नुहोस्…', 'Search…') %>">
-  <button class="btn btn-outline"><%- icon('search') %></button><% if (qs) { %><a class="btn btn-ghost" href="/admin/audit"><%= t('हटाउनुहोस्', 'Clear') %></a><% } %>
+  <button type="submit" class="btn btn-outline"><%- icon('search') %></button><% if (qs) { %><a class="btn btn-ghost" href="/admin/audit"><%= t('हटाउनुहोस्', 'Clear') %></a><% } %>
 </form>
 <div class="table-wrap"><table class="table"><thead><tr><th><%= t('समय', 'When') %></th><th><%= t('को', 'Who') %></th><th><%= t('कार्य', 'Action') %></th><th><%= t('विवरण', 'Details') %></th><th>IP</th></tr></thead><tbody>
   <% rows.forEach(a => { %><tr><td class="small"><%= bsDate(a.created_at) %> <span class="faint"><%= new Date(a.created_at).toTimeString().slice(0, 5) %></span></td><td><%= a.actor_name || '' %> <span class="faint small"><%= a.actor_type %></span></td><td><span class="badge"><%= a.action %></span><% if (a.id < 0) { %> <span class="badge"><%= t('पुरानो', 'legacy') %></span><% } %></td>

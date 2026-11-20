@@ -33,7 +33,7 @@
     </tbody>
     <% }) %>
   </table></div>
-  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('भूमिका सुरक्षित गर्नुहोस्', 'Save role') %></button><a class="btn btn-ghost" href="/admin/roles"><%= t('रद्द', 'Cancel') %></a><span class="small muted" data-role-count></span></div>
+  <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('भूमिका सुरक्षित गर्नुहोस्', 'Save role') %></button><a class="btn btn-ghost" href="/admin/roles"><%= t('रद्द', 'Cancel') %></a><span class="small muted" data-role-count></span></div>
 </form>
 <% } %>
 
@@ -47,7 +47,7 @@
     <td class="text-center"><%= num(r.user_count) %></td>
     <td><div class="row-actions">
       <a class="btn btn-ghost btn-sm btn-icon" href="/admin/roles?edit=<%= r.id %>" title="<%= t('सम्पादन', 'Edit') %>"><%- icon('edit') %></a>
-      <form method="post" action="/admin/roles"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="delete_role"><input type="hidden" name="role_id" value="<%= r.id %>"><button class="btn btn-ghost btn-sm btn-icon" title="<%= t('हटाउने', 'Delete') %>" data-confirm="<%= t('यो भूमिका हटाउने?', 'Delete this role?') %>" <%= r.user_count > 0 ? 'disabled' : '' %>><%- icon('trash') %></button></form>
+      <form method="post" action="/admin/roles"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="delete_role"><input type="hidden" name="role_id" value="<%= r.id %>"><button type="submit" class="btn btn-ghost btn-sm btn-icon" title="<%= t('हटाउने', 'Delete') %>" data-confirm="<%= t('यो भूमिका हटाउने?', 'Delete this role?') %>" <%= r.user_count > 0 ? 'disabled' : '' %>><%- icon('trash') %></button></form>
     </div></td>
   </tr><% }) %>
   </tbody>

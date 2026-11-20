@@ -277,3 +277,86 @@ test('SM-12: status notification resolves the member by portal id, Member ID, th
   assert.match(n.message, /Admin टिप्पणी: OK from office/);
   assert.equal(n.link, '/member/requests/loan/77');
 });
+
+// ---------------------------------------------------------------- B-1 / B-16 CSP regression + view lint (smoke-csp, smoke-img-alt, smoke-security)
+function viewFiles(dir = path.join(__dirname, '..', 'views')) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? viewFiles(path.join(dir, e.name)) : e.name.endsWith('.ejs') ? [path.join(dir, e.name)] : []));
+}
+const stripEjs = s => s.replace(/<%[\s\S]*?%>/g, 'X');
+
+test('B-1: strict CSP header on public, member and admin pages; no inline scripts or on*= handlers in views', async () => {
+  for (const url of ['/', '/member/login', '/admin/login']) {
+    const r = await client().get(url);
+    const csp = r.headers['content-security-policy'] || '';
+    const script = (csp.match(/script-src ([^;]*)/) || [])[1] || '';
+    assert.ok(script, url + ': script-src present');
+    assert.doesNotMatch(script, /unsafe-inline|unsafe-eval/, url + ': no unsafe script-src');
+    for (const src of script.trim().split(/\s+/)) assert.ok(["'self'", 'https://challenges.cloudflare.com'].includes(src), url + ': unexpected script source ' + src);
+    assert.match(csp, /script-src-attr 'none'/, url + ': no inline handlers');
+    assert.match(csp, /object-src 'none'/);
+    assert.match(csp, /frame-ancestors 'self'/);
+    assert.equal(r.headers['x-content-type-options'], 'nosniff');
+    assert.ok(r.headers['referrer-policy']);
+  }
+  const bad = [];
+  for (const f of viewFiles()) {
+    const s = stripEjs(fs.readFileSync(f, 'utf8'));
+    const rel = path.relative(path.join(__dirname, '..'), f);
+    for (const m of s.matchAll(/<script\b([^>]*)>/gi)) if (!/\ssrc=/i.test(m[1]) && !/type="application\/ld\+json"/i.test(m[1])) bad.push(rel + ': inline <script>');
+    for (const m of s.matchAll(/<[a-z][a-z0-9-]*\b[^>]*?\s(on[a-z]+)\s*=/gi)) bad.push(rel + ': ' + m[1] + '= handler');
+    for (const m of s.matchAll(/<img\b[^>]*>/gi)) if (!/\salt=/i.test(m[0])) bad.push(rel + ': <img> without alt');
+    for (const m of s.matchAll(/<a\b[^>]*target="_blank"[^>]*>/gi)) if (!/rel="[^"]*noopener/i.test(m[0])) bad.push(rel + ': target=_blank without rel=noopener');
+    for (const m of s.matchAll(/<(?:script|link)\b[^>]*(?:src|href)="(https?:)?\/\/(?!fonts\.googleapis\.com|fonts\.gstatic\.com|challenges\.cloudflare\.com)[^"]*"/gi)) bad.push(rel + ': external asset ' + m[0].slice(0, 60));
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('B-16: form labels point at an existing control (smoke-form-a11y)', () => {
+  const bad = [];
+  for (const f of viewFiles()) {
+    const s = fs.readFileSync(f, 'utf8');
+    if (/<%[^%]*include\(/.test(s) && !/<label\b/.test(s)) continue;
+    for (const m of s.matchAll(/<label\b[^>]*\sfor="([^"<]+)"/gi)) {
+      const id = m[1];
+      if (id.includes('<%')) continue; // dynamic ids are checked at render time
+      if (!s.includes(`id="${id}"`) && !s.includes(`'${id}'`)) bad.push(path.basename(f) + ': label for="' + id + '"');
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('B-16: concurrent double check-in keeps one VALID row; over-size capture gives a clear message', async () => {
+  const att = require('../src/lib/attendance');
+  const { m } = await seedMember('CC-0700', '9841600009');
+  const out = await inA(async () => {
+    const pid = await db.value("INSERT INTO upcoming_programs (title, is_active) VALUES ('Race', 1) RETURNING id");
+    const program = await db.one('SELECT * FROM upcoming_programs WHERE id = $1', [pid]);
+    const rs = await Promise.all([1, 2, 3].map(() => att.record({ member: m, program, method: 'ADMIN_MANUAL', source: 'admin_desk' })));
+    return { rs, n: await db.value("SELECT count(*) FROM member_program_attendance WHERE program_id = $1 AND attendance_status = 'VALID'", [pid]) };
+  });
+  assert.equal(Number(out.n), 1);
+  assert.equal(out.rs.filter(r => r.row).length, 1);
+  const up = require('../src/lib/uploads');
+  const big = 'data:image/jpeg;base64,' + Buffer.alloc(1.2 * 1024 * 1024, 1).toString('base64');
+  const r = up.saveDataUrl({ tenant: { slug: A } }, 'kyc', big, { maxMb: 1 });
+  assert.match(r.error, /1MB भन्दा ठूलो/);
+});
+
+test('B-16: every admin <button> declares its type (smoke-admin-buttons)', () => {
+  const bad = [];
+  for (const f of viewFiles(path.join(__dirname, '..', 'views', 'admin'))) {
+    for (const m of stripEjs(fs.readFileSync(f, 'utf8')).matchAll(/<button\b[^>]*>/gi)) if (!/\stype=/i.test(m[0])) bad.push(path.basename(f) + ': ' + m[0].slice(0, 60));
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('B-16: an over-size admin upload reports "too large", not a CSRF error (smoke-report-upload)', async () => {
+  const c = await adminClient();
+  const tok = await c.token('/admin/r/reports/new');
+  const big = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(21 * 1024 * 1024, 32)]);
+  const r = await c.agent.post('/admin/r/reports?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('title_np', 'Big').field('access_level', 'none').attach('file_path', big, 'big.pdf');
+  assert.equal(r.status, 422);
+  assert.match(r.text, /MB भन्दा ठूलो/);
+  assert.doesNotMatch(r.text, /Form expired|फारमको समय सकियो/);
+});

@@ -1,13 +1,13 @@
 <div class="content-head"><div><div class="crumbs"><a href="/admin/members"><%= t('सदस्यहरू', 'Members') %></a></div><h1><%= item ? (item.name_np || item.name) : t('नयाँ सदस्य', 'New member') %></h1></div>
   <% if (item) { %><div class="flex gap-1 wrap">
     <a class="btn btn-ghost btn-sm" href="/admin/members/<%= item.id %>/activities"><%- icon('chart') %><%= t('गतिविधि', 'Activity') %></a>
-    <form method="post" action="/admin/members/<%= item.id %>/card"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('नयाँ परिचयपत्र जारी गर्ने? पुरानो रद्द हुनेछ।', 'Issue a new ID card? The old one will be revoked.') %>"><%- icon('id') %><%= t('परिचयपत्र जारी', 'Issue ID card') %></button></form>
-    <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('सदस्यलाई अभिलेखमा सार्ने? (पछि पुनर्स्थापित गर्न सकिन्छ)', 'Move this member to the archive? (can be restored later)') %>"><%- icon('trash') %></button></form><% } %>
+    <form method="post" action="/admin/members/<%= item.id %>/card"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-outline btn-sm" data-confirm="<%= t('नयाँ परिचयपत्र जारी गर्ने? पुरानो रद्द हुनेछ।', 'Issue a new ID card? The old one will be revoked.') %>"><%- icon('id') %><%= t('परिचयपत्र जारी', 'Issue ID card') %></button></form>
+    <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-ghost btn-sm" data-confirm="<%= t('सदस्यलाई अभिलेखमा सार्ने? (पछि पुनर्स्थापित गर्न सकिन्छ)', 'Move this member to the archive? (can be restored later)') %>"><%- icon('trash') %></button></form><% } %>
   </div><% } %>
 </div>
 <% if (item && item.approval_status === 'pending') { %>
   <div class="alert alert-warn"><%- icon('alert') %><span><%= t('यो सदस्यको पोर्टल खाता स्वीकृत हुन बाँकी छ।', 'This member portal account is waiting for approval.') %></span>
-    <form method="post" action="/admin/members/<%= item.id %>/approve" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="back" value="/admin/members/<%= item.id %>"><button class="btn btn-primary btn-sm"><%- icon('check') %><%= t('स्वीकृत', 'Approve') %></button></form></div>
+    <form method="post" action="/admin/members/<%= item.id %>/approve" style="display:inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="back" value="/admin/members/<%= item.id %>"><button type="submit" class="btn btn-primary btn-sm"><%- icon('check') %><%= t('स्वीकृत', 'Approve') %></button></form></div>
 <% } %>
 <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
 <div>
@@ -29,7 +29,7 @@
     <%- include('../partials/admin-field', { field: { name: 'is_active', label: ['सक्रिय', 'Active'], type: 'bool' }, values: v, errors, options: {} }) %>
     <%- include('../partials/admin-field', { field: { name: 'information_room_enabled', label: ['सूचना कक्ष पहुँच', 'Information room access'], type: 'bool' }, values: v, errors, options: {} }) %>
   </div>
-  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+  <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
 </form>
 
 <% if (item) { %>
@@ -42,7 +42,7 @@
     <div class="field span-2"><label for="n_msg"><%= t('सन्देश', 'Message') %></label><textarea class="textarea" id="n_msg" name="message" rows="3" maxlength="2000"></textarea></div>
     <div class="field span-2"><div class="choices"><label class="choice"><input type="checkbox" checked disabled> <%= t('पोर्टल + push', 'Portal + push') %></label><% if (item.phone) { %><label class="choice"><input type="checkbox" name="sms" value="1"> SMS (<%= item.phone %>)</label><% } %><% if (item.email) { %><label class="choice"><input type="checkbox" name="email" value="1"> <%= t('इमेल', 'Email') %></label><% } %></div></div>
   </div>
-  <div class="form-actions"><button class="btn btn-outline"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button></div>
+  <div class="form-actions"><button type="submit" class="btn btn-outline"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button></div>
 </form>
 
 <div class="card mt-3">
@@ -63,14 +63,14 @@
       <div>KYM</div><div><% if (locals.kycId) { %><a href="/admin/inbox/kyc/<%= kycId %>?from_member=<%= item.id %>"><%= t('केवाइएम हेर्नुहोस्', 'Open KYM') %> #<%= kycId %></a><% } else { %><span class="faint"><%= t('KYM छैन', 'No KYM') %></span><% } %></div>
       <% if (locals.rating && rating.total) { %><div><%= t('कार्यक्रम उपस्थिति', 'Programme attendance') %></div><div><%= num(rating.attended) %> / <%= num(rating.total) %> <span class="faint">(<%= num(Math.round(100 * rating.attended / rating.total)) %>%)</span></div><% } %>
     </div>
-    <% if (Number(item.twofa_enabled) && roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/2fa-reset" class="mt-2"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('यो सदस्यको 2FA reset गर्ने? (फोन परिवर्तन / QR मिलेन)', 'Reset this member’s 2FA? (new phone / QR mismatch)') %>"><%- icon('shield') %><%= t('2FA reset', 'Reset 2FA') %></button></form><% } %>
+    <% if (Number(item.twofa_enabled) && roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/2fa-reset" class="mt-2"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-ghost btn-sm" data-confirm="<%= t('यो सदस्यको 2FA reset गर्ने? (फोन परिवर्तन / QR मिलेन)', 'Reset this member’s 2FA? (new phone / QR mismatch)') %>"><%- icon('shield') %><%= t('2FA reset', 'Reset 2FA') %></button></form><% } %>
     <% if (locals.resets && resets.length) { %><div class="alert alert-info mt-2"><span><%= t('पासवर्ड रिसेट अनुरोध बाँकी छ।', 'A password reset request is waiting.') %> <a href="/admin/password-requests"><%= t('हेर्नुहोस्', 'Open') %></a></span></div><% } %>
     <% if (locals.changes && changes.length) { %><div class="alert alert-info mt-2"><span><%= t('मोबाइल परिवर्तन अनुरोध: ', 'Mobile change request: ') %><strong><%= changes[0].new_value %></strong> <a href="/admin/member-portal?tab=changes"><%= t('हेर्नुहोस्', 'Open') %></a></span></div><% } %>
   </div>
   <div class="card mt-3"><h3><%= t('परिचयपत्र', 'ID cards') %></h3>
   <% if (!locals.cards || !cards.length) { %><p class="muted small"><%= t('परिचयपत्र जारी भएको छैन।', 'No card issued yet.') %></p><% } else { %>
   <ul class="list"><% cards.forEach(c => { %><li class="list-item" style="flex-direction:column;gap:2px;align-items:flex-start"><div><strong style="font-weight:500"><%= c.card_no %></strong> <span class="badge <%= c.locked_at ? 'badge-bad' : c.status === 'active' ? 'badge-ok' : '' %>"><%= c.locked_at ? t('LOCK', 'Locked') : c.status %></span><% if (Number(c.unlock_requested)) { %> <span class="badge badge-warn"><%= t('Unlock अनुरोध', 'Unlock requested') %></span><% } %></div><div class="small muted"><%= t('कोड', 'Code') %>: <code><%= c.verification_code %></code> · CVV <code><%= c.cvv %></code></div><div class="small faint"><%= bsDate(c.issued_date) %> → <%= c.expiry_date ? bsDate(c.expiry_date) : '' %> · <%= t('प्रमाणीकरण', 'verified') %> <%= num(c.verify_count || 0) %>× · <%= t('गलत', 'failed') %> <%= num(c.failed_verify_count || 0) %>×</div>
-    <% if (c.locked_at && c.status === 'active' && roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/card/unlock" class="mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-soft btn-sm"><%= t('Unlock गर्नुहोस्', 'Unlock card') %></button></form><% } %></li><% }) %></ul><% } %>
+    <% if (c.locked_at && c.status === 'active' && roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= item.id %>/card/unlock" class="mt-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-soft btn-sm"><%= t('Unlock गर्नुहोस्', 'Unlock card') %></button></form><% } %></li><% }) %></ul><% } %>
   </div>
   <% if (locals.accounts && accounts.length) { %><div class="card mt-3"><h3><%= t('खाता (CBS)', 'Accounts (CBS)') %></h3><ul class="list small"><% accounts.forEach(a => { %><li class="list-item" style="padding:6px 0"><code><%= a.account_no %></code><span class="grow"><%= a.product_name || a.kind %></span><span>रु. <%= money(a.balance) %></span></li><% }) %></ul></div><% } %>
   <% if (locals.partnerServices && partnerServices.length) { %><div class="card mt-3"><h3><%= t('साझेदार सेवा', 'Partner services') %></h3><ul class="list small"><% partnerServices.forEach(p => { %><li class="list-item" style="flex-direction:column;align-items:flex-start;gap:2px;padding:6px 0"><div><strong style="font-weight:500"><%= p.partner_name %></strong><% if (p.service_name) { %> — <%= p.service_name %><% } %> <span class="badge <%= Number(p.service_taken) ? 'badge-ok' : '' %>"><%= Number(p.service_taken) ? t('सेवा लिइयो', 'Taken') : t('दर्ता', 'Logged') %></span></div><div class="faint"><%= bsDate(p.created_at) %><%= p.service_note ? ' · ' + p.service_note : '' %></div></li><% }) %></ul></div><% } %>

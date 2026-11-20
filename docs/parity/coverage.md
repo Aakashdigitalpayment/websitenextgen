@@ -564,16 +564,16 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | run-all-smokes.sh | `npm test` | COVERED | |
 | run-migration-safe.php | `scripts/migrate.js` | COVERED | |
 | reports/* (8 files: *.pruned.txt, *.json) | — | NOT-NEEDED | build artefacts. |
-| smoke-admin-buttons.php | — | MISSING | no test that every admin `<button>` has `type=`. P3 lint test over `views/admin/**`. |
+| smoke-admin-buttons.php | test/coverage-gaps.test.js "every admin <button> declares its type" | COVERED | 120 admin buttons given an explicit `type` |
 | smoke-admin-permissions.php | admin-tools.test.js "permission matrix…", "custom role limits…" | COVERED | |
 | smoke-cms-html.php | app.test.js "sanitizer strips…", security.test.js "rich text sanitizer…" | COVERED | |
 | smoke-contact-guard.php | admin-tools.test.js "spam heuristics…", "contact form rejects link spam", security2 antispam | COVERED | |
-| smoke-csp.php | — | MISSING | no test asserts the CSP header (no `unsafe-inline`, no CDN) nor that views carry no inline `<script>`/`on*=` (only one page checked, public-parity.test.js:126). P2 because CSP is a CLAUDE.md §6 rule. |
+| smoke-csp.php | test/coverage-gaps.test.js "B-1: strict CSP header…" | COVERED | header asserted on public/member/admin pages; views scanned for inline `<script>`, `on*=`, external assets. Was: no test asserts the CSP header (no `unsafe-inline`, no CDN) nor that views carry no inline `<script>`/`on*=` (only one page checked, public-parity.test.js:126). P2 because CSP is a CLAUDE.md §6 rule. |
 | smoke-css-order.php | — | NOT-NEEDED | |
 | smoke-deploy.php | — | NOT-NEEDED | cPanel. |
 | smoke-dynamic-pages-nav.php | admin-cms-parity.test.js (menu_position/show_in_menu) | COVERED | |
-| smoke-form-a11y.php | forms-member-parity.test.js (some label checks) | PARTIAL | no global "every input with id has a label for=" lint. P3. |
-| smoke-img-alt.php | — | MISSING | no `<img>` alt lint over views. P3. |
+| smoke-form-a11y.php | forms-member-parity.test.js + test/coverage-gaps.test.js label `for=` lint | COVERED | no global "every input with id has a label for=" lint. P3. |
+| smoke-img-alt.php | test/coverage-gaps.test.js (view lint) | COVERED | every `<img>` has `alt` |
 | smoke-information-room.php | admin-tools / admin-ops-parity / security tests | COVERED | |
 | smoke-member-import-optional.php | admin-ops-parity.test.js (father_name / citizenship_no / membership_date) | COVERED | |
 | smoke-member-marketplace.php | parity.test.js "marketplace…", forms-member-parity | COVERED | |
@@ -583,15 +583,15 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | smoke-pii-crypto.php | applications / admin-ops-parity pii tests | COVERED | |
 | smoke-pretty-urls.php | members.test.js "legacy PHP URLs redirect (301)…" | COVERED | |
 | smoke-program-attendance-db.php | parity.test.js "programmes: defaults…, desks, pre-reg…" | COVERED | |
-| smoke-program-concurrency.php | DB unique index `member_program_attendance_uniq_scope_member_status` + sequential duplicate test (parity.test.js:195) | PARTIAL | no concurrent (Promise.all) double check-in test. P3. |
+| smoke-program-concurrency.php | DB unique index `member_program_attendance_uniq_scope_member_status` + sequential duplicate test (parity.test.js:195) + concurrent Promise.all test (test/coverage-gaps.test.js) | COVERED | no concurrent (Promise.all) double check-in test. P3. |
 | smoke-program-ui.php | — | NOT-NEEDED | PHP UI static check. |
 | smoke-public-cache.php | public-parity / parity Cache-Control tests | COVERED | |
 | smoke-pull-to-refresh.php | `public/js/site.js` (feature) — no test | PARTIAL | P3 (public slice). |
 | smoke-quarantine-stubs.php | legacy redirect tests | COVERED | |
-| smoke-report-upload.php | app.test.js "POST without CSRF (multipart)" | PARTIAL | the over-size upload case (must report "too large", not a false CSRF error) is not tested. P3. |
+| smoke-report-upload.php | app.test.js "POST without CSRF (multipart)" + over-size upload test (test/coverage-gaps.test.js) | COVERED | the over-size upload case (must report "too large", not a false CSRF error) is not tested. P3. |
 | smoke-schema-ensure.php | migration.test.js | COVERED | |
 | smoke-scroll-a11y.php | — | NOT-NEEDED | PHP `scroll-accessibility.js` voice widget has no Node counterpart; confirm with public slice (matrix A) that dropping it is intended. |
-| smoke-security.php | security.test.js, security2.test.js | PARTIAL | headers (X-Frame-Options/nosniff/Referrer-Policy) and `rel=noopener` tabnabbing are not asserted. P3. |
+| smoke-security.php | security.test.js, security2.test.js, test/coverage-gaps.test.js (headers, `rel=noopener`) | COVERED | headers (X-Frame-Options/nosniff/Referrer-Policy) and `rel=noopener` tabnabbing are not asserted. P3. |
 | smoke-seo.php | public-parity.test.js (sitemap/robots), admin-tools "public SEO head…" | COVERED | |
 | smoke-upload-gate.php | api.test.js magic-byte, forms-member-parity saveDataUrl PHP-payload test | COVERED | |
 
@@ -639,7 +639,7 @@ Every other install.sql table is edited through `res.*`, `inbox:*` or a dedicate
 - none found in this slice. All P1 items of reports 3 and 4 (2FA policy and forced enrolment, settings registry, legacy key mapping, about sections, audit filters + legacy rows, institutional profile, delete guards, auction exclusive winner) are implemented and were verified in code.
 
 ### P2
-1. **CSP regression test** (smoke-csp.php): `test/security*.test.js` — GET a public page, an admin page and a member page; assert `content-security-policy` has no `'unsafe-inline'` in `script-src` and no external host; walk `views/**/*.ejs` and fail on `<script>` without `src` or any ` on[a-z]+=` attribute.
+1. **COVERED** (`test/coverage-gaps.test.js`) — **CSP regression test** (smoke-csp.php): `test/security*.test.js` — GET a public page, an admin page and a member page; assert `content-security-policy` has no `'unsafe-inline'` in `script-src` and no external host; walk `views/**/*.ejs` and fail on `<script>` without `src` or any ` on[a-z]+=` attribute.
 2. **Member import commit for large files** (member-import.php:437-535): commit runs inside one HTTP request for up to 20,000 rows. Spec: `POST /admin/members/import/:id/commit` sets `member_import_jobs.status='running'` and processes rows in batches of 200 via `notify.later`-style background loop (or `?step=1` ticks from `public/js/admin-tools.js`), updating `processed_rows`; `member-import-job.ejs` polls `GET /admin/members/import/:id/status.json` for a progress bar; rows already `imported` are skipped so a rerun resumes. Store failures in `member_import_jobs.error_message`.
 3. **Settings keys read by the site but not editable** (settings.php:47-66, 293-300): add to `src/lib/setting-defs.js` — `hero_title`, `hero_subtitle` (group general, text, max 200), `pwa_app_name` (general, text, max 60), `site_version` (general, text, max 20, shown in admin footer). Decide `himal_bg`/`himal_bg_opacity`: either port as theme header background (image + number 0-100 in `/admin/theme`, used by the public header) or record as deliberately dropped in docs/parity.
 
@@ -656,7 +656,7 @@ Every other install.sql table is edited through `res.*`, `inbox:*` or a dedicate
 13. **help_topics import** into chatbot_faqs (§6.2).
 14. **COVERED** (`attendance.voidAttendance` writes `payload_json` + `ip_address`; member QR check-in stores `device_fingerprint` = sha256(UA) prefix) — **Attendance audit details**: write `program_audit_logs.payload_json` + `ip_address` on void; `member_program_attendance.device_fingerprint` on member QR check-ins.
 15. **pages.is_new / new_until**: show a "New" chip on dynamic-page menu items while `is_new=1 AND (new_until IS NULL OR new_until >= CURRENT_DATE)` and expose both fields on `res.pages`.
-16. **Tests to add** (smoke parity): admin `<button>` type lint, `<img>` alt lint, label `for=` lint, security headers + `rel=noopener`, concurrent double check-in (Promise.all → one VALID row), over-size upload error message.
+16. **COVERED** (`test/coverage-gaps.test.js`: admin button type, img alt, label for=, headers + noopener, concurrent check-in, over-size upload) — **Tests to add** (smoke parity): admin `<button>` type lint, `<img>` alt lint, label `for=` lint, security headers + `rel=noopener`, concurrent double check-in (Promise.all → one VALID row), over-size upload error message.
 17. **VAPID key import**: copy the PHP site's VAPID key pair (push-vapid.local.php / settings) into `push_vapid_public/private` during site migration so existing member push subscriptions keep working.
 18. `db/legacy/install.sql` is an older copy of the PHP file; refresh it or point `schema:convert` at the PHP repo copy.
 19. Create `docs/parity/coverage.md` (required by CLAUDE.md §1, currently absent) from this matrix + matrix A.
