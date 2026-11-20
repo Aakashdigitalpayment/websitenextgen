@@ -12,7 +12,7 @@ async function build() {
 
   const [committees, pages, teamMenus, electionNav, honorOpen, extra] = await Promise.all([
     db.many('SELECT id, name, name_np FROM committee_types WHERE is_active = 1 AND show_in_navbar = 1 ORDER BY display_order, id'),
-    db.many(`SELECT slug, title, title_np, title_en, menu_position FROM pages WHERE is_active = 1 AND show_in_menu = 1 ORDER BY menu_order, id`),
+    db.many(`SELECT slug, title, title_np, title_en, menu_position, (COALESCE(is_new, 0) = 1 AND (new_until IS NULL OR new_until >= CURRENT_DATE)) AS is_new FROM pages WHERE is_active = 1 AND show_in_menu = 1 ORDER BY menu_order, id`),
     require('./team').navCategories().catch(() => []),
     // legacy header.php: the Elections item only while a published cycle is marked "show in navbar"
     db.value('SELECT 1 FROM election_cycles WHERE is_published = 1 AND show_in_navbar = 1 LIMIT 1').catch(() => null),
@@ -21,7 +21,7 @@ async function build() {
   ]);
   const vt = (k, np, en) => [extra.s[k + '_title_np'] || np, extra.s[k + '_title_en'] || en];
   const pageLinks = pos => pages.filter(p => (p.menu_position || 'more') === pos)
-    .map(p => ({ href: '/page/' + encodeURIComponent(p.slug), label: [p.title_np || p.title, p.title_en || p.title] }));
+    .map(p => ({ href: '/page/' + encodeURIComponent(p.slug), label: [p.title_np || p.title, p.title_en || p.title], isNew: !!p.is_new })); // "New" chip (header.php)
 
   const data = [
     { label: ['गृहपृष्ठ', 'Home'], href: '/' },

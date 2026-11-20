@@ -32,7 +32,7 @@
   <select class="select" name="status" data-autosubmit aria-label="<%= t('स्वीकृति', 'Approval') %>"><option value=""><%= t('सबै स्थिति', 'All statuses') %></option><% ['pending','approved','rejected','renewal_pending'].forEach(s => { %><option value="<%= s %>" <%= st === s ? 'selected' : '' %>><%= s === 'renewal_pending' ? t('नवीकरण बाँकी', 'Renewal pending') : statusLabel(s) %></option><% }) %></select>
   <select class="select" name="ms" data-autosubmit aria-label="<%= t('मासिक बचत', 'Monthly saving') %>"><option value=""><%= t('मासिक बचत: सबै', 'Monthly saving: all') %></option><option value="1" <%= ms === '1' ? 'selected' : '' %>><%= t('नियमित', 'Regular') %></option><option value="0" <%= ms === '0' ? 'selected' : '' %>><%= t('नियमित नभएको', 'Not regular') %></option><option value="unset" <%= ms === 'unset' ? 'selected' : '' %>><%= t('नतोकिएको', 'Not set') %></option></select>
   <select class="select" name="kyc" data-autosubmit aria-label="KYM"><option value=""><%= t('KYM: सबै', 'KYM: all') %></option><% [['linked', 'लिंक (पासवर्डसहित)', 'Linked (with password)'], ['unlinked', 'लिंक नभएको', 'Not linked'], ['no_password', 'पासवर्ड नभएको', 'No password']].forEach(o => { %><option value="<%= o[0] %>" <%= kyc === o[0] ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select>
-  <button class="btn btn-outline"><%- icon('search') %></button>
+  <button type="submit" class="btn btn-outline"><%- icon('search') %></button>
 </form>
 <% if (!rows.length) { %><div class="empty"><%= t('सदस्य भेटिएन।', 'No members found.') %></div><% } else { %>
 <div class="table-wrap"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('फोन', 'Phone') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('मासिक बचत', 'Monthly saving') %></th><th><%= view === 'arch' ? t('हटाइएको', 'Removed') : t('अन्तिम लगइन', 'Last login') %></th><% if (view === 'arch') { %><th></th><% } %></tr></thead><tbody>
@@ -42,7 +42,7 @@
     <td><span class="badge <%= m.approval_status === 'approved' ? 'badge-ok' : m.approval_status === 'rejected' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(m.approval_status || 'pending') %></span><% if (!m.is_active) { %> <span class="badge"><%= t('निष्क्रिय', 'Inactive') %></span><% } %></td>
     <td><span class="badge <%= msv === 1 ? 'badge-ok' : msv === 0 ? 'badge-warn' : '' %>"><%= msv === 1 ? t('नियमित', 'Regular') : msv === 0 ? t('नियमित नभएको', 'Not regular') : t('नतोकिएको', 'Not set') %></span></td>
     <td class="small faint"><%= view === 'arch' ? bsDate(m.deleted_at) : m.last_login ? bsDate(m.last_login) : '—' %></td>
-    <% if (view === 'arch') { %><td class="text-right"><% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= m.id %>/restore"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-soft btn-sm" data-confirm="<%= t('सदस्य पुनर्स्थापित गर्ने?', 'Restore this member?') %>"><%= t('पुनर्स्थापित', 'Restore') %></button></form><% } %></td><% } %>
+    <% if (view === 'arch') { %><td class="text-right"><% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= m.id %>/restore"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-soft btn-sm" data-confirm="<%= t('सदस्य पुनर्स्थापित गर्ने?', 'Restore this member?') %>"><%= t('पुनर्स्थापित', 'Restore') %></button></form><% } %></td><% } %>
   </tr><% }) %>
 </tbody></table></div>
 <%- include('../partials/pagination', { pg }) %><% } %>
@@ -62,7 +62,7 @@
       <% if (roleLevel(admin.role) >= 3) { %><label class="choice"><input type="checkbox" name="sms" value="1"> SMS</label><label class="choice"><input type="checkbox" name="email" value="1"> <%= t('इमेल', 'Email') %></label><% } %>
     </div>
     <p class="small faint mt-1"><%= t('पोर्टलमा सधैं देखिन्छ। SMS/इमेल दैनिक सीमाभित्र मात्र जान्छ।', 'Always shown in the member portal. SMS / email stop at the daily limits.') %></p>
-    <button class="btn btn-primary mt-2" data-confirm="<%= t('छानिएका सबै सदस्यलाई पठाउने?', 'Send to every member in this group?') %>"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button>
+    <button type="submit" class="btn btn-primary mt-2" data-confirm="<%= t('छानिएका सबै सदस्यलाई पठाउने?', 'Send to every member in this group?') %>"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button>
   </form>
 </details>
 <% } %>

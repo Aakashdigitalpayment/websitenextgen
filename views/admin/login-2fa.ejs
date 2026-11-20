@@ -7,7 +7,7 @@
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <div class="stack mt-2">
     <label class="choice"><input type="checkbox" name="saved" value="1" required> <%= t('मैले कोडहरू सुरक्षित राखेँ', 'I have saved these codes') %></label>
-    <button class="btn btn-primary btn-block btn-lg"><%= t('जारी राख्नुहोस्', 'Continue') %></button>
+    <button type="submit" class="btn btn-primary btn-block btn-lg"><%= t('जारी राख्नुहोस्', 'Continue') %></button>
   </div>
 </form>
 <% } else { %>
@@ -25,7 +25,7 @@
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <div class="stack">
     <div class="field"><label for="c"><%= t('कोड', 'Code') %></label><input class="input otp-input" id="c" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus></div>
-    <button class="btn btn-primary btn-block btn-lg"><%= m === 'setup' ? t('सक्रिय गरी लगइन', 'Turn on and sign in') : t('प्रमाणित गर्नुहोस्', 'Verify') %></button>
+    <button type="submit" class="btn btn-primary btn-block btn-lg"><%= m === 'setup' ? t('सक्रिय गरी लगइन', 'Turn on and sign in') : t('प्रमाणित गर्नुहोस्', 'Verify') %></button>
   </div>
 </form>
 <% } %>

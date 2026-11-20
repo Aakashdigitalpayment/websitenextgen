@@ -14,7 +14,7 @@
     <% }) %>
   </div>
   <label class="check mt-2"><input type="checkbox" name="content" value="1"> <%= t('खाली खण्डहरूमा नमुना सामग्री (सेवा, ब्याजदर, FAQ, समिति, स्लाइड) पनि थप्ने', 'Also fill empty sections with starter content (services, rates, FAQ, committees, slides)') %></label>
-  <div class="form-actions"><button class="btn btn-outline"><%- icon('check') %><%= t('डिजाइन लागू गर्नुहोस्', 'Apply design') %></button></div>
+  <div class="form-actions"><button type="submit" class="btn btn-outline"><%- icon('check') %><%= t('डिजाइन लागू गर्नुहोस्', 'Apply design') %></button></div>
 </form>
 
 <form class="form-card" method="post" action="/admin/theme">
@@ -78,5 +78,5 @@
   <label class="check mt-1"><input type="checkbox" name="reset_all" value="1"> <%= t('सबैको सुरक्षित छनोट हटाएर नयाँ पूर्वनिर्धारित लागू गर्ने', "Clear everyone's saved choice and apply the new default") %></label>
   <div class="field-hint"><%= t('अहिले', 'Currently') %> <%= num(counts.members) %> <%= t('सदस्य र', 'members and') %> <%= num(counts.admins) %> <%= t('कर्मचारीले आफ्नै रूप राखेका छन्।', 'staff have their own theme saved.') %></div>
 
-  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+  <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
 </form>

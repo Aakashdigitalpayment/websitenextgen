@@ -6,6 +6,10 @@
 .cert h1{font-size:24pt;margin:2mm 0;color:var(--brand)} .cert .org{font-size:16pt;font-weight:600} .cert .name{font-size:20pt;font-weight:600;border-bottom:1px solid #ccc;display:inline-block;padding:0 12mm 1mm;margin:4mm 0}
 .cert .meta{display:flex;justify-content:space-between;align-items:flex-end;margin-top:14mm;text-align:left;font-size:10pt}
 .cert .sig{text-align:center;min-width:60mm;border-top:1px solid #999;padding-top:2mm}
+.cert .member-row{display:flex;gap:8mm;align-items:flex-start;justify-content:center;margin:5mm auto 0;max-width:220mm;text-align:left}
+.cert .photo{width:28mm;height:34mm;border:1px solid #ccc;object-fit:cover;flex:none}
+.cert .details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5mm 8mm;font-size:10.5pt;flex:1}
+.cert .details dt{color:#666;font-size:8.5pt} .cert .details dd{margin:0;font-weight:500}
 @page{size:A4 landscape;margin:0} @media print{body{background:#fff}.no-print{display:none}.cert{margin:0;border:0}}</style></head>
 <body>
 <div class="cert"><div class="cert-inner">
@@ -20,6 +24,13 @@
     <%= t('यस संस्थाको सदस्यता नं. ', 'is a registered member of this cooperative, membership no. ') %><b><%= member.sadasyata_number || member.member_card_no || '—' %></b>
     <%= t(' मा दर्ता भई ' + (since ? nd.formatBs(since, 'np') : '—') + ' देखि सदस्य हुनुहुन्छ।', ', since ' + (since ? nd.formatBs(since, 'en') : '—') + '.') %>
   </p>
+  <% const rows = [[t('बुबाको नाम', "Father's name"), details.fatherName], [t('जन्म मिति (वि.सं.)', 'Date of birth (BS)'), details.dobBs ? nd.formatBs(details.dobBs, lang) : ''], [t('स्थायी ठेगाना', 'Permanent address'), details.address], [t('नागरिकता नं.', 'Citizenship no.'), details.citizenship], [t('खाताको प्रकार', 'Account type'), details.accountType], [t('मोबाइल', 'Mobile'), details.phone], [t('इमेल', 'Email'), details.email]].filter(r => r[1]); %>
+  <% if (rows.length || details.hasPhoto) { %>
+  <div class="member-row">
+    <% if (details.hasPhoto) { %><img class="photo" src="/member/kyc-print/file/photo" alt="<%= t('सदस्यको फोटो', 'Member photo') %>"><% } %>
+    <dl class="details"><% for (const [label, value] of rows) { %><div><dt><%= label %></dt><dd><%= value %></dd></div><% } %></dl>
+  </div>
+  <% } %>
   <div class="meta">
     <div><img src="<%= qr %>" alt="QR" style="width:26mm;height:26mm"><div class="small muted"><%= t('प्रमाणीकरण', 'Verify') %>: <%= verifyCode %></div></div>
     <div class="small muted text-center"><%= t('जारी मिति', 'Issued') %><br><b style="color:#1c1f23"><%= nd.formatBs(nd.todayBs(), lang) %></b></div>

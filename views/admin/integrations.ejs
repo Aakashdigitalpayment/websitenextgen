@@ -21,16 +21,16 @@
           <div class="flex gap-1 wrap">
             <a class="btn btn-ghost btn-sm" href="/admin/integrations/<%= c.id %>/edit"><%- icon('edit') %></a>
             <% [['rotate', t('नयाँ key', 'New key'), t('पुरानो key तुरुन्त बन्द हुन्छ। जारी राख्ने?', 'The old key stops working immediately. Continue?')], [c.is_active ? 'disable' : 'enable', c.is_active ? t('बन्द', 'Disable') : t('खोल्नुहोस्', 'Enable'), ''], ['delete', t('हटाउने', 'Delete'), t('पक्का?', 'Sure?')]].forEach(([a, l, conf]) => { %>
-              <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button class="btn btn-ghost btn-sm" <% if (conf) { %>data-confirm="<%= conf %>"<% } %>><%= l %></button></form>
+              <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="<%= a %>"><button type="submit" class="btn btn-ghost btn-sm" <% if (conf) { %>data-confirm="<%= conf %>"<% } %>><%= l %></button></form>
             <% }) %>
           </div>
         </div>
         <div class="flex gap-1 wrap mt-1"><% c.scopes.forEach(s => { %><span class="badge"><%= s %></span><% }) %></div>
         <div class="small muted mt-1"><%= t('IP', 'IPs') %>: <%= c.allowed_ips || t('कुनै पनि', 'any') %><% if (c.webhook_url) { %> · webhook: <code><%= c.webhook_url %></code> (<%= c.webhook_events.join(', ') || '—' %>)<% } %></div>
         <% if (c.webhook_url) { %><div class="flex gap-1 mt-1">
-          <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="test_webhook"><button class="btn btn-soft btn-sm"><%= t('webhook परीक्षण', 'Test webhook') %></button></form>
-          <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="rotate_webhook"><button class="btn btn-ghost btn-sm" data-confirm="<%= t('नयाँ signing secret?', 'New signing secret?') %>"><%= t('नयाँ secret', 'New secret') %></button></form>
-          <% if (c.failed_hooks > 0) { %><form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="retry_failed"><button class="btn btn-ghost btn-sm"><%= t('असफल पुनः पठाउने', 'Retry failed') %> (<%= num(c.failed_hooks) %>)</button></form><% } %>
+          <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="test_webhook"><button type="submit" class="btn btn-soft btn-sm"><%= t('webhook परीक्षण', 'Test webhook') %></button></form>
+          <form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="rotate_webhook"><button type="submit" class="btn btn-ghost btn-sm" data-confirm="<%= t('नयाँ signing secret?', 'New signing secret?') %>"><%= t('नयाँ secret', 'New secret') %></button></form>
+          <% if (c.failed_hooks > 0) { %><form method="post" action="/admin/integrations/<%= c.id %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="action" value="retry_failed"><button type="submit" class="btn btn-ghost btn-sm"><%= t('असफल पुनः पठाउने', 'Retry failed') %> (<%= num(c.failed_hooks) %>)</button></form><% } %>
         </div><% } %>
       </div>
     <% }) %>
@@ -48,7 +48,7 @@
       <div class="field"><label>Webhook URL (<%= t('ऐच्छिक', 'optional') %>)</label><input class="input" name="webhook_url" value="<%= e.webhook_url || '' %>" placeholder="https://cbs.example.com.np/hooks/portal" <%= vaultEnabled ? '' : 'disabled' %>></div>
       <div class="field"><label><%= t('पठाउने घटना', 'Events to send') %></label>
         <div class="choices"><% Object.entries(EVENTS).forEach(([ev, l]) => { %><label class="choice"><input type="checkbox" name="events" value="<%= ev %>" <%= e.webhook_events.includes(ev) ? 'checked' : '' %>> <%= t(...l) %></label><% }) %></div></div>
-      <button class="btn btn-primary"><%= edit ? t('सुरक्षित गर्नुहोस्', 'Save') : t('API key बनाउनुहोस्', 'Create API key') %></button>
+      <button type="submit" class="btn btn-primary"><%= edit ? t('सुरक्षित गर्नुहोस्', 'Save') : t('API key बनाउनुहोस्', 'Create API key') %></button>
       <% if (edit) { %><a class="btn btn-ghost" href="/admin/integrations"><%= t('रद्द', 'Cancel') %></a><% } %>
       <a class="small" href="https://github.com/Aakashdigitalpayment/websitenextgen/blob/main/docs/API.md" target="_blank" rel="noopener"><%= t('API कागजात (docs/API.md)', 'API documentation (docs/API.md)') %></a>
     </div>

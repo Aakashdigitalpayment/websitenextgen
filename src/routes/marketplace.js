@@ -40,6 +40,17 @@ function readListing(body) {
   if (price && !Number.isFinite(data.price)) errors.price = 'number';
   const exp = nd.toLatinDigits(s('experience_years'));
   data.experience_years = exp ? Math.min(80, Math.max(0, parseInt(exp, 10) || 0)) : null;
+  // availability (member/marketplace.php:121-125): from / until dates (B.S. or A.D.), until time, daily hours
+  const normDate = require('../lib/forms').normalizeAdDate;
+  const hhmm = v => (/^([01]\d|2[0-3]):[0-5]\d$/.test(nd.toLatinDigits(String(v || '').trim())) ? nd.toLatinDigits(String(v).trim()) : null);
+  data.available_from = normDate(body.available_from);
+  const until = normDate(body.available_until);
+  data.available_until = until ? `${until} ${hhmm(body.available_until_time) || '23:59'}:00` : null;
+  data.available_time_from = hhmm(body.available_time_from);
+  data.available_time_to = hhmm(body.available_time_to);
+  if (body.available_from && !data.available_from) errors.available_from = 'date';
+  if (body.available_until && !until) errors.available_until = 'date';
+  if (data.available_from && until && until < data.available_from) errors.available_until = 'date';
   if (!data.title) errors.title = 'required';
   if (!data.description) errors.description = 'required';
   if (data.contact_phone && !util.isPhone(data.contact_phone)) errors.contact_phone = 'phone';
@@ -64,7 +75,11 @@ member.get('/new', (req, res) => res.render('member/marketplace-form', { title: 
 member.get('/:id/edit', ah(async (req, res, next) => {
   const item = await db.one('SELECT * FROM member_marketplace_listings WHERE id = $1 AND member_id = $2', [util.int(req.params.id), req.member.id]);
   if (!item) return next();
-  res.render('member/marketplace-form', { title: res.locals.t('सूची सम्पादन', 'Edit listing'), item, values: item, errors: {}, CATEGORIES });
+  const day = v => (v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60_000).toISOString().slice(0, 10) : '');
+  const values = { ...item, available_from: day(item.available_from), available_until: day(item.available_until),
+    available_until_time: item.available_until ? new Date(item.available_until).toTimeString().slice(0, 5) : '',
+    available_time_from: String(item.available_time_from || '').slice(0, 5), available_time_to: String(item.available_time_to || '').slice(0, 5) };
+  res.render('member/marketplace-form', { title: res.locals.t('सूची सम्पादन', 'Edit listing'), item, values, errors: {}, CATEGORIES });
 }));
 
 const imageUpload = (req, res, next) => {

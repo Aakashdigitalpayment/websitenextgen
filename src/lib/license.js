@@ -34,10 +34,26 @@ function guard(req, res, next) {
   return res.status(503).render('public/license-expired', { layout: false, st, adminBlocked: false });
 }
 
-/** Where to pay (shown to the tenant; same vendor for the whole platform): LICENSE_RENEWAL_AMOUNT, LICENSE_ESEWA_ID, LICENSE_KHALTI_ID, LICENSE_VENDOR_EMAIL. */
-function payInfo() {
+/**
+ * Where to pay (shown to the tenant): platform-wide env LICENSE_RENEWAL_AMOUNT, LICENSE_ESEWA_ID, LICENSE_KHALTI_ID,
+ * LICENSE_BANK_DETAILS, LICENSE_VENDOR_EMAIL; amount / eSewa / Khalti may be overridden per tenant by the platform
+ * operator (site-license.php save_renewal_settings) — tenant settings license_renewal_amount / license_esewa_id / license_khalti_id.
+ * @param {object} s  the tenant's settings (res.locals.settings)
+ */
+const PAY_KEYS = { amount: 'license_renewal_amount', esewa: 'license_esewa_id', khalti: 'license_khalti_id' };
+function payInfo(s = {}) {
   const e = k => String(process.env[k] || '').trim().slice(0, 120);
-  return { amount: e('LICENSE_RENEWAL_AMOUNT'), esewa: e('LICENSE_ESEWA_ID'), khalti: e('LICENSE_KHALTI_ID'), bank: e('LICENSE_BANK_DETAILS'), vendorEmail: e('LICENSE_VENDOR_EMAIL') };
+  const o = k => String((s && s[PAY_KEYS[k]]) || '').trim().slice(0, 120);
+  return { amount: o('amount') || e('LICENSE_RENEWAL_AMOUNT'), esewa: o('esewa') || e('LICENSE_ESEWA_ID'), khalti: o('khalti') || e('LICENSE_KHALTI_ID'), bank: e('LICENSE_BANK_DETAILS'), vendorEmail: e('LICENSE_VENDOR_EMAIL') };
+}
+
+/** Licence date typed by the operator: A.D. YYYY-MM-DD, or B.S. (year 2050 or later) converted to A.D. */
+function parseUntil(v) {
+  const s = nd.toLatinDigits(String(v || '').trim());
+  if (!/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) return null;
+  if (Number(s.slice(0, 4)) >= 2050) return nd.bsToAd(s);
+  const d = new Date(s + 'T00:00:00Z');
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
 /** Block non-super-admin logins while expired (called from the login route). */
@@ -45,4 +61,4 @@ function loginBlocked(tenant, user) {
   return status(tenant).expired && !isSuper(user.role);
 }
 
-module.exports = { status, guard, loginBlocked, todayKathmandu, payInfo };
+module.exports = { status, guard, loginBlocked, todayKathmandu, payInfo, parseUntil, PAY_KEYS };

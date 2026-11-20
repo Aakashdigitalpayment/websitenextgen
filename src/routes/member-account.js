@@ -180,7 +180,6 @@ router.post('/forgot/resend', otpSendLimiter, ah(async (req, res) => {
 router.post('/forgot/cancel', (req, res) => { delete req.session.pwReset; res.redirect('/member/forgot'); });
 
 // ---------------------------------------------------------------- second factor (authenticator app)
-const usedSteps = new Map(); // "<schema>:<memberId>" -> last accepted step (replay protection)
 function pending2fa(req) {
   const p = req.session.memberPending2fa;
   return p && p.tenantId === req.tenant.id && Date.now() - p.at < 10 * 60_000 ? p : null;
@@ -223,9 +222,8 @@ router.post('/login/2fa', ah(async (req, res) => {
     return render2fa(req, res, req.session.memberPending2fa, null, 200, codes);
   }
   let ok = false;
-  const key = db.currentSchema() + ':' + m.id;
   const step = totp.verify(m.twofa_secret, code);
-  if (step !== null && step > (usedSteps.get(key) || 0)) { usedSteps.set(key, step); ok = true; }
+  if (step !== null && await totp.claimStep('members', m.id, step)) ok = true; // replay guard in the DB (all processes)
   if (!ok && code.replace(/[^A-Za-z0-9]/g, '').length >= 8) {
     const remaining = await totp.consumeBackupCode(code, m.twofa_backup_codes);
     if (remaining) { await db.query('UPDATE members SET twofa_backup_codes = $1 WHERE id = $2', [JSON.stringify(remaining), m.id]); ok = true; }

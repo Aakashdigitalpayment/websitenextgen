@@ -151,13 +151,21 @@ const CARD_ROW_LIMIT = 400;
  * membership_date is set, father_name / citizenship_no soft-fill the member's KYM (a stub is created when needed),
  * and small jobs (≤ CARD_ROW_LIMIT rows) get a KYM stub and a digital ID card for members without an active card.
  */
-async function commit(jobId, adminId, { tenant = null } = {}) {
-  const job = await db.one("SELECT * FROM member_import_jobs WHERE id = $1 AND status = 'staged'", [jobId]);
+const CHUNK = 200;
+/**
+ * Commit the next batch (default 200) of pending rows of a staged / running job (member-import.php chunked commit).
+ * The job is 'running' until no pending row is left, then 'done'; counts grow per batch, so a crash or a closed
+ * browser tab resumes where it stopped (rows already saved are no longer 'pending').
+ * @returns {Promise<{ok, skip, fail, cards, remaining, done}>}
+ */
+async function commitChunk(jobId, adminId, { tenant = null, limit = CHUNK } = {}) {
+  const job = await db.one("SELECT * FROM member_import_jobs WHERE id = $1 AND status IN ('staged', 'running')", [jobId]);
   if (!job) throw new Error('Job not found or already imported');
+  if (job.status === 'staged') await db.query("UPDATE member_import_jobs SET status = 'running', error_message = NULL, updated_at = now() WHERE id = $1", [jobId]);
   let ok = 0, skip = 0, fail = 0, cards = 0;
   const small = Number(job.total_rows) <= CARD_ROW_LIMIT;
   const kym = require('./kym');
-  const rows = await db.many("SELECT * FROM member_import_rows WHERE job_id = $1 AND status = 'pending' ORDER BY row_num", [jobId]);
+  const rows = await db.many("SELECT * FROM member_import_rows WHERE job_id = $1 AND status = 'pending' ORDER BY row_num LIMIT $2", [jobId, Math.max(1, Number(limit) || CHUNK)]);
   for (const r of rows) {
     try {
       await db.transaction(async () => {
@@ -202,9 +210,42 @@ async function commit(jobId, adminId, { tenant = null } = {}) {
       await db.query("UPDATE member_import_rows SET status = 'failed', message = $1 WHERE id = $2", [e.code === '23505' ? (/sadasyata/.test(e.constraint || '') ? 'membership number already used by another member' : 'email already used by another member') : e.message.slice(0, 250), r.id]);
     }
   }
-  await db.query("UPDATE member_import_jobs SET status = 'done', ok_count = $1, skip_count = $2, fail_count = fail_count + $3, cards_count = cards_count + $4, updated_at = now() WHERE id = $5", [ok, skip, fail, cards, jobId]);
-  return { ok, skip, fail, cards };
+  const remaining = Number(await db.value("SELECT count(*) FROM member_import_rows WHERE job_id = $1 AND status = 'pending'", [jobId]));
+  await db.query(`UPDATE member_import_jobs SET status = $6, ok_count = ok_count + $1, skip_count = skip_count + $2, fail_count = fail_count + $3, cards_count = cards_count + $4,
+                    parsed_rows = (SELECT count(*) FROM member_import_rows WHERE job_id = $5 AND status <> 'pending'), updated_at = now() WHERE id = $5`,
+  [ok, skip, fail, cards, jobId, remaining ? 'running' : 'done']);
+  return { ok, skip, fail, cards, remaining, done: !remaining };
 }
+
+/** Whole job in one go (CLI, tests, small files): batches until nothing is pending. Totals are cumulative. */
+async function commit(jobId, adminId, opts = {}) {
+  const sum = { ok: 0, skip: 0, fail: 0, cards: 0 };
+  for (;;) {
+    const r = await commitChunk(jobId, adminId, opts);
+    for (const k of Object.keys(sum)) sum[k] += r[k];
+    if (r.done) return sum;
+  }
+}
+
+/** Failed rows back to pending so the next commit retries them (failure counts are taken off the job). */
+async function retryFailed(jobId) {
+  const n = (await db.query("UPDATE member_import_rows SET status = 'pending', message = '' WHERE job_id = $1 AND status = 'failed'", [jobId])).rowCount;
+  if (n) await db.query("UPDATE member_import_jobs SET status = 'running', fail_count = GREATEST(0, fail_count - $2), error_message = NULL, updated_at = now() WHERE id = $1 AND status IN ('running', 'done')", [jobId, n]);
+  return n;
+}
+
+/** Progress for the job page's polling (member-import.php status ticks). */
+async function progress(jobId) {
+  const job = await db.one('SELECT id, status, total_rows, ok_count, skip_count, fail_count, cards_count, error_message FROM member_import_jobs WHERE id = $1', [jobId]);
+  if (!job) return null;
+  const c = Object.fromEntries((await db.many('SELECT status, count(*)::int AS n FROM member_import_rows WHERE job_id = $1 GROUP BY status', [jobId])).map(r => [r.status, r.n]));
+  const pending = c.pending || 0, invalid = c.invalid || 0;
+  const todo = Math.max(0, Number(job.total_rows) - invalid);
+  return { id: job.id, status: job.status, total: todo, processed: Math.max(0, todo - pending), pending, saved: job.ok_count, skipped: job.skip_count, failed: job.fail_count, cards: job.cards_count, error: job.error_message || null };
+}
+
+/** Store a job-level failure (member_import_jobs.error_message). */
+const setError = (jobId, msg) => db.query('UPDATE member_import_jobs SET error_message = $2, updated_at = now() WHERE id = $1', [jobId, String(msg || '').slice(0, 1000)]);
 
 // aligned with the legacy member-import-sample.php (BS dates; father / citizenship soft-fill the KYM)
 const SAMPLE = '﻿member_id,full_name,name_np,mobile,email,address,dob_bs,gender,father_name,citizenship_no,membership_date_bs,monthly_saving,branch,password\n'
@@ -214,4 +255,4 @@ const SAMPLE = '﻿member_id,full_name,name_np,mobile,email,address,dob_bs,gende
 /** Failed and invalid rows of a job, for the errors CSV (legacy memberImportExportErrors). */
 const errorRows = jobId => db.many("SELECT row_num, sadasyata_number, full_name, mobile, status, message FROM member_import_rows WHERE job_id = $1 AND status IN ('invalid', 'failed') ORDER BY row_num", [jobId]);
 
-module.exports = { parseCsv, stage, commit, errorRows, SAMPLE, normDob, CARD_ROW_LIMIT };
+module.exports = { parseCsv, stage, commit, commitChunk, retryFailed, progress, setError, errorRows, SAMPLE, normDob, CARD_ROW_LIMIT, CHUNK };

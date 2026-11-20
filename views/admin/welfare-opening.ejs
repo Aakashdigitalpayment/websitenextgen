@@ -15,7 +15,7 @@
         <td><input class="input" type="number" min="0" step="0.01" name="opening_amount" value="<%= o.amount %>" aria-label="<%= t('रकम', 'Amount') %>" <%= isAdmin ? '' : 'disabled' %>></td>
         <td><input class="input" name="note" value="<%= o.note %>" maxlength="255" placeholder="<%= t('उदा. २०७५–८० को राहत', 'e.g. relief 2075–80') %>" aria-label="<%= t('टिप्पणी', 'Note') %>" <%= isAdmin ? '' : 'disabled' %>></td></tr><% }) %>
     </tbody></table></div>
-    <% if (isAdmin) { %><div class="form-actions" style="padding:0 20px 16px"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div><% } %>
+    <% if (isAdmin) { %><div class="form-actions" style="padding:0 20px 16px"><button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div><% } %>
   </form><% } %>
   </div>
   <div class="card" style="padding:0"><h3 style="padding:16px 20px 0"><%= t('मासिक प्रोफाइल अनुसार', 'By monthly profile') %></h3><ul class="list">

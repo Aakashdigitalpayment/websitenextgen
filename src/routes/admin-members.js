@@ -204,12 +204,34 @@ router.get('/members/import/:id/errors.csv', requireAdmin('admin'), ah(async (re
   res.type('text/csv; charset=utf-8').attachment(`member-import-${job.id}-errors.csv`).send(util.toCsv(['row_num', 'sadasyata_number', 'full_name', 'mobile', 'status', 'message'], rows));
 }));
 router.post('/members/import/:id/commit', requireAdmin('admin'), ah(async (req, res) => {
+  // one batch of rows per request (member-import.php chunked commit); the job page keeps posting until done
   const id = util.int(req.params.id);
+  const wantsJson = (req.get('accept') || '').includes('application/json');
   try {
-    const r = await memberImport.commit(id, req.admin.id, { tenant: req.tenant });
-    await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${r.ok} ok, ${r.skip} skipped, ${r.fail} failed, ${r.cards} ID cards`);
-    flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${r.ok} सफल, ${r.skip} छोडियो, ${r.fail} असफल, ${r.cards} परिचयपत्र`, `Import done: ${r.ok} saved, ${r.skip} skipped, ${r.fail} failed, ${r.cards} ID cards issued`));
-  } catch (e) { flash(req, 'error', e.message); }
+    const r = await memberImport.commitChunk(id, req.admin.id, { tenant: req.tenant });
+    if (r.done) {
+      const p = await memberImport.progress(id);
+      await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${p.saved} ok, ${p.skipped} skipped, ${p.failed} failed, ${p.cards} ID cards`);
+      if (!wantsJson) flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${p.saved} सफल, ${p.skipped} छोडियो, ${p.failed} असफल, ${p.cards} परिचयपत्र`, `Import done: ${p.saved} saved, ${p.skipped} skipped, ${p.failed} failed, ${p.cards} ID cards issued`));
+    } else if (!wantsJson) flash(req, 'info', res.locals.t(`आयात जारी छ: ${r.remaining} row बाँकी।`, `Import in progress: ${r.remaining} rows left.`));
+    if (wantsJson) return res.json({ ok: true, ...(await memberImport.progress(id)) });
+  } catch (e) {
+    await memberImport.setError(id, e.message).catch(() => {});
+    if (wantsJson) return res.status(409).json({ ok: false, error: e.message });
+    flash(req, 'error', e.message);
+  }
+  res.redirect('/admin/members/import/' + id);
+}));
+router.get('/members/import/:id/status.json', requireAdmin('admin'), ah(async (req, res) => {
+  const p = await memberImport.progress(util.int(req.params.id));
+  if (!p) return res.status(404).json({ ok: false });
+  res.set('Cache-Control', 'no-store').json({ ok: true, ...p });
+}));
+router.post('/members/import/:id/retry', requireAdmin('admin'), ah(async (req, res) => {
+  const id = util.int(req.params.id);
+  const n = await memberImport.retryFailed(id);
+  await auth.audit(req, 'import_retry', 'member_import_jobs', id, `${n} failed rows queued again`);
+  flash(req, n ? 'info' : 'error', n ? res.locals.t(`${n} असफल row फेरि प्रयास गरिँदै।`, `${n} failed rows queued again.`) : res.locals.t('फेरि प्रयास गर्ने row छैन।', 'No failed rows to retry.'));
   res.redirect('/admin/members/import/' + id);
 }));
 
@@ -565,6 +587,24 @@ router.badges = ah(async (req, res, next) => {
     + (SELECT count(*) FROM member_profile_change_requests WHERE status = 'pending')
     + (SELECT count(*) FROM member_id_cards WHERE status = 'active' AND unlock_requested = 1 AND locked_at IS NOT NULL)
     + (SELECT count(*) FROM member_password_reset_requests WHERE status = 'pending')`)) || 0;
+  // admin-header.php bell: KYM risk reviews due, marketplace listings and programme attendance requests waiting
+  const extra = await db.one(`SELECT (SELECT count(*) FROM kyc_applications WHERE status = 'approved' AND risk_review_status = 'due_review' AND deleted_at IS NULL) AS kyc_risk,
+                                     (SELECT count(*) FROM member_marketplace_listings WHERE status = 'pending') AS marketplace,
+                                     (SELECT count(*) FROM member_program_attendance_requests WHERE status = 'pending') AS attendance`).catch(() => null);
+  if (extra) Object.assign(res.locals.pendingCounts, { _kycRisk: Number(extra.kyc_risk) || 0, _marketplace: Number(extra.marketplace) || 0, _attendance: Number(extra.attendance) || 0 });
+  // bell entries that are not inboxes: key → [href, [np, en], permission section]
+  res.locals.bellLinks = {
+    _memberPortal: ['/admin/member-portal', ['सदस्य पोर्टल अनुरोध', 'Member portal queue'], 'member_portal'],
+    _kycRisk: ['/admin/kyc-risk-reviews', ['KYM जोखिम पुनरावलोकन', 'KYM risk reviews due'], 'inbox:kyc'],
+    _marketplace: ['/admin/marketplace?status=pending', ['बजार सूची (स्वीकृतिका लागि)', 'Marketplace listings to approve'], 'marketplace'],
+    _attendance: ['/admin/programs/register?tab=requests', ['उपस्थिति अनुरोध', 'Attendance requests'], 'programs'],
+  };
+  // open the bell once whenever the waiting total grows (admin-header.php popup), not on every page
+  if (!req.path.endsWith('.json') && !(req.get('accept') || '').includes('application/json')) {
+    const total = Object.values(res.locals.pendingCounts).reduce((a, n) => a + (Number(n) || 0), 0);
+    res.locals.bellOpen = total > (Number(req.session.pendingSeen) || 0);
+    req.session.pendingSeen = total;
+  }
   next();
 });
 

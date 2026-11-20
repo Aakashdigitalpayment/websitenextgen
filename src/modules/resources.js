@@ -17,6 +17,10 @@ const FILE = (name, np = 'फाइल', en = 'File', extra = {}) => T(name, np,
 const SEL = (name, np, en, options, extra = {}) => T(name, np, en, { type: 'select', options, ...extra });
 const REF = (name, np, en, table, label, extra = {}) => T(name, np, en, { type: 'select', ref: { table, label }, ...extra });
 const ICON = (name = 'icon', np = 'आइकन', en = 'Icon', extra = {}) => T(name, np, en, { type: 'icon', ...extra });
+/** information-room.php: the admin who added the item (created_by), stamped once. */
+async function stampCreatedBy(row, req) {
+  if (row && !row.created_by && req && req.admin) await require('../db').query('UPDATE information_room_items SET created_by = $1 WHERE id = $2 AND created_by IS NULL', [req.admin.id, row.id]);
+}
 const ACTIVE = B('is_active', 'सक्रिय', 'Active', { default: 1, list: true });
 const lazyDb = () => require('../db');
 
@@ -125,7 +129,8 @@ const resources = {
     RT('content_np', 'सामग्री (नेपाली)', 'Content (Nepali)'), RT('content', 'सामग्री (English)', 'Content (English)'),
     IMG('featured_image', 'मुख्य फोटो', 'Featured image'), T('meta_keywords', 'ट्याग (अल्पविरामले छुट्याउनुहोस्)', 'Tags (comma separated)'),
     B('show_in_menu', 'मेनुमा देखाउने', 'Show in menu', { list: true }), SEL('menu_position', 'मेनु', 'Menu', [['about', 'हाम्रो बारेमा', 'About'], ['services', 'सेवाहरू', 'Services'], ['more', 'सूचना', 'Updates'], ['footer', 'फुटर', 'Footer']]),
-    ICON('menu_icon', 'मेनु आइकन', 'Menu icon'), N('menu_order', 'क्रम', 'Order', { default: 0 }), ACTIVE],
+    ICON('menu_icon', 'मेनु आइकन', 'Menu icon'), N('menu_order', 'क्रम', 'Order', { default: 0 }),
+    B('is_new', 'मेनुमा "नयाँ" चिन्ह', '"New" chip in the menu'), D('new_until', '"नयाँ" चिन्ह कहिलेसम्म', '"New" chip until', { hint: 'खाली = सधैं / blank = no end date' }), ACTIVE],
   // legacy pages.php: blank slug → from the title; a footer page shown in the menu goes under About
   beforeSave: async data => {
     const util = require('../lib/util');
@@ -165,7 +170,8 @@ const resources = {
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     SEL('category', 'समूह', 'Category', IR_CATEGORIES, { list: true, optionsFn: irCategoryOptions }), D('meeting_date', 'बैठक मिति', 'Meeting date', { list: true }), T('reference_no', 'च.नं./सन्दर्भ', 'Reference no.'),
     FILE('file_path', 'फाइल (PDF)', 'File (PDF)', { required: true }), TA('description_np', 'विवरण', 'Description'),
-    B('allow_download', 'डाउनलोड अनुमति', 'Allow download', { default: 0 }), ORDER, ACTIVE] },
+    B('allow_download', 'डाउनलोड अनुमति', 'Allow download', { default: 0 }), B('restrict_copy', 'कपी / प्रिन्ट रोक्ने', 'Block copy / print', { default: 1, list: true }), ORDER, ACTIVE],
+  afterSave: stampCreatedBy },
 
   // ---------------------------------------------------------------- services & rates
   service_categories: { group: 'services', icon: 'layers', title: ['सेवा समूह', 'Service groups'], order: 'display_order, id', fields: [
@@ -450,6 +456,8 @@ for (const [key, r] of Object.entries(resources)) {
   r.table = r.table || key;
   r.fileFields = r.fields.filter(f => f.type === 'image' || f.type === 'file' || f.type === 'images');
   r.listFields = r.fields.filter(f => f.list);
+  // bulk activate / deactivate on every list with an "active" switch (faqs.php / services.php bulk_status); opt out with bulk: false
+  if (r.bulk === undefined && r.fields.some(f => f.name === 'is_active')) r.bulk = true;
 }
 
 module.exports = { resources, GROUPS };

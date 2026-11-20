@@ -383,6 +383,7 @@ CREATE TABLE IF NOT EXISTS reports (
     report_quarter VARCHAR(10),
     file_path VARCHAR(255),
     access_level ENUM('none','member') NOT NULL DEFAULT 'none',
+    view_only TINYINT(1) NOT NULL DEFAULT 0,
     is_active TINYINT(1) DEFAULT 1,
     display_order INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1201,6 +1202,7 @@ CREATE TABLE IF NOT EXISTS institutional_profile (
 ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS profit_loss DECIMAL(18,2) DEFAULT 0 AFTER npa_percent;
 ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS access_level ENUM('none','member') NOT NULL DEFAULT 'none';
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS access_level ENUM('none','member') NOT NULL DEFAULT 'none';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS view_only TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS other_fund DECIMAL(18,2) DEFAULT 0 AFTER total_assets;
 ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS bank_cash_balance DECIMAL(18,2) DEFAULT 0 AFTER other_fund;
 ALTER TABLE institutional_profile ADD COLUMN IF NOT EXISTS fixed_assets DECIMAL(18,2) DEFAULT 0 AFTER bank_cash_balance;

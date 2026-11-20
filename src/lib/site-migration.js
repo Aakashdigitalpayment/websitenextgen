@@ -41,7 +41,47 @@ function readPhpSite(root) {
   const piiFile = path.join(r, 'includes/.pii-master.key');
   if (!out.piiKey && fs.existsSync(piiFile)) out.piiKey = fs.readFileSync(piiFile, 'utf8').trim();
   if (out.piiKey && !/^[0-9a-f]{64}$/i.test(out.piiKey)) { out.notes.push('PII key found but it is not 64 hex characters — ignored'); out.piiKey = null; }
+  // Web Push keys of this install (includes/push-vapid.local.php), so member push subscriptions keep working
+  const vapidFile = path.join(r, 'includes/push-vapid.local.php');
+  if (fs.existsSync(vapidFile)) {
+    out.vapid = parseVapid(fs.readFileSync(vapidFile, 'utf8'));
+    out.notes.push(out.vapid ? 'Web Push keys read from includes/push-vapid.local.php' : 'includes/push-vapid.local.php found but the keys could not be read');
+  }
   return out;
+}
+
+/**
+ * VAPID pair from the PHP push-vapid.local.php (COOP_VAPID_PUBLIC_KEY + COOP_VAPID_PRIVATE_PEM) → web-push format
+ * (base64url public key, base64url 32-byte private key). null unless the private key really belongs to the public key.
+ */
+function parseVapid(php) {
+  try {
+    const pub = (String(php).match(/define\(\s*['"]COOP_VAPID_PUBLIC_KEY['"]\s*,\s*['"]([A-Za-z0-9_-]{40,120})['"]/) || [])[1];
+    const body = (String(php).match(/define\(\s*['"]COOP_VAPID_PRIVATE_PEM['"]\s*,([\s\S]*?)\);/) || [])[1];
+    if (!pub || !body) return null;
+    const pem = [...body.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'/g)].map(m => (m[1] !== undefined ? m[1].replace(/\\n/g, '\n') : m[2])).join('');
+    if (!/BEGIN EC PRIVATE KEY|BEGIN PRIVATE KEY/.test(pem)) return null;
+    const jwk = crypto.createPrivateKey(pem).export({ format: 'jwk' });
+    const derived = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]).toString('base64url');
+    return derived === pub ? { publicKey: pub, privateKey: jwk.d } : null;
+  } catch { return null; }
+}
+
+/**
+ * help_topics rows (read by the PHP assistant as context, includes/ai-chat-context.php) become chatbot answers once:
+ * question = title (NP / EN), answer = content (NP / EN). Rows already present (same question) are skipped.
+ */
+async function importHelpTopics() {
+  const rows = await db.many("SELECT * FROM help_topics WHERE COALESCE(is_active, 1) = 1 AND COALESCE(content_np, content, '') <> '' ORDER BY display_order, id").catch(() => []);
+  let added = 0;
+  for (const h of rows) {
+    const q = String(h.title_np || h.title || '').slice(0, 255);
+    if (!q || await db.value('SELECT 1 FROM chatbot_faqs WHERE question = $1 LIMIT 1', [q])) continue;
+    await db.query(`INSERT INTO chatbot_faqs (question, question_en, answer, answer_en, category, display_order, is_active, created_at) VALUES ($1, $2, $3, $4, $5, $6, 1, now())`,
+      [q, h.title ? String(h.title).slice(0, 255) : null, h.content_np || h.content, h.content || null, String(h.category || 'help').slice(0, 50), Number(h.display_order) || 0]);
+    added++;
+  }
+  return added;
 }
 
 const redact = url => String(url || '').replace(/\/\/([^:@/]+):([^@]*)@/, '//$1:***@');
@@ -79,10 +119,106 @@ const MOJIBAKE = /à¤|à¥|Ã¤|Ã¥|â€/;
 function fileColumns() {
   const map = {};
   const add = (table, col, priv) => { (map[table] = map[table] || []).push({ col, private: priv }); };
-  for (const m of Object.values(modules)) for (const f of m.fileFields) add(m.table, f.name, true);
+  for (const m of Object.values(modules)) {
+    for (const f of m.fileFields) add(m.table, f.name, true);
+    add(m.table, 'admin_attachment', true); // office replies (admin-applications.js) are confidential too
+  }
   for (const r of Object.values(resources)) for (const f of r.fileFields) add(r.table, f.name, !!r.privateFiles);
   add('members', 'avatar_url', false);
   return map;
+}
+
+// ---------------------------------------------------------------- PHP-gated folders → private storage (SM-3)
+/** Move every file of a gated folder (src) into dst, keeping sub-paths; existing targets are kept. */
+function moveTree(src, dst) {
+  let n = 0;
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    const a = path.join(src, e.name), b = path.join(dst, e.name);
+    if (e.isSymbolicLink()) { fs.rmSync(a, { force: true }); continue; }
+    if (e.isDirectory()) { n += moveTree(a, b); continue; }
+    fs.mkdirSync(dst, { recursive: true });
+    if (fs.existsSync(b)) fs.rmSync(a, { force: true }); else { fs.renameSync(a, b); n++; }
+  }
+  fs.rmSync(src, { recursive: true, force: true });
+  return n;
+}
+const sqlRe = s => s.replace(/[-_]/g, m => '\\' + m);
+/**
+ * The PHP upload gate (includes/upload-gate.php) protected whole folders (KYC, loan, welfare, office replies …).
+ * Move each of them wholesale to _private/<folder> — files referenced by any column, comma lists and orphans alike —
+ * then point every stored path (single or comma-separated, with or without "assets/uploads/") at the private copy.
+ * Also rewrites links to /assets/uploads/ inside rich text to /uploads/ (public folders only).
+ * Runs inside the tenant schema; safe to re-run (scripts/privatise-uploads.js for tenants migrated earlier).
+ * @returns {Promise<{moved:number, folders:string[], rows:number, html:number}>}
+ */
+async function protectGatedUploads(dest) {
+  const { GATED_FOLDERS } = require('./uploads');
+  const out = { moved: 0, folders: [], rows: 0, html: 0 };
+  for (const f of GATED_FOLDERS) {
+    const dir = path.join(dest, f);
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+    out.moved += moveTree(dir, path.join(dest, '_private', f));
+    out.folders.push(f);
+  }
+  const alt = GATED_FOLDERS.map(sqlRe).join('|');
+  // a value that is only paths: one or more comma-separated tokens without spaces
+  const onlyPaths = `^\\s*[^\\s,]+(\\s*,\\s*[^\\s,]+)*\\s*$`;
+  const hit = `(^|,)\\s*/?(assets/)?(uploads/)?(${alt})/`;
+  const cols = await db.many(`SELECT table_name, column_name FROM information_schema.columns
+                              WHERE table_schema = current_schema() AND data_type IN ('text', 'character varying')`);
+  const site = String(await require('./settings').get('site_url', '') || '').replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  const host = site ? `(?:https?://(?:www\\.)?${site.replace(/^www\./i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?` : '';
+  for (const { table_name: t, column_name: c } of cols) {
+    if (/^(schema_migrations|audit_log|app_error_log)$/.test(t)) continue;
+    const col = db.ident(c), tbl = db.ident(t);
+    const r = await db.query(`UPDATE ${tbl} SET ${col} = regexp_replace(${col}, $1, '\\1_private/\\2/', 'gi')
+                              WHERE ${col} ~* $2 AND ${col} ~ $3`, [`(^|,)\\s*/?(?:assets/)?(?:uploads/)?(${alt})/`, hit, onlyPaths]).catch(() => ({ rowCount: 0 }));
+    out.rows += r.rowCount;
+    // rich text: src="/assets/uploads/news/x.jpg" (or the old site's absolute URL) → /uploads/news/x.jpg; gated folders → private route
+    const h = await db.query(`UPDATE ${tbl} SET ${col} = regexp_replace(regexp_replace(${col}, $1, '\\1/admin/files/_private/\\2/', 'gi'), $2, '\\1/uploads/', 'gi')
+                              WHERE ${col} ~* '(src|href)\\s*=\\s*["'']' AND ${col} ~* 'assets/uploads/'`,
+    [`((?:src|href)\\s*=\\s*["'])${host}/?assets/uploads/(${alt})/`, `((?:src|href)\\s*=\\s*["'])${host}/?assets/uploads/`]).catch(() => ({ rowCount: 0 }));
+    out.html += h.rowCount;
+  }
+  return out;
+}
+
+/**
+ * Move every file referenced by a private file column (application documents, information room, members-only
+ * reports and institutional-profile files) into _private/ and update the row; comma lists are handled per path.
+ * Runs inside the tenant schema; safe to re-run.
+ */
+async function privatiseFileColumns(dest) {
+  const cols = fileColumns();
+  let moved = 0, missing = 0;
+  const missingList = [];
+  for (const [table, list] of Object.entries(cols)) {
+    const tcols = await db.columns(table);
+    for (const { col, private: priv } of list) {
+      if (!tcols.has(col)) continue;
+      const rows = await db.many(`SELECT id, ${db.ident(col)} AS v FROM ${db.ident(table)} WHERE ${db.ident(col)} IS NOT NULL AND ${db.ident(col)} <> ''`);
+      for (const r of rows) {
+        // single paths and comma-separated lists (loan documents, welfare supporting documents)
+        const parts = String(r.v).split(',').map(x => x.trim()).filter(Boolean);
+        let changed = false;
+        const next = parts.map(v => {
+          if (/^https?:\/\//i.test(v)) return v;
+          const rel = v.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+          const abs = path.resolve(dest, rel);
+          if (!abs.startsWith(path.resolve(dest) + path.sep)) return v;
+          if (!fs.existsSync(abs)) { missing++; if (missingList.length < 50) missingList.push(`${table}.${col} #${r.id}: ${v}`); return v; }
+          if (!priv || rel.startsWith('_private/')) return v;
+          const target = path.join(dest, '_private', rel);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.renameSync(abs, target);
+          moved++; changed = true;
+          return '_private/' + rel;
+        });
+        if (changed) await db.query(`UPDATE ${db.ident(table)} SET ${db.ident(col)} = $1 WHERE id = $2`, [next.join(','), r.id]);
+      }
+    }
+  }
+  return { moved, missing, missingList };
 }
 
 // ---------------------------------------------------------------- sources
@@ -117,7 +253,7 @@ async function mysqlSource(url) {
 
 // ---------------------------------------------------------------- main
 /**
- * @param {object} o  { tenant, source | mysqlUrl, uploads, credKey, piiKey, dryRun, mode: 'fresh'|'incremental', log }
+ * @param {object} o  { tenant, source | mysqlUrl, uploads, credKey, piiKey, vapid, dryRun, mode: 'fresh'|'incremental', log }
  * @returns report object
  */
 async function migrate(o) {
@@ -239,32 +375,18 @@ async function migrate(o) {
     step('copy uploads', 'ok', `${copied} files${skipped ? `, ${skipped} unsafe files skipped` : ''}`);
   }
 
+  // ---- PHP-gated folders (KYC, loan, welfare, office replies …) → private storage, every file and every stored path
+  if (o.uploads) {
+    await db.withSchema(tenant.schema_name, async () => {
+      const g = await protectGatedUploads(dest);
+      report.files.gated = g;
+      step('protect gated folders', 'ok', `${g.moved} files in ${g.folders.length} folders moved to private storage; ${g.rows} stored paths and ${g.html} rich-text links updated`);
+    });
+  }
+
   // ---- privatise confidential files (application documents, information room)
   await db.withSchema(tenant.schema_name, async () => {
-    const cols = fileColumns();
-    let moved = 0, missing = 0;
-    const missingList = [];
-    for (const [table, list] of Object.entries(cols)) {
-      const tcols = await db.columns(table);
-      for (const { col, private: priv } of list) {
-        if (!tcols.has(col)) continue;
-        const rows = await db.many(`SELECT id, ${db.ident(col)} AS v FROM ${db.ident(table)} WHERE ${db.ident(col)} IS NOT NULL AND ${db.ident(col)} <> ''`);
-        for (const r of rows) {
-          if (/^https?:\/\//i.test(r.v)) continue;
-          const rel = String(r.v).replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
-          const abs = path.resolve(dest, rel);
-          if (!abs.startsWith(path.resolve(dest) + path.sep)) continue;
-          if (!fs.existsSync(abs)) { missing++; if (missingList.length < 50) missingList.push(`${table}.${col} #${r.id}: ${r.v}`); continue; }
-          if (priv && !rel.startsWith('_private/')) {
-            const target = path.join(dest, '_private', rel);
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.renameSync(abs, target);
-            await db.query(`UPDATE ${db.ident(table)} SET ${db.ident(col)} = $1 WHERE id = $2`, ['_private/' + rel, r.id]);
-            moved++;
-          }
-        }
-      }
-    }
+    const { moved, missing, missingList } = await privatiseFileColumns(dest);
     report.files.privatised = moved;
     report.files.missing = missing;
     report.files.missing_examples = missingList;
@@ -299,6 +421,20 @@ async function migrate(o) {
     const mapped = await settings.mapLegacy(o.credKey);
     await settings.set('admin_2fa_required', '1', { group: 'security', label: 'Require 2FA for every admin (1 = yes)' });
     step('settings', 'ok', `${mapped.length} PHP setting names mapped${mapped.length ? ` (${mapped.slice(0, 8).join(', ')}${mapped.length > 8 ? '…' : ''})` : ''}; admin 2FA required as on the PHP site (Admin → Security policy to change)`);
+  });
+
+  // ---- help_topics (PHP assistant context) → chatbot answers; the PHP install's Web Push keys
+  await db.withSchema(tenant.schema_name, async () => {
+    const n = await importHelpTopics();
+    step('help topics', n ? 'ok' : 'skip', n ? `${n} help topics added as assistant answers (Admin → Chatbot answers)` : 'none to add');
+    if (o.vapid) {
+      const st = require('./settings');
+      await st.set('push_vapid_public', o.vapid.publicKey, { group: 'push', label: 'VAPID public key' });
+      await st.set('push_vapid_private', o.vapid.privateKey, { group: 'push', label: 'VAPID private key' });
+      step('push keys', 'ok', 'Web Push keys of the old site kept, so members stay subscribed');
+    } else if (await db.value('SELECT 1 FROM member_push_subscriptions LIMIT 1').catch(() => null)) {
+      warn('the old site\'s Web Push keys were not found (includes/push-vapid.local.php) — members must turn push notifications on again');
+    }
   });
 
   // ---- PII (citizenship numbers): PHP pii1:/pii2: → decrypt with the old key → new pii3: format
@@ -400,4 +536,4 @@ async function convertPii(oldKey, step = () => {}, warn = () => {}) {
   return { ok, bad, found };
 }
 
-module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii };
+module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii, protectGatedUploads, privatiseFileColumns, parseVapid, importHelpTopics };

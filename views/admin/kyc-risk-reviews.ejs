@@ -19,7 +19,7 @@
       <td class="small"><%= r.risk_review_due_at ? bsDate(r.risk_review_due_at) : '—' %></td>
       <td><span class="badge <%= due ? 'badge-bad' : 'badge-ok' %>"><%= due ? t('पुनरावलोकन बाँकी', 'Due review') : t('सामान्य', 'Normal') %></span></td>
       <td><div class="row-actions">
-        <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/kyc-risk-reviews/<%= r.id %>/reviewed"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="filter" value="<%= filter %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('पुनरावलोकन भयो भनी चिन्ह लगाउने?', 'Mark as reviewed?') %>"><%- icon('check') %><%= t('पुनरावलोकन भयो', 'Mark reviewed') %></button></form><% } %>
+        <% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/kyc-risk-reviews/<%= r.id %>/reviewed"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="filter" value="<%= filter %>"><button type="submit" class="btn btn-outline btn-sm" data-confirm="<%= t('पुनरावलोकन भयो भनी चिन्ह लगाउने?', 'Mark as reviewed?') %>"><%- icon('check') %><%= t('पुनरावलोकन भयो', 'Mark reviewed') %></button></form><% } %>
       </div></td>
     </tr>
   <% }) %></tbody>

@@ -223,6 +223,21 @@ router.get('/requests/:module/:id/attachment', ah(async (req, res, next) => {
   require('../lib/uploads').sendStored(req, res, next, mine.row[m.attachCol]);
 }));
 
+/**
+ * The member's own uploaded documents on one of their applications (upload-gate.php coop_upload_gate_member_owns):
+ * only file fields of that form; comma-separated lists pick one with ?i=.
+ */
+router.get('/requests/:module/:id/file/:field', ah(async (req, res, next) => {
+  const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
+  const field = m && m.fileFields.find(f => f.name === req.params.field);
+  if (!field) return next();
+  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  const files = mine ? String(mine.row[field.name] || '').split(',').map(x => x.trim()).filter(Boolean) : [];
+  const stored = files[util.int(req.query.i, 0)] || null;
+  if (!stored || /^https?:/i.test(stored)) return next();
+  require('../lib/uploads').sendStored(req, res, next, stored, { download: req.query.dl === '1' });
+}));
+
 // ---------------------------------------------------------------- service request (member/service-request.php): one form → appointment or grievance
 const SERVICE_TYPES = {
   appointment: { label: ['भेटघाट — सेवा कार्यालय भ्रमण / भेट माग्ने', 'Appointment — visit the service office'], purpose: 'other' },
@@ -313,14 +328,20 @@ router.get('/certificate', ah(async (req, res) => {
   const verifyCode = card?.verification_code || '';
   const target = `${req.protocol}://${req.get('host')}/verify${verifyCode ? '?code=' + encodeURIComponent(verifyCode) : ''}`;
   const sinceAd = (m.approved_at || m.created_at) ? new Date(m.approved_at || m.created_at).toISOString().slice(0, 10) : null;
-  res.render('member/certificate', { layout: false, qr: await QRCode.toDataURL(target, { margin: 1, width: 200 }), verifyCode: verifyCode || '—', since: sinceAd ? nd.adToBs(sinceAd) : null });
+  // member/certificate.php: identity from the linked KYM (SSOT) — photo, father's name, DOB, address, citizenship, account type
+  const kyc = await ownKyc(m);
+  const cit = String(kyc?.citizenship_no || '').trim();
+  const dobBs = kyc?.dob_bs || (kyc?.dob_ad ? nd.adToBs(new Date(kyc.dob_ad).toISOString().slice(0, 10)) : '');
+  const details = kyc ? {
+    fatherName: kyc.father_name || '', dobBs: dobBs || '', address: kyc.permanent_address || '', accountType: kyc.account_type || '',
+    citizenship: cit ? '•'.repeat(Math.max(0, Math.min(cit.length - 4, 8))) + cit.slice(-4) : '', // PII: masked except the last 4
+    phone: kyc.mobile || m.phone || '', email: kyc.email || m.email || '', hasPhoto: !!kyc.photo,
+  } : { phone: m.phone || '', email: m.email || '', hasPhoto: false };
+  res.render('member/certificate', { layout: false, qr: await QRCode.toDataURL(target, { margin: 1, width: 200 }), verifyCode: verifyCode || '—', since: sinceAd ? nd.adToBs(sinceAd) : null, details });
 }));
 
-async function ownKyc(m) {
-  const keys = [m.sadasyata_number, m.member_card_no].filter(Boolean);
-  return db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3) AND mobile = $4))
-                 ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
-}
+/** The member's own KYM (SSOT: kym.loadLinkedKyc — kyc_application_id, else the KYM with this Member ID). */
+const ownKyc = m => require('../lib/kym').loadLinkedKyc(m);
 router.get('/kyc-print/file/:field', ah(async (req, res, next) => {
   const field = modules.kyc.fileFields.find(f => f.name === req.params.field);
   const k = field ? await ownKyc(req.member) : null;
@@ -329,10 +350,7 @@ router.get('/kyc-print/file/:field', ah(async (req, res, next) => {
 }));
 
 router.get('/kyc-print', ah(async (req, res) => {
-  const m = req.member;
-  const keys = [m.sadasyata_number, m.member_card_no].filter(Boolean);
-  const k = await db.one(`SELECT * FROM kyc_applications WHERE deleted_at IS NULL AND (id = $1 OR id = $2 OR ($3::text[] <> '{}' AND member_id = ANY($3) AND mobile = $4))
-                          ORDER BY (id = $1 OR id = $2) DESC, created_at DESC LIMIT 1`, [m.kyc_application_id || 0, m.kyc_id || 0, keys, m.phone || '-']);
+  const k = await ownKyc(req.member);
   if (!k) { flash(req, 'info', res.locals.t('तपाईंको KYC फारम भेटिएन। पहिले KYC भर्नुहोस्।', 'No KYC form found. Please fill in the KYC form first.')); return res.redirect('/apply/kyc'); }
   const mod = modules.kyc;
   const forms = require('../lib/forms');
@@ -393,6 +411,8 @@ router.get('/information-room/:id/view', ah(async (req, res, next) => {
   const item = await db.one('SELECT * FROM information_room_items WHERE id = $1 AND is_active = 1', [util.int(req.params.id)]);
   if (!item || !item.file_path) return next();
   const ext = String(item.file_path).toLowerCase().split('.').pop();
+  await db.query(`INSERT INTO information_room_access_log (item_id, viewer_type, viewer_id, viewer_name, action, ip_address, created_at) VALUES ($1, 'member', $2, $3, 'view', $4, now())`,
+    [item.id, req.member.id, req.member.name, req.ip]);
   res.set('Cache-Control', 'private, no-store');
   res.render('member/information-room-view', { title: res.locals.f(item, 'title'), item, kind: ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? 'image' : ext === 'pdf' ? 'pdf' : 'other',
     category: IR_CATEGORIES[item.category] || null, stamp: `${req.member.name_np || req.member.name} · ${req.member.sadasyata_number || ''} · ${nd.formatBs(nd.todayBs(), req.lang)} ${new Date(Date.now() + 345 * 60_000).toISOString().slice(11, 16)}` });
@@ -402,16 +422,14 @@ router.get('/information-room/:id', ah(async (req, res, next) => {
   if (!req.member.information_room_enabled) return res.redirect('/member/information-room');
   const item = await db.one('SELECT * FROM information_room_items WHERE id = $1 AND is_active = 1', [util.int(req.params.id)]);
   if (!item || !item.file_path) return next();
-  await db.query(`INSERT INTO information_room_access_log (item_id, viewer_type, viewer_id, viewer_name, action, ip_address, created_at) VALUES ($1, 'member', $2, $3, $4, $5, now())`,
-    [item.id, req.member.id, req.member.name, item.allow_download ? 'download' : 'view', req.ip]);
-  const path = require('path');
-  const base = path.resolve(require('../lib/uploads').tenantDir(req));
-  const file = path.resolve(base, String(item.file_path).replace(/^\/+/, '').replace(/^assets\/uploads\//, ''));
-  if (!file.startsWith(base + path.sep)) return next(); // never outside this tenant's folder
-  res.set('Cache-Control', 'private, no-store');
-  if (item.allow_download && !req.query.inline) return res.download(file, path.basename(file), err => err && next());
-  res.set('Content-Disposition', 'inline');
-  res.sendFile(file, err => err && next());
+  // the in-page viewer's own fetch (?inline=1) was logged as a view by /view; a direct open is a download only when allowed
+  if (!req.query.inline) {
+    await db.query(`INSERT INTO information_room_access_log (item_id, viewer_type, viewer_id, viewer_name, action, ip_address, created_at) VALUES ($1, 'member', $2, $3, $4, $5, now())`,
+      [item.id, req.member.id, req.member.name, item.allow_download ? 'download' : 'view', req.ip]);
+  }
+  // never outside this tenant's folder (uploads.resolveStored); served relative to it so the dotfile check covers the stored path only
+  const inline = !item.allow_download || !!req.query.inline;
+  require('../lib/uploads').sendStored(req, res, next, item.file_path, { viewOnly: inline, download: !inline });
 }));
 
 // ---------------------------------------------------------------- programmes: QR check-in, pre-registration, history
@@ -436,7 +454,8 @@ router.post('/attend', ah(async (req, res) => {
     flash(req, 'error', res.locals.t(...reason)); return res.redirect(back);
   }
   if (Number(found.program.instant_attendance)) {
-    const r = await att.record({ member: req.member, program: found.program, occurrence: found.occurrence, method: 'QR_SCAN', source: 'member_qr', ip: req.ip, checkEligible: true });
+    const r = await att.record({ member: req.member, program: found.program, occurrence: found.occurrence, method: 'QR_SCAN', source: 'member_qr', ip: req.ip, checkEligible: true,
+      deviceFingerprint: require('crypto').createHash('sha256').update(String(req.get('user-agent') || '')).digest('hex').slice(0, 40) }); // audit value only
     if (r.ineligible) flash(req, 'error', res.locals.t(r.ineligible[0], r.ineligible[1]));
     else flash(req, r.duplicate ? 'info' : 'success', r.duplicate ?res.locals.t('तपाईं पहिले नै उपस्थित हुनुहुन्छ।', 'You are already checked in.') : res.locals.t('उपस्थिति दर्ता भयो। धन्यवाद!', 'You are checked in. Thank you!'));
   } else {

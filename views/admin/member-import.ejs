@@ -7,7 +7,7 @@
       <div class="field"><label><%= t('CSV फाइल (UTF-8)', 'CSV file (UTF-8)') %></label><input class="input" type="file" name="csv" accept=".csv,text/csv" required></div>
       <div class="field"><label><%= t('पहिले नै भएका सदस्य', 'Existing members') %></label>
         <div class="choices"><label class="choice"><input type="radio" name="mode" value="update" checked> <%= t('अद्यावधिक गर्ने', 'Update them') %></label><label class="choice"><input type="radio" name="mode" value="skip"> <%= t('छोड्ने', 'Skip them') %></label></div></div>
-      <button class="btn btn-primary"><%- icon('check') %><%= t('जाँच गर्नुहोस् (अझै सेभ हुँदैन)', 'Check file (nothing is saved yet)') %></button>
+      <button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('जाँच गर्नुहोस् (अझै सेभ हुँदैन)', 'Check file (nothing is saved yet)') %></button>
     </div>
   </form>
   <div class="card">
@@ -24,7 +24,7 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <div class="stack">
       <div class="field"><label><%= t('CSV फाइल: member_id, monthly_saving', 'CSV file: member_id, monthly_saving') %></label><input class="input" type="file" name="fu_file" accept=".csv,text/csv" required></div>
-      <button class="btn btn-primary" data-confirm="<%= t('भएका सदस्यको मासिक बचत मात्र बदलिन्छ। जारी राख्ने?', 'Only the monthly saving of existing members changes. Continue?') %>"><%- icon('check') %><%= t('अपडेट गर्नुहोस्', 'Update') %></button>
+      <button type="submit" class="btn btn-primary" data-confirm="<%= t('भएका सदस्यको मासिक बचत मात्र बदलिन्छ। जारी राख्ने?', 'Only the monthly saving of existing members changes. Continue?') %>"><%- icon('check') %><%= t('अपडेट गर्नुहोस्', 'Update') %></button>
       <a class="small" href="/admin/members/import/field-sample.csv"><%- icon('download') %><%= t('नमूना CSV', 'Sample CSV') %></a>
     </div>
   </form>

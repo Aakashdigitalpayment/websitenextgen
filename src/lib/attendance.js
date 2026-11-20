@@ -54,7 +54,7 @@ function eligibility(member) {
 }
 
 /** Record a VALID check-in. Returns { row }, { duplicate } or, with checkEligible, { ineligible: [np, en, code] }. */
-async function record({ member, program, occurrence = null, method, source, ip = null, staffAdminId = null, deskId = null, note = null, checkEligible = false }) {
+async function record({ member, program, occurrence = null, method, source, ip = null, staffAdminId = null, deskId = null, note = null, checkEligible = false, deviceFingerprint = null }) {
   const bad = checkEligible ? eligibility(member) : null;
   if (bad) {
     await logAttempt(member.id, program, occurrence, method, bad[2], bad[1], null, ip, staffAdminId, deskId);
@@ -72,8 +72,13 @@ async function record({ member, program, occurrence = null, method, source, ip =
       parent_program_id: program.parent_program_id || (occurrence ? program.id : null), attendance_scope_key: scopeKey(program.id, occurrence?.id),
       program_title: String(program.title || '').slice(0, 255), attendance_method: method, attendance_status: 'VALID', source,
       location_label: occurrence?.location_name || program.location || null, verified_by_ip: ip, staff_admin_id: staffAdminId, desk_id: deskId,
-      attendance_note: note, attended_at: new Date(),
+      attendance_note: note, attended_at: new Date(), device_fingerprint: deviceFingerprint ? String(deviceFingerprint).slice(0, 120) : null,
     });
+    // programClosePendingRequests: a recorded check-in closes the member's pending request for this programme
+    if (source !== 'member_request') {
+      await db.query(`UPDATE member_program_attendance_requests SET status = 'approved', processed_at = now(), admin_id = $3, admin_note = 'Closed by attendance record'
+                      WHERE member_id = $1 AND program_id = $2 AND status = 'pending'`, [member.id, row.program_id, staffAdminId]).catch(() => {});
+    }
     return { row };
   } catch (e) {
     if (e.code === '23505') return { duplicate: await existing(member.id, program.id, occurrence?.id) };
@@ -88,17 +93,32 @@ async function logAttempt(memberId, program, occurrence, method, result, message
     [memberId, program.parent_program_id || program.id, program.id, occurrence?.id || null, method, prevId, result, message, ip, staffAdminId, deskId]).catch(() => {});
 }
 
-async function voidAttendance(id, adminId, reason) {
+async function voidAttendance(id, adminId, reason, ip = null) {
   return db.transaction(async () => {
     const row = await db.one("SELECT * FROM member_program_attendance WHERE id = $1 AND attendance_status = 'VALID' FOR UPDATE", [id]);
     if (!row) return null;
     // legacy unique (scope, member, status) allows a single VOID row per scope — replace an older one
     await db.query("DELETE FROM member_program_attendance WHERE attendance_scope_key = $1 AND member_id = $2 AND attendance_status = 'VOID'", [row.attendance_scope_key, row.member_id]);
     await db.query("UPDATE member_program_attendance SET attendance_status = 'VOID', voided_by = $1, voided_at = now(), void_reason = $2 WHERE id = $3", [adminId, String(reason || '').slice(0, 255), id]);
-    await db.query(`INSERT INTO program_audit_logs (action_type, program_id, occurrence_id, attendance_id, member_id, admin_id, reason, created_at) VALUES ('void', $1, $2, $3, $4, $5, $6, now())`,
-      [row.program_id, row.occurrence_id, row.id, row.member_id, adminId, String(reason || '').slice(0, 255)]);
+    const payload = { attendance_method: row.attendance_method, source: row.source, attended_at: row.attended_at, staff_admin_id: row.staff_admin_id, desk_id: row.desk_id, member_card_no: row.member_card_no };
+    await db.query(`INSERT INTO program_audit_logs (action_type, program_id, occurrence_id, attendance_id, member_id, admin_id, reason, payload_json, ip_address, created_at)
+                    VALUES ('void', $1, $2, $3, $4, $5, $6, $7, $8, now())`,
+    [row.program_id, row.occurrence_id, row.id, row.member_id, adminId, String(reason || '').slice(0, 255), JSON.stringify(payload), String(ip || '').slice(0, 45)]);
     return row;
   });
+}
+
+/**
+ * programCanVoidAttendance (program-attendance-helpers.php:599-611): admins and super-admins void any record;
+ * a custom role with the Delete permission on programmes too; other staff only the records they took themselves.
+ */
+function canVoid(admin, row, permCtx) {
+  if (!admin || !row) return false;
+  const auth = require('./auth');
+  if (auth.roleLevel(admin.role) >= auth.roleLevel('admin')) return true;
+  const section = (require('./admin-perms').resolve('/programs') || {}).section;
+  if (permCtx && permCtx.perms && section && String(permCtx.perms[section] || '').includes('d')) return true;
+  return Number(row.staff_admin_id) > 0 && Number(row.staff_admin_id) === Number(admin.id);
 }
 
 /** Find a member by membership no., card no. or phone (desk check-in). */
@@ -108,4 +128,4 @@ async function findMember(q) {
   return db.one(`SELECT * FROM members WHERE deleted_at IS NULL AND is_active = 1 AND (sadasyata_number = $1 OR member_card_no = $1 OR phone = $1) ORDER BY id LIMIT 1`, [v]);
 }
 
-module.exports = { eligibility, logAttempt, newToken, scopeKey, byToken, closedReason, record, voidAttendance, findMember, existing };
+module.exports = { eligibility, logAttempt, newToken, scopeKey, byToken, closedReason, record, voidAttendance, canVoid, findMember, existing };

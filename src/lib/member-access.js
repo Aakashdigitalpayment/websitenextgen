@@ -69,4 +69,22 @@ function checkFileToken(req, kind, id, token) {
   return want.length === got.length && require('crypto').timingSafeEqual(want, got);
 }
 
-module.exports = { normalizeLevel, unlocked, canOpen, tryUnlock, guard, fileToken, checkFileToken };
+/**
+ * coopMemberAccessBounceSocialInAppToPage (public-member-access.php:598-660): link-preview crawlers and cold opens in
+ * Facebook / Instagram / Line in-app browsers get the HTML page (OG card, unlock form) instead of the file bytes.
+ * Links on our own pages carry ?nav=1 (or a same-site Referer) and go straight through. Returns the page to send them to, or null.
+ */
+const SOCIAL_CRAWLER = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp/i;
+const SOCIAL_INAPP = /FBAN|FBAV|FB_IAB|Instagram|Line\//i;
+function socialBounce(req, pageUrl) {
+  const ua = String(req.get('user-agent') || '');
+  const crawler = SOCIAL_CRAWLER.test(ua), inApp = SOCIAL_INAPP.test(ua);
+  if (!crawler && !inApp) return null;
+  if (!crawler) {
+    if (req.query.nav === '1') return null;
+    try { if (new URL(String(req.get('referer') || '')).hostname === req.hostname) return null; } catch { /* no / bad referer */ }
+  }
+  return pageUrl;
+}
+
+module.exports = { normalizeLevel, unlocked, canOpen, tryUnlock, guard, fileToken, checkFileToken, socialBounce };

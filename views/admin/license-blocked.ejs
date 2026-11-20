@@ -15,7 +15,7 @@
     <div class="field"><label for="lb_amt"><%= t('रकम (रु.)', 'Amount (Rs.)') %></label><input class="input" id="lb_amt" name="amount" inputmode="decimal" maxlength="40"></div>
     <div class="field"><label for="lb_txn"><%= t('कारोबार नं. / भौचर नं.', 'Transaction / voucher no.') %> *</label><input class="input" id="lb_txn" name="txn_reference" required maxlength="120"></div>
     <div class="field"><label for="lb_note"><%= t('टिप्पणी', 'Note') %></label><textarea class="textarea" id="lb_note" name="note" rows="2" maxlength="1000"></textarea></div>
-    <button class="btn btn-primary btn-block"><%= t('भुक्तानी सूचना पठाउनुहोस्', 'Send payment notice') %></button>
+    <button type="submit" class="btn btn-primary btn-block"><%= t('भुक्तानी सूचना पठाउनुहोस्', 'Send payment notice') %></button>
   </form>
   <p class="small muted mt-2"><%= t('प्रयोगकर्ता', 'User') %>: <%= username %></p>
 </div>

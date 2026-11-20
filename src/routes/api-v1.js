@@ -311,6 +311,7 @@ router.patch('/applications/:module/:ref', requireScope('applications:write'), i
     if (status !== undefined && status !== row.status) {
       await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
                       VALUES ($1, $2, $3, $4, $5, NULL, $6, now(), 0, $7)`, [mod.key, row.id, row.status || null, status, remarks || null, ('API: ' + req.apiClient.name).slice(0, 100), req.body.notify ? 1 : 0]);
+      await notify.memberStatusNotification(mod, u, status, remarks || '');
     }
     return u;
   });

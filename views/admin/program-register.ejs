@@ -16,7 +16,7 @@
   <input class="input" name="date_to" value="<%= query.date_to || '' %>" placeholder="<%= t('सम्म', 'To') %>" style="max-width:150px" aria-label="<%= t('सम्म', 'To') %>">
   <label class="choice" style="padding:6px 10px"><input type="checkbox" name="active_only" value="1" <%= f.activeOnly ? 'checked' : '' %>> <%= t('सक्रिय कार्यक्रम मात्र', 'Active programmes only') %></label>
   <% if (tab === 'requests') { %><label class="choice" style="padding:6px 10px"><input type="checkbox" name="show_done" value="1" <%= f.showDone ? 'checked' : '' %>> <%= t('प्रक्रिया भएका पनि', 'Include processed') %></label><% } %>
-  <button class="btn btn-outline"><%- icon('search') %></button>
+  <button type="submit" class="btn btn-outline"><%- icon('search') %></button>
 </form>
 <% if (!rows.length) { %><div class="empty"><%= t('केही भेटिएन।', 'Nothing found.') %></div><% } else { %>
 <div class="table-wrap"><table class="table">

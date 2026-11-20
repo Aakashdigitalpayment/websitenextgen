@@ -153,4 +153,26 @@
     });
     input.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }); // do not submit the form
   });
+
+  // ---- member CSV import: keep committing batches until the job is done (member-import.php chunked commit)
+  const imp = $('[data-import-progress]');
+  if (imp) {
+    const id = imp.dataset.importProgress, bar = $('progress', imp), count = $('[data-import-count]', imp), err = $('[data-import-error]', imp);
+    let tries = 0;
+    const tick = async () => {
+      try {
+        const r = await fetch('/admin/members/import/' + encodeURIComponent(id) + '/commit', { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json', 'x-csrf-token': imp.dataset.csrf } });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'failed');
+        tries = 0;
+        bar.max = j.total || 1; bar.value = j.processed; count.textContent = j.processed + ' / ' + j.total;
+        if (j.status === 'done') return location.reload();
+        setTimeout(tick, 150);
+      } catch (e) {
+        err.hidden = false; err.textContent = e.message;
+        if (++tries < 5) setTimeout(tick, 2000 * tries); // retry with back-off; the Continue button resumes after that
+      }
+    };
+    tick();
+  }
 })();

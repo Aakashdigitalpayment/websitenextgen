@@ -5,6 +5,6 @@
     <div class="field"><label><%= t('प्रयोगकर्ता नाम', 'Username') %></label><input class="input" value="<%= values.username %>" disabled></div>
     <div class="field <%= errors.full_name ? 'has-error' : '' %>"><label for="pf_name"><%= t('पूरा नाम', 'Full name') %> *</label><input class="input" id="pf_name" name="full_name" value="<%= values.full_name || '' %>" maxlength="100" required><% if (errors.full_name) { %><div class="field-error"><%= errors.full_name %></div><% } %></div>
     <div class="field <%= errors.email ? 'has-error' : '' %>"><label for="pf_email"><%= t('इमेल', 'Email') %></label><input class="input" id="pf_email" name="email" type="email" value="<%= values.email || '' %>" maxlength="100"><% if (errors.email) { %><div class="field-error"><%= errors.email %></div><% } %></div>
-    <button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button>
+    <button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button>
   </div>
 </form>

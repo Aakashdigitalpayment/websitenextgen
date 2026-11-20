@@ -131,7 +131,7 @@ async function runImport(o) {
 
     log(o.dryRun ? 'Checking (dry run — nothing is written) …' : `Importing into "${o.tenant.slug}" (mode ${o.mode}) …`);
     const report = await mig.migrate({
-      tenant: o.tenant.slug, source, uploads: site.uploads || null, credKey: site.credKey || null, piiKey: site.piiKey || null,
+      tenant: o.tenant.slug, source, uploads: site.uploads || null, credKey: site.credKey || null, piiKey: site.piiKey || null, vapid: site.vapid || null,
       dryRun: !!o.dryRun, mode: o.mode === 'incremental' ? 'incremental' : 'fresh', log,
     });
     for (const w of source.parseWarnings || []) report.warnings.unshift('SQL file: ' + w);

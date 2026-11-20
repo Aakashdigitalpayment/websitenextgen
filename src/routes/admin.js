@@ -49,7 +49,6 @@ router.post('/login', ah(async (req, res) => {
 }));
 
 // second factor (TOTP or backup code)
-const usedSteps = new Map(); // "<schema>:<adminId>" -> last accepted TOTP step (replay protection)
 function pending2fa(req) {
   const p = req.session.pending2fa;
   return p && p.tenantId === req.tenant.id && Date.now() - p.at < 5 * 60_000 ? p : null;
@@ -74,12 +73,11 @@ router.post('/login/2fa', ah(async (req, res) => {
   const setup = p.mode === 'setup';
   const user = await db.one("SELECT * FROM admin_users WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(status, 'active') = 'active'", [p.id]);
   if (!user || (!setup && !user.twofa_enabled) || (setup && user.twofa_enabled) || require('../lib/license').loginBlocked(req.tenant, user)) { delete req.session.pending2fa; return res.redirect('/admin/login'); }
-  const key = db.currentSchema() + ':' + user.id;
   if (await auth.tooManyAttempts('2fa:' + user.username, req.ip)) return render2fa(req, res, p, { status: 429, error: res.locals.t('धेरै गलत प्रयास। १५ मिनेटपछि प्रयास गर्नुहोस्।', 'Too many attempts. Try again in 15 minutes.') });
   const code = String(req.body.code || '').trim();
   let ok = false;
   const step = totp.verify(setup ? p.secret : user.twofa_secret, code);
-  if (step !== null && step > (usedSteps.get(key) || 0)) { usedSteps.set(key, step); ok = true; }
+  if (step !== null && await totp.claimStep('admin_users', user.id, step)) ok = true; // replay guard in the DB (all processes)
   if (!ok && !setup && code.replace(/[^A-Za-z0-9]/g, '').length >= 8) {
     const remaining = await totp.consumeBackupCode(code, user.twofa_backup_codes);
     if (remaining) { await db.query('UPDATE admin_users SET twofa_backup_codes = $1 WHERE id = $2', [JSON.stringify(remaining), user.id]); ok = true; }
@@ -118,7 +116,7 @@ router.get('/license/blocked', ah(async (req, res) => {
   if (!b) return res.redirect('/admin/login');
   const st = require('../lib/license').status(req.tenant);
   const notices = await db.many("SELECT * FROM site_license_renewal_notices WHERE status = 'pending' ORDER BY id DESC LIMIT 5");
-  res.render('admin/license-blocked', { layout: 'auth', title: res.locals.t('सेवा नवीकरण', 'Licence renewal'), st, pay: require('../lib/license').payInfo(), notices, username: b.username });
+  res.render('admin/license-blocked', { layout: 'auth', title: res.locals.t('सेवा नवीकरण', 'Licence renewal'), st, pay: require('../lib/license').payInfo(res.locals.settings), notices, username: b.username });
 }));
 router.post('/license/blocked', licenseLimiter, ah(async (req, res) => {
   const b = blockedStash(req);
@@ -137,7 +135,7 @@ async function submitLicenseNotice(req, res, who) {
   await db.query(`INSERT INTO site_license_renewal_notices (status, gateway, txn_reference, amount_reported, note, submitted_by_admin_id, submitted_by_username, created_at) VALUES ('pending', $1, $2, $3, $4, $5, $6, now())`,
     [gateway, txn, amount, note, who.adminId, who.username]);
   await auth.audit(req, 'license_notice', 'site_license_renewal_notices', null, `Renewal notice ${txn}`, { actorId: who.adminId, actorName: who.username });
-  const vendor = require('../lib/license').payInfo().vendorEmail;
+  const vendor = require('../lib/license').payInfo(res.locals.settings).vendorEmail;
   if (vendor && util.isEmail(vendor)) {
     notify.later(() => notify.sendEmail('license_notice', vendor, `Licence renewal notice: ${req.tenant.name}`,
       `Cooperative: ${req.tenant.name} (${req.tenant.slug})\nBy: ${who.username}\nVia: ${gateway}\nReference: ${txn}\nAmount: ${amount}\nNote: ${note || ''}`));
@@ -595,6 +593,14 @@ async function settingsPage(req, res, { tab, errors = {}, posted = null, status 
     oauthRedirect: `${req.protocol}://${req.get('host')}/member/oauth/google/callback`, facebookRedirect: `${req.protocol}://${req.get('host')}/member/oauth/facebook/callback`,
   });
 }
+// ai-settings.php: test the saved AI provider / model / key
+router.post('/settings/ai-test', requireAdmin('admin'), ah(async (req, res) => {
+  const r = await require('../lib/ai-chat').testConnection();
+  await auth.audit(req, 'ai_test', 'settings', null, `AI connection test (${r.provider}/${r.model}): ${r.ok ? 'OK' : 'failed'}`);
+  if (r.ok) flash(req, 'success', res.locals.t(`जडान ठीक छ (${r.provider}/${r.model}): ${r.text}`, `Connection OK (${r.provider}/${r.model}): ${r.text}`));
+  else flash(req, 'error', res.locals.t(`जडान असफल (${r.provider}/${r.model}): ${r.error}`, `Connection failed (${r.provider}/${r.model}): ${r.error}`));
+  res.redirect('/admin/settings?tab=ai');
+}));
 router.get('/settings', requireAdmin('admin'), ah((req, res) => settingsPage(req, res, { tab: String(req.query.tab || 'general') })));
 
 router.post('/settings', requireAdmin('admin'), (req, res, next) => {
@@ -881,6 +887,14 @@ router.post('/notifications/push/clear-expired', requireAdmin('admin'), ah(async
   res.redirect('/admin/notifications');
 }));
 
+// notification-settings.php "clear old logs": delivery log entries older than 30 days
+router.post('/notifications/clear-old', requireAdmin('admin'), ah(async (req, res) => {
+  const r = await db.query("DELETE FROM notification_log WHERE created_at < now() - interval '30 days'");
+  await auth.audit(req, 'notification_log_clear', 'notification_log', null, `${r.rowCount} log entries older than 30 days removed`);
+  flash(req, 'success', res.locals.t(`${r.rowCount} पुराना लग हटाइए।`, `${r.rowCount} old log entries removed.`));
+  res.redirect('/admin/notifications');
+}));
+
 // send one template with sample values (legacy notification-templates.php test)
 router.post('/notifications/template-test', requireAdmin('admin'), ah(async (req, res) => {
   const tpl = await db.one('SELECT * FROM notification_templates WHERE id = $1', [util.int(req.body.template_id)]);
@@ -948,7 +962,7 @@ router.post('/2fa/disable', ah(async (req, res) => {
 // ---------------------------------------------------------------- site licence (tenant side)
 router.get('/license', requireAdmin('admin'), ah(async (req, res) => {
   const notices = await db.many('SELECT * FROM site_license_renewal_notices ORDER BY id DESC LIMIT 20');
-  res.render('admin/license', { title: res.locals.t('वेबसाइट सेवा नवीकरण', 'Website licence'), notices, pay: require('../lib/license').payInfo() });
+  res.render('admin/license', { title: res.locals.t('वेबसाइट सेवा नवीकरण', 'Website licence'), notices, pay: require('../lib/license').payInfo(res.locals.settings) });
 }));
 // withdraw a notice sent by mistake (legacy site-license.php cancel)
 router.post('/license/cancel', requireAdmin('admin'), ah(async (req, res) => {

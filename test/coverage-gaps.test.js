@@ -1,0 +1,727 @@
+'use strict';
+/** Gaps closed from docs/parity/coverage.md (SM-n = Part A §6, B-n = Part B §7). */
+process.env.DEFAULT_TENANT = '';
+process.env.BASE_DOMAIN = 'app.local';
+process.env.PLATFORM_HOST = 'platform.app.local';
+process.env.PII_KEY = process.env.PII_KEY || 'test-only-pii-key-0123456789abcdef0123456789';
+delete process.env.TRUST_PROXY;
+
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const request = require('supertest');
+const fs = require('fs');
+const path = require('path');
+const db = require('../src/db');
+const tenants = require('../src/lib/tenants');
+const config = require('../src/config');
+const { createApp } = require('../src/app');
+
+const SUFFIX = Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 4);
+const A = 'cg' + SUFFIX, HA = `${A}.app.local`, PW = 'Admin@12345!';
+const inA = fn => db.withSchema('tenant_' + A, fn);
+let app;
+
+function client(host = HA) {
+  const agent = request.agent(app);
+  return {
+    agent,
+    get: url => agent.get(url).set('Host', host),
+    async token(url) {
+      const r = await agent.get(url).set('Host', host);
+      const m = r.text.match(/name="_csrf" value="([^"]+)"/);
+      assert.ok(m, 'csrf token on ' + url + ' (' + r.status + ')');
+      return m[1];
+    },
+    async form(url, data, tokenUrl = url) {
+      const _csrf = await this.token(tokenUrl);
+      return agent.post(url).set('Host', host).type('form').send({ _csrf, ...data });
+    },
+  };
+}
+async function adminClient() {
+  const c = client();
+  const r = await c.form('/admin/login', { username: 'admin', password: PW });
+  assert.equal(r.status, 302, 'admin login');
+  return c;
+}
+async function seedMember(sid, phone, { name = 'Member ' + sid, kycName = 'KYC ' + sid } = {}) {
+  return inA(async () => {
+    const m = await db.one(`INSERT INTO members (name, name_np, phone, email, sadasyata_number, approval_status, is_active)
+                            VALUES ($1, $2, $3, $4, $5, 'approved', 1) RETURNING *`, [name, 'सदस्य ' + sid, phone, sid.toLowerCase() + '@example.com', sid]);
+    const k = await db.one(`INSERT INTO kyc_applications (tracking_id, member_id, full_name, full_name_en, mobile, email, permanent_address, citizenship_no, status, father_name, dob_bs, photo)
+                            VALUES ($1, $2, $3, $4, $5, $6, 'Kathmandu-5', '11-22-3334567', 'approved', $7, '2040-01-15', 'kyc/p.jpg') RETURNING *`,
+    ['KY-' + sid, sid, kycName, kycName, phone, 'kyc.' + sid.toLowerCase() + '@example.com', 'Father of ' + kycName]);
+    await db.query('UPDATE members SET kyc_application_id = $1 WHERE id = $2', [k.id, m.id]);
+    return { m, k };
+  });
+}
+
+before(async () => {
+  await tenants.applyPlatformSchema();
+  await tenants.createTenant({ slug: A, name: 'Coverage A', domains: [HA], adminPassword: PW });
+  await inA(async () => {
+    await db.query('UPDATE admin_users SET must_change_password = 0');
+    await require('../src/lib/settings').set('spam_math_captcha', '0');
+  });
+  app = require('http').createServer(createApp());
+  await new Promise(r => app.listen(0, '127.0.0.1', r));
+});
+
+after(async () => {
+  await new Promise(r => app.close(r));
+  await db.query(`DROP SCHEMA IF EXISTS tenant_${A} CASCADE`);
+  await db.query('DELETE FROM platform.tenants WHERE slug = $1', [A]);
+  fs.rmSync(path.join(config.uploadDir, A), { recursive: true, force: true });
+  await db.pool.end();
+});
+
+// ---------------------------------------------------------------- SM-1 derived CVV on PHP-issued cards
+test('SM-1: PHP derived CVV (name + Member ID) verifies; Node 4-digit CVV still works; wrong tries lock', async () => {
+  const portal = require('../src/lib/member-portal');
+  assert.equal(portal.deriveCardCvv('Sujan Sharma', 'MEM-2081-0123'), 'SUJ0123');
+  assert.equal(portal.deriveCardCvv('  jo   doe', '7'), 'JOX0007');
+  assert.equal(portal.deriveCardCvv('सुजन शर्मा', 'A-12345'), 'सुज2345');
+  assert.equal(portal.deriveCardCvv('रा', ''), 'राX0000');
+  assert.equal(portal.cvvMatches(' suj 0123 ', '1234', ['SUJ0123']), true);
+  assert.equal(portal.cvvMatches('1234', '1234', ['SUJ0123']), true);
+  assert.equal(portal.cvvMatches('SUJ0124', '1234', ['SUJ0123']), false);
+  assert.equal(portal.cvvMatches('', '', []), false);
+
+  const { m } = await seedMember('CV-0123', '9841600001', { kycName: 'Sujan Sharma' });
+  await inA(() => db.query(`INSERT INTO member_id_cards (member_id, card_no, verification_code, cvv, issued_date, expiry_date, status)
+                            VALUES ($1, 'CARD-2081-0001', 'TST-CVVA-BBBB', 'SUJ0123', CURRENT_DATE, CURRENT_DATE + 365, 'active')`, [String(m.id)]));
+  const c = client();
+  let r = await c.form('/verify', { mode: 'code', code: 'TST-CVVA-BBBB', cvv: 'suj0123' });
+  assert.match(r.text, /badge-ok/, 'lower-case derived CVV verifies');
+  assert.match(r.text, /name="cvv" maxlength="20"/);
+  r = await c.form('/verify', { mode: 'name', name: 'Sujan Sharma', member_no: 'CV-0123', mobile: '9841600001', cvv: 'SUJ0123' });
+  assert.match(r.text, /badge-ok/, 'derived CVV accepted on the name path');
+  assert.equal(await inA(() => db.value("SELECT failed_verify_count FROM member_id_cards WHERE card_no = 'CARD-2081-0001'")), 0);
+
+  // a Node card (random 4 digits) still verifies with its stored CVV
+  const { m: m2 } = await seedMember('CV-0200', '9841600002');
+  await inA(() => db.query(`INSERT INTO member_id_cards (member_id, card_no, verification_code, cvv, issued_date, expiry_date, status)
+                            VALUES ($1, 'CARD-2081-0002', 'TST-CVVB-BBBB', '4321', CURRENT_DATE, CURRENT_DATE + 365, 'active')`, [String(m2.id)]));
+  r = await c.form('/verify', { mode: 'code', code: 'TST-CVVB-BBBB', cvv: '४३२१' });
+  assert.match(r.text, /badge-ok/);
+  for (let i = 0; i < 5; i++) r = await c.form('/verify', { mode: 'code', code: 'TST-CVVA-BBBB', cvv: 'SUJ0124' });
+  assert.match(r.text, /LOCK/, 'wrong derived CVV counts toward the lock');
+});
+
+// ---------------------------------------------------------------- SM-2 legacy /assets/uploads URLs
+test('SM-2: /assets/uploads/<public folder> redirects to /uploads; gated folders are never public', async () => {
+  const up = require('../src/lib/uploads');
+  const dir = path.join(config.uploadDir, A);
+  fs.mkdirSync(path.join(dir, 'news'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'news', 'x.jpg'), 'img');
+  let r = await client().get('/assets/uploads/news/x.jpg?v=2');
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.location, '/uploads/news/x.jpg?v=2');
+  assert.equal((await client().get('/uploads/news/x.jpg')).status, 200);
+  assert.equal((await client().get('/assets/uploads/kyc/x.jpg')).status, 404);
+  assert.equal((await client().get('/assets/uploads/admin-replies/r.pdf')).status, 404);
+  assert.equal((await client().get('/assets/uploads/_private/kyc/x.jpg')).status, 404);
+  const admin = await adminClient();
+  r = await admin.get('/assets/uploads/kyc/x.jpg');
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.location, '/admin/files/_private/kyc/x.jpg');
+  assert.equal(up.mediaUrl('assets/images/logo.png'), '');
+  assert.equal(up.mediaUrl('assets/uploads/loan/a.pdf'), '/admin/files/_private/loan/a.pdf');
+});
+
+// ---------------------------------------------------------------- SM-3 gated folders → private storage
+test('SM-3: migration moves every file of the PHP-gated folders to private storage and rewrites stored paths', async () => {
+  const mig = require('../src/lib/site-migration');
+  const dir = path.join(config.uploadDir, A);
+  const put = (rel, body = 'x') => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), body); };
+  for (const f of ['kyc/a.jpg', 'kyc/orphan.jpg', 'loan/b.pdf', 'loan/c.pdf', 'admin-replies/r.pdf', 'welfare_claims/sub/w.pdf', 'news/n.jpg']) put(f);
+  assert.equal((await client().get('/uploads/kyc/orphan.jpg')).status, 404, 'gated folder blocked even before the move');
+  const ids = await inA(async () => {
+    await require('../src/lib/settings').set('site_url', 'https://www.oldcoop.example');
+    const loan = await db.value(`INSERT INTO loan_applications (full_name, mobile, documents, admin_attachment) VALUES ('L', '9841000000', 'assets/uploads/loan/b.pdf, loan/c.pdf', 'admin-replies/r.pdf') RETURNING id`);
+    const news = await db.value(`INSERT INTO news (title, content) VALUES ('N', $1) RETURNING id`,
+      ['<p><img src="https://oldcoop.example/assets/uploads/news/n.jpg"> <a href="/assets/uploads/kyc/a.jpg">doc</a> see loan/b.pdf in text</p>']);
+    return { loan, news };
+  });
+  const r = await inA(() => mig.protectGatedUploads(dir));
+  assert.ok(r.moved >= 6, 'moved ' + r.moved);
+  for (const f of ['kyc/a.jpg', 'kyc/orphan.jpg', 'loan/b.pdf', 'loan/c.pdf', 'admin-replies/r.pdf', 'welfare_claims/sub/w.pdf']) {
+    assert.ok(fs.existsSync(path.join(dir, '_private', f)), f + ' is private');
+    assert.ok(!fs.existsSync(path.join(dir, f)), f + ' left the public folder');
+  }
+  assert.ok(fs.existsSync(path.join(dir, 'news/n.jpg')), 'public folders stay');
+  const loan = await inA(() => db.one('SELECT documents, admin_attachment FROM loan_applications WHERE id = $1', [ids.loan]));
+  assert.equal(loan.documents, '_private/loan/b.pdf,_private/loan/c.pdf');
+  assert.equal(loan.admin_attachment, '_private/admin-replies/r.pdf');
+  const news = await inA(() => db.value('SELECT content FROM news WHERE id = $1', [ids.news]));
+  assert.match(news, /src="\/uploads\/news\/n\.jpg"/);
+  assert.match(news, /href="\/admin\/files\/_private\/kyc\/a\.jpg"/);
+  assert.match(news, /see loan\/b\.pdf in text/, 'free text untouched');
+  // re-run is a no-op
+  const again = await inA(() => mig.protectGatedUploads(dir));
+  assert.equal(again.moved, 0);
+  assert.equal(await inA(() => db.value('SELECT documents FROM loan_applications WHERE id = $1', [ids.loan])), '_private/loan/b.pdf,_private/loan/c.pdf');
+  assert.ok(mig.fileColumns().loan_applications.some(c => c.col === 'admin_attachment' && c.private));
+  const admin = await adminClient();
+  assert.equal((await admin.get('/admin/files/_private/loan/c.pdf')).status, 200);
+});
+
+// ---------------------------------------------------------------- SM-5 members-only reports private
+test('SM-5: report / institutional-profile files are private; migrated members-only files are moved up front', async () => {
+  const mig = require('../src/lib/site-migration');
+  const { resources } = require('../src/modules/resources');
+  assert.ok(resources.reports.privateFiles && resources.institutional_profile.privateFiles, 'uploads go to _private from the start');
+  const dir = path.join(config.uploadDir, A);
+  fs.mkdirSync(path.join(dir, 'reports'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'reports', 'agm.pdf'), '%PDF-1.4');
+  const id = await inA(() => db.value(`INSERT INTO reports (title, title_np, file_path, access_level, is_active) VALUES ('AGM', 'साधारण सभा', 'assets/uploads/reports/agm.pdf', 'member', 1) RETURNING id`));
+  await inA(() => mig.privatiseFileColumns(dir));
+  assert.equal(await inA(() => db.value('SELECT file_path FROM reports WHERE id = $1', [id])), '_private/reports/agm.pdf');
+  assert.equal((await client().get('/uploads/reports/agm.pdf')).status, 404);
+  assert.equal((await client().get('/reports/' + id + '/file')).status, 403, 'members only');
+});
+
+// ---------------------------------------------------------------- SM-6 / SM-7 card lookup and partner QR
+test('SM-6: card lookup by code without dashes or by card number; SM-7: verify.php keeps the partner', async () => {
+  const { m } = await seedMember('CL-0300', '9841600003', { kycName: 'Hari Prasad' });
+  await inA(() => db.query(`INSERT INTO member_id_cards (member_id, card_no, verification_code, cvv, issued_date, expiry_date, status)
+                            VALUES ($1, 'BAN-2026-00031', 'BAN-AB12-CD34', '5555', CURRENT_DATE, CURRENT_DATE + 365, 'active')`, [String(m.id)]));
+  const c = client();
+  let r = await c.form('/verify', { mode: 'code', code: 'banab12cd34', cvv: '5555' });
+  assert.match(r.text, /badge-ok/, 'code without dashes');
+  r = await c.form('/verify', { mode: 'code', code: 'BAN202600031', cvv: 'HAR0300' });
+  assert.match(r.text, /badge-ok/, 'card number without dashes + derived CVV');
+  r = await c.form('/verify', { mode: 'code', code: 'BAN-2026-00031', cvv: '5555' });
+  assert.match(r.text, /badge-ok/, 'card number as printed');
+  const legacy = require('../src/lib/legacy-urls');
+  assert.equal(legacy.PUBLIC['verify.php']({ partner: 'HOSP1' }), '/verify?partner=HOSP1');
+  assert.equal(legacy.PUBLIC['verify.php']({ partner_id: '7', x: 'y' }), '/verify?partner_id=7');
+  r = await client().get('/verify.php?partner=HOSP1');
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.location, '/verify?partner=HOSP1');
+});
+
+async function memberClient(sid) {
+  await inA(async () => db.query('UPDATE members SET password_hash = $1 WHERE sadasyata_number = $2', [await require('bcryptjs').hash('Member@12345', 4), sid]));
+  const c = client();
+  const r = await c.form('/member/login', { identifier: sid, password: 'Member@12345' });
+  assert.equal(r.status, 302, 'member login ' + sid);
+  return c;
+}
+
+// ---------------------------------------------------------------- SM-8 certificate KYM details
+test('SM-8: membership certificate shows the linked KYM details, citizenship masked', async () => {
+  await seedMember('CT-0400', '9841600004', { kycName: 'Gita Rai' });
+  await inA(() => db.query("UPDATE kyc_applications SET account_type = 'Saving' WHERE member_id = 'CT-0400'"));
+  const c = await memberClient('CT-0400');
+  const r = await c.get('/member/certificate');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /Father of Gita Rai/);
+  assert.match(r.text, /Kathmandu-5/);
+  assert.match(r.text, /Saving/);
+  assert.match(r.text, /•+4567/);
+  assert.doesNotMatch(r.text, /11-22-3334567/, 'citizenship number is masked');
+  assert.match(r.text, /src="\/member\/kyc-print\/file\/photo"/);
+});
+
+// ---------------------------------------------------------------- SM-9 / SM-14 / B-14 attendance void + requests + audit
+test('SM-9: staff void only their own check-ins; SM-14: a check-in closes the pending request; void audit payload + IP', async () => {
+  const att = require('../src/lib/attendance');
+  const { m } = await seedMember('AT-0500', '9841600005');
+  const { m: m2 } = await seedMember('AT-0501', '9841600006');
+  const ids = await inA(async () => {
+    await db.query("INSERT INTO admin_users (username, password, full_name, role, is_active, status) VALUES ('staffcg1', $1, 'Staff One', 'staff', 1, 'active'), ('staffcg2', $1, 'Staff Two', 'staff', 1, 'active')", [require('bcryptjs').hashSync(PW, 4)]);
+    const s1 = await db.value("SELECT id FROM admin_users WHERE username = 'staffcg1'");
+    const s2 = await db.value("SELECT id FROM admin_users WHERE username = 'staffcg2'");
+    const pid = await db.value("INSERT INTO upcoming_programs (title, is_active) VALUES ('AGM', 1) RETURNING id");
+    const program = await db.one('SELECT * FROM upcoming_programs WHERE id = $1', [pid]);
+    await db.query("INSERT INTO member_program_attendance_requests (member_id, program_id, program_title, status, requested_at) VALUES ($1, $2, 'AGM', 'pending', now())", [m.id, pid]);
+    const a1 = (await att.record({ member: m, program, method: 'ADMIN_MANUAL', source: 'admin_desk', staffAdminId: s2 })).row;
+    const a2 = (await att.record({ member: m2, program, method: 'ADMIN_MANUAL', source: 'admin_desk', staffAdminId: s1 })).row;
+    return { s1, s2, pid, a1: a1.id, a2: a2.id };
+  });
+  assert.equal(await inA(() => db.value('SELECT status FROM member_program_attendance_requests WHERE member_id = $1', [m.id])), 'approved', 'pending request closed');
+  assert.equal(att.canVoid({ id: 1, role: 'admin' }, { staff_admin_id: 99 }), true);
+  assert.equal(att.canVoid({ id: ids.s1, role: 'staff' }, { staff_admin_id: ids.s2 }), false);
+  const c = client();
+  assert.equal((await c.form('/admin/login', { username: 'staffcg1', password: PW })).status, 302);
+  const page = await c.get('/admin/programs/' + ids.pid);
+  assert.equal(page.status, 200);
+  assert.ok(page.text.includes(`/attendance/${ids.a2}/void`) && !page.text.includes(`/attendance/${ids.a1}/void`), 'void button only on own records');
+  await c.form(`/admin/programs/${ids.pid}/attendance/${ids.a1}/void`, { reason: 'x' }, '/admin/programs/' + ids.pid);
+  assert.equal(await inA(() => db.value('SELECT attendance_status FROM member_program_attendance WHERE id = $1', [ids.a1])), 'VALID', 'other staff record not voided');
+  await c.form(`/admin/programs/${ids.pid}/attendance/${ids.a2}/void`, { reason: 'mistake' }, '/admin/programs/' + ids.pid);
+  assert.equal(await inA(() => db.value('SELECT attendance_status FROM member_program_attendance WHERE id = $1', [ids.a2])), 'VOID');
+  const log = await inA(() => db.one("SELECT payload_json, ip_address FROM program_audit_logs WHERE attendance_id = $1 AND action_type = 'void'", [ids.a2]));
+  assert.equal(JSON.parse(log.payload_json).attendance_method, 'ADMIN_MANUAL');
+  assert.ok(log.ip_address);
+});
+
+// ---------------------------------------------------------------- SM-12 status notification goes to the right member
+test('SM-12: status notification resolves the member by portal id, Member ID, then a unique phone (+ email)', async () => {
+  const notify = require('../src/lib/notify');
+  const modules = require('../src/modules/applications');
+  const loan = modules.loan;
+  const { m: a } = await seedMember('NT-0600', '9841600007');
+  const { m: b } = await seedMember('NT-0601', '9841600008');
+  await inA(() => db.query("UPDATE members SET phone = '+977-9841600007' WHERE id = $1", [b.id])); // shared, reformatted phone
+  const row = { id: 77, tracking_id: 'LN-TEST', [loan.nameCol]: 'Ram Bahadur', [loan.phoneCol]: '9841600007' };
+  assert.equal(await inA(() => notify.memberForRequest(loan, row)), null, 'shared phone without email: nobody');
+  assert.equal((await inA(() => notify.memberForRequest(loan, { ...row, email: 'nt-0601@example.com' }))).id, b.id, 'email decides');
+  assert.equal((await inA(() => notify.memberForRequest(loan, { ...row, member_portal_id: a.id }))).id, a.id, 'portal id first');
+  if (loan.memberCol) assert.equal((await inA(() => notify.memberForRequest(loan, { ...row, [loan.memberCol]: 'nt-0601' }))).id, b.id, 'Member ID');
+  await inA(() => notify.memberStatusNotification(loan, { ...row, member_portal_id: a.id }, 'approved', 'OK from office'));
+  const n = await inA(() => db.one('SELECT * FROM member_notifications WHERE member_id = $1 ORDER BY id DESC LIMIT 1', [a.id]));
+  assert.match(n.message, /^Ram जी, तपाईंको .+ आवेदनको अवस्था «स्वीकृत» भएको छ।/);
+  assert.match(n.message, /Tracking ID: LN-TEST/);
+  assert.match(n.message, /Admin टिप्पणी: OK from office/);
+  assert.equal(n.link, '/member/requests/loan/77');
+});
+
+// ---------------------------------------------------------------- B-1 / B-16 CSP regression + view lint (smoke-csp, smoke-img-alt, smoke-security)
+function viewFiles(dir = path.join(__dirname, '..', 'views')) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? viewFiles(path.join(dir, e.name)) : e.name.endsWith('.ejs') ? [path.join(dir, e.name)] : []));
+}
+const stripEjs = s => s.replace(/<%[\s\S]*?%>/g, 'X');
+
+test('B-1: strict CSP header on public, member and admin pages; no inline scripts or on*= handlers in views', async () => {
+  for (const url of ['/', '/member/login', '/admin/login']) {
+    const r = await client().get(url);
+    const csp = r.headers['content-security-policy'] || '';
+    const script = (csp.match(/script-src ([^;]*)/) || [])[1] || '';
+    assert.ok(script, url + ': script-src present');
+    assert.doesNotMatch(script, /unsafe-inline|unsafe-eval/, url + ': no unsafe script-src');
+    for (const src of script.trim().split(/\s+/)) assert.ok(["'self'", 'https://challenges.cloudflare.com'].includes(src), url + ': unexpected script source ' + src);
+    assert.match(csp, /script-src-attr 'none'/, url + ': no inline handlers');
+    assert.match(csp, /object-src 'none'/);
+    assert.match(csp, /frame-ancestors 'self'/);
+    assert.equal(r.headers['x-content-type-options'], 'nosniff');
+    assert.ok(r.headers['referrer-policy']);
+  }
+  const bad = [];
+  for (const f of viewFiles()) {
+    const s = stripEjs(fs.readFileSync(f, 'utf8'));
+    const rel = path.relative(path.join(__dirname, '..'), f);
+    for (const m of s.matchAll(/<script\b([^>]*)>/gi)) if (!/\ssrc=/i.test(m[1]) && !/type="application\/ld\+json"/i.test(m[1])) bad.push(rel + ': inline <script>');
+    for (const m of s.matchAll(/<[a-z][a-z0-9-]*\b[^>]*?\s(on[a-z]+)\s*=/gi)) bad.push(rel + ': ' + m[1] + '= handler');
+    for (const m of s.matchAll(/<img\b[^>]*>/gi)) if (!/\salt=/i.test(m[0])) bad.push(rel + ': <img> without alt');
+    for (const m of s.matchAll(/<a\b[^>]*target="_blank"[^>]*>/gi)) if (!/rel="[^"]*noopener/i.test(m[0])) bad.push(rel + ': target=_blank without rel=noopener');
+    for (const m of s.matchAll(/<(?:script|link)\b[^>]*(?:src|href)="(https?:)?\/\/(?!fonts\.googleapis\.com|fonts\.gstatic\.com|challenges\.cloudflare\.com)[^"]*"/gi)) bad.push(rel + ': external asset ' + m[0].slice(0, 60));
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('B-16: form labels point at an existing control (smoke-form-a11y)', () => {
+  const bad = [];
+  for (const f of viewFiles()) {
+    const s = fs.readFileSync(f, 'utf8');
+    if (/<%[^%]*include\(/.test(s) && !/<label\b/.test(s)) continue;
+    for (const m of s.matchAll(/<label\b[^>]*\sfor="([^"<]+)"/gi)) {
+      const id = m[1];
+      if (id.includes('<%')) continue; // dynamic ids are checked at render time
+      if (!s.includes(`id="${id}"`) && !s.includes(`'${id}'`)) bad.push(path.basename(f) + ': label for="' + id + '"');
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('B-16: concurrent double check-in keeps one VALID row; over-size capture gives a clear message', async () => {
+  const att = require('../src/lib/attendance');
+  const { m } = await seedMember('CC-0700', '9841600009');
+  const out = await inA(async () => {
+    const pid = await db.value("INSERT INTO upcoming_programs (title, is_active) VALUES ('Race', 1) RETURNING id");
+    const program = await db.one('SELECT * FROM upcoming_programs WHERE id = $1', [pid]);
+    const rs = await Promise.all([1, 2, 3].map(() => att.record({ member: m, program, method: 'ADMIN_MANUAL', source: 'admin_desk' })));
+    return { rs, n: await db.value("SELECT count(*) FROM member_program_attendance WHERE program_id = $1 AND attendance_status = 'VALID'", [pid]) };
+  });
+  assert.equal(Number(out.n), 1);
+  assert.equal(out.rs.filter(r => r.row).length, 1);
+  const up = require('../src/lib/uploads');
+  const big = 'data:image/jpeg;base64,' + Buffer.alloc(1.2 * 1024 * 1024, 1).toString('base64');
+  const r = up.saveDataUrl({ tenant: { slug: A } }, 'kyc', big, { maxMb: 1 });
+  assert.match(r.error, /1MB भन्दा ठूलो/);
+});
+
+test('B-16: every admin <button> declares its type (smoke-admin-buttons)', () => {
+  const bad = [];
+  for (const f of viewFiles(path.join(__dirname, '..', 'views', 'admin'))) {
+    for (const m of stripEjs(fs.readFileSync(f, 'utf8')).matchAll(/<button\b[^>]*>/gi)) if (!/\stype=/i.test(m[0])) bad.push(path.basename(f) + ': ' + m[0].slice(0, 60));
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('B-16: an over-size admin upload reports "too large", not a CSRF error (smoke-report-upload)', async () => {
+  const c = await adminClient();
+  const tok = await c.token('/admin/r/reports/new');
+  const big = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(21 * 1024 * 1024, 32)]);
+  const r = await c.agent.post('/admin/r/reports?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('title_np', 'Big').field('access_level', 'none').attach('file_path', big, 'big.pdf');
+  assert.equal(r.status, 422);
+  assert.match(r.text, /MB भन्दा ठूलो/);
+  assert.doesNotMatch(r.text, /Form expired|फारमको समय सकियो/);
+});
+
+// ---------------------------------------------------------------- B-2 chunked member import commit
+test('B-2: member import commits in batches with progress, resumes, and retries failed rows', async () => {
+  const mi = require('../src/lib/member-import');
+  const c = await adminClient();
+  const lines = ['member_id,full_name,mobile'];
+  for (let i = 0; i < 7; i++) lines.push(`MI-${100 + i},Import ${i},98417${String(10000 + i).slice(-5)}`);
+  const tok = await c.token('/admin/members/import');
+  let r = await c.agent.post('/admin/members/import?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('mode', 'skip').attach('csv', Buffer.from(lines.join('\n') + '\n'), 'm.csv');
+  assert.equal(r.status, 302, r.text.slice(0, 200));
+  const jobId = Number(r.headers.location.split('/').pop());
+  const first = await inA(() => mi.commitChunk(jobId, 1, { limit: 3 }));
+  assert.equal(first.ok, 3);
+  assert.equal(first.remaining, 4);
+  let st = await c.get(`/admin/members/import/${jobId}/status.json`);
+  assert.equal(st.body.status, 'running');
+  assert.equal(st.body.processed, 3);
+  assert.equal(st.body.total, 7);
+  const page = await c.get(`/admin/members/import/${jobId}`);
+  assert.match(page.text, /data-import-progress/);
+  assert.match(page.text, /<progress id="import_bar" max="7" value="3"/);
+  // a row that fails, then is retried after the cause is fixed
+  await inA(() => db.query("INSERT INTO members (name, phone, email, sadasyata_number, approval_status, is_active) VALUES ('Taken', '9800000000', 'x@example.com', 'MI-999', 'approved', 1)"));
+  await inA(() => db.query("UPDATE member_import_rows SET email = 'x@example.com' WHERE job_id = $1 AND sadasyata_number = 'MI-106'", [jobId]));
+  r = await c.agent.post(`/admin/members/import/${jobId}/commit`).set('Host', HA).set('Accept', 'application/json').set('x-csrf-token', await c.token(`/admin/members/import/${jobId}`));
+  assert.equal(r.body.ok, true);
+  assert.equal(r.body.status, 'done');
+  assert.equal(r.body.failed, 1);
+  await inA(() => db.query("UPDATE member_import_rows SET email = '' WHERE job_id = $1 AND sadasyata_number = 'MI-106'", [jobId]));
+  r = await c.form(`/admin/members/import/${jobId}/retry`, {}, `/admin/members/import/${jobId}`);
+  assert.equal(r.status, 302);
+  assert.equal((await inA(() => mi.progress(jobId))).status, 'running');
+  await inA(() => mi.commit(jobId, 1));
+  const p = await inA(() => mi.progress(jobId));
+  assert.equal(p.status, 'done');
+  assert.equal(p.saved, 7);
+  assert.equal(p.failed, 0);
+  assert.equal(Number(await inA(() => db.value("SELECT count(*) FROM members WHERE sadasyata_number LIKE 'MI-1%'"))), 7);
+});
+
+// ---------------------------------------------------------------- B-3 settings read by the site are editable
+test('B-3: hero_title / hero_subtitle / pwa_app_name / site_version are in the settings registry and used', async () => {
+  const SD = require('../src/lib/setting-defs');
+  for (const k of ['hero_title', 'hero_subtitle', 'pwa_app_name', 'site_version']) assert.ok(SD.DEFS.some(x => x.key === k && x.group === 'general'), k);
+  await inA(async () => {
+    const st = require('../src/lib/settings');
+    await st.set('pwa_app_name', 'Coop App Full');
+    await st.set('site_version', '7.1');
+    st.invalidate();
+    require('../src/lib/public-cache').clear();
+  });
+  const man = await client().get('/manifest.webmanifest');
+  assert.match(man.text, /Coop App Full/);
+  const c = await adminClient();
+  assert.match((await c.get('/admin')).text, /admin-version[^>]*>[^<]*7\.1/);
+  assert.match((await c.get("/admin/settings")).text, /name="s_hero_title"/);
+});
+
+// ---------------------------------------------------------------- B-7 bulk activate / deactivate on generic lists
+test('B-7: resource lists with an active switch get bulk activate / deactivate (faqs, services …)', async () => {
+  const { resources } = require('../src/modules/resources');
+  assert.equal(resources.faqs.bulk, true);
+  assert.equal(resources.services.bulk, true);
+  const ids = await inA(async () => [
+    await db.value("INSERT INTO faqs (question, answer, is_active) VALUES ('Q1', 'A1', 1) RETURNING id"),
+    await db.value("INSERT INTO faqs (question, answer, is_active) VALUES ('Q2', 'A2', 1) RETURNING id"),
+  ]);
+  const c = await adminClient();
+  assert.match((await c.get('/admin/r/faqs')).text, /action="\/admin\/r\/faqs\/bulk"/);
+  const r = await c.agent.post('/admin/r/faqs/bulk').set('Host', HA).type('form')
+    .send(`_csrf=${encodeURIComponent(await c.token('/admin/r/faqs'))}&action=deactivate&ids=${ids[0]}&ids=${ids[1]}`);
+  assert.equal(r.status, 302);
+  assert.equal(Number(await inA(() => db.value('SELECT count(*) FROM faqs WHERE id = ANY($1::int[]) AND is_active = 0', [ids]))), 2);
+});
+
+// ---------------------------------------------------------------- B-5 AI connection test
+test('B-5: AI connection test button reports the provider result (or the missing key) and is audited', async () => {
+  const c = await adminClient();
+  const page = await c.get('/admin/settings?tab=ai');
+  assert.match(page.text, /action="\/admin\/settings\/ai-test"/);
+  let r = await c.form('/admin/settings/ai-test', {}, '/admin/settings?tab=ai');
+  assert.equal(r.status, 302);
+  assert.match((await c.get('/admin/settings?tab=ai')).text, /API key is not set/);
+  const ai = require('../src/lib/ai-chat');
+  const realFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'OK' } }] }) });
+  try {
+    await inA(async () => { const st = require('../src/lib/settings'); await st.set('ai_provider', 'openai'); await st.set('ai_api_key', 'sk-test'); st.invalidate(); });
+    const out = await inA(() => ai.testConnection());
+    assert.equal(out.ok, true);
+    assert.equal(out.text, 'OK');
+  } finally { global.fetch = realFetch; }
+  assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'ai_test' LIMIT 1")));
+});
+
+// ---------------------------------------------------------------- B-6 admin bell
+test('B-6: admin bell counts KYM risk reviews, marketplace listings and attendance requests; opens once per increase', async () => {
+  const c = await adminClient();
+  await seedMember('BL-0800', '9841600010');
+  await c.get('/admin'); // settle the "seen" total
+  await inA(async () => {
+    await db.query("UPDATE kyc_applications SET risk_review_status = 'due_review' WHERE member_id = 'BL-0800'");
+    const mid = await db.value("SELECT id FROM members WHERE sadasyata_number = 'BL-0800'");
+    await db.query("INSERT INTO member_marketplace_listings (member_id, listing_type, title, status) VALUES ($1, 'product', 'Goats', 'pending')", [mid]);
+  });
+  let page = await c.get('/admin');
+  assert.match(page.text, /href="\/admin\/kyc-risk-reviews"/);
+  assert.match(page.text, /href="\/admin\/marketplace\?status=pending"/);
+  assert.match(page.text, /<details class="bell" open>/);
+  page = await c.get('/admin');
+  assert.match(page.text, /<details class="bell">/, 'not opened again without a new item');
+});
+
+// ---------------------------------------------------------------- B-9 / SM-19 information room restrict_copy, created_by, view log
+test('B-9 / SM-19: information room "block copy / print", created_by stamp, view logged once', async () => {
+  const { resources } = require('../src/modules/resources');
+  assert.ok(resources.information_room_items.fields.some(f => f.name === 'restrict_copy'));
+  const c = await adminClient();
+  const tok = await c.token('/admin/r/information_room_items/new');
+  let r = await c.agent.post('/admin/r/information_room_items?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('title_np', 'Board minutes').field('category', 'meeting_minutes').field('restrict_copy', '1').field('is_active', '1')
+    .attach('file_path', Buffer.from('%PDF-1.4\n%%EOF\n'), 'minutes.pdf');
+  assert.equal(r.status, 302, r.text.slice(0, 300));
+  const item = await inA(() => db.one("SELECT * FROM information_room_items WHERE title_np = 'Board minutes'"));
+  assert.ok(item.created_by > 0, 'created_by stamped');
+  assert.equal(Number(item.restrict_copy), 1);
+  await seedMember('IR-0900', '9841600011');
+  await inA(() => db.query("UPDATE members SET information_room_enabled = 1 WHERE sadasyata_number = 'IR-0900'"));
+  const m = await memberClient('IR-0900');
+  r = await m.get(`/member/information-room/${item.id}/view`);
+  assert.equal(r.status, 200);
+  assert.match(r.text, /class="ir-viewer ir-restricted" id="irViewerWrap"/);
+  assert.match(r.text, /information-room-viewer\.js/);
+  assert.doesNotMatch(r.text, /class="ir-viewer[^"]*" style=/);
+  assert.equal((await m.get(`/member/information-room/${item.id}?inline=1`)).status, 200);
+  const log = await inA(() => db.many('SELECT action FROM information_room_access_log WHERE item_id = $1', [item.id]));
+  assert.deepEqual(log.map(x => x.action), ['view'], 'one view entry, no download');
+  assert.equal(require('../src/lib/legacy-urls').PUBLIC['information-room-view.php']?.({ id: '5' }) ?? require('../src/lib/legacy-urls').MEMBER?.['information-room-view.php']?.({ id: '5' }), '/member/information-room/5/view');
+});
+
+// ---------------------------------------------------------------- B-10 clear old notification logs
+test('B-10: admin clears notification log entries older than 30 days (audited)', async () => {
+  await inA(() => db.query(`INSERT INTO notification_log (event_type, channel, recipient, subject, status, created_at) VALUES
+    ('t', 'sms', '98', 's', 'sent', now() - interval '40 days'), ('t', 'sms', '98', 's', 'sent', now())`));
+  const c = await adminClient();
+  assert.match((await c.get('/admin/notifications')).text, /action="\/admin\/notifications\/clear-old"/);
+  const r = await c.form('/admin/notifications/clear-old', {}, '/admin/notifications');
+  assert.equal(r.status, 302);
+  assert.equal(Number(await inA(() => db.value("SELECT count(*) FROM notification_log WHERE created_at < now() - interval '30 days'"))), 0);
+  assert.ok(Number(await inA(() => db.value('SELECT count(*) FROM notification_log'))) >= 1);
+  assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'notification_log_clear'")));
+});
+
+// ---------------------------------------------------------------- B-11 licence: per-tenant payment details, B.S. date
+test('B-11: platform sets the licence date in B.S. and per-tenant renewal amount / eSewa / Khalti', async () => {
+  const lic = require('../src/lib/license');
+  assert.equal(lic.parseUntil('2026-07-17'), '2026-07-17');
+  assert.equal(lic.parseUntil('२०८३-०४-०१'), require('../src/lib/nepali-date').bsToAd('2083-04-01'));
+  assert.equal(lic.payInfo({ license_esewa_id: '98000' }).esewa, '98000');
+  const user = 'opcg' + SUFFIX, pw = 'Operator@123456';
+  await db.query('INSERT INTO platform.operators (username, password, full_name) VALUES ($1, $2, $3)', [user, await require('../src/lib/auth').hashPassword(pw), 'Op']);
+  try {
+    const agent = request.agent(app), H = 'platform.app.local';
+    let r = await agent.get('/platform/login').set('Host', H);
+    r = await agent.post('/platform/login').set('Host', H).type('form').send({ _csrf: r.text.match(/name="_csrf" value="([^"]+)"/)[1], username: user, password: pw });
+    assert.equal(r.status, 302);
+    r = await agent.get('/platform').set('Host', H);
+    const csrf = r.text.match(/name="_csrf" value="([^"]+)"/)[1];
+    const tid = await db.value('SELECT id FROM platform.tenants WHERE slug = $1', [A]);
+    assert.match(r.text, new RegExp(`id="lic_bs_${tid}"`));
+    r = await agent.post(`/platform/tenants/${tid}/license`).set('Host', H).type('form')
+      .send({ _csrf: csrf, until: '', until_bs: '2090-01-01', renewal_amount: '15000', esewa_id: '9801234567', khalti_id: '' });
+    assert.equal(r.status, 302);
+    assert.equal(String((await db.value('SELECT license_valid_until::text FROM platform.tenants WHERE id = $1', [tid]))), require('../src/lib/nepali-date').bsToAd('2090-01-01'));
+    const c = await adminClient();
+    const page = await c.get('/admin/license');
+    assert.match(page.text, /9801234567/);
+    assert.match(page.text, /15000/);
+  } finally {
+    await db.query('DELETE FROM platform.operators WHERE username = $1', [user]);
+    await db.query('UPDATE platform.tenants SET license_valid_until = NULL WHERE slug = $1', [A]);
+    tenants.clearCache();
+  }
+});
+
+// ---------------------------------------------------------------- B-12 legacy admin URLs for CMS / settings pages
+test('B-12: old CMS admin URLs redirect to their Node pages', async () => {
+  const c = await adminClient();
+  for (const [from, to] of [['/admin/news.php', '/admin/r/news'], ['/admin/messages.php?view=4', '/admin/inbox/contact/4'], ['/admin/settings.php', '/admin/settings'],
+    ['/admin/team-karmachari.php', '/admin/r/team_members'], ['/admin/backup-restore.php', '/admin/backup'], ['/admin/ai-settings.php', '/admin/settings?tab=ai']]) {
+    const r = await c.get(from);
+    assert.equal(r.status, 301, from);
+    assert.equal(r.headers.location, to, from);
+  }
+  const { ADMIN } = require('../src/lib/legacy-admin-urls');
+  // every redirect target is a real admin page (signed-in admin gets 200, not 404)
+  for (const [k, fn] of Object.entries(ADMIN)) {
+    const to = fn({});
+    if (/print|\.csv|blocked|login/.test(to)) continue;
+    const r = await c.get(to);
+    assert.ok([200, 302].includes(r.status), `${k} → ${to}: ${r.status}`);
+  }
+});
+
+// ---------------------------------------------------------------- SM-16 / SM-17 legacy entry points and query params
+test('SM-16 / SM-17: unmapped PHP entry points and dropped query params', () => {
+  const { PUBLIC } = require('../src/lib/legacy-urls');
+  assert.equal(PUBLIC['backup-restore.php']({}), '/admin/backup');
+  assert.equal(PUBLIC['upload-file.php']({ d: 'kyc', f: 'a.jpg' }), '/assets/uploads/kyc/a.jpg');
+  assert.equal(PUBLIC['upload-file.php']({ d: 'kyc', f: '../x' }), '/');
+  assert.equal(PUBLIC['pwa-icon.php']({ s: '512', maskable: '1' }), '/pwa-icon-512.png?maskable=1');
+  assert.equal(PUBLIC['pwa-icon.php']({ s: '64' }), '/pwa-icon-192.png');
+  assert.equal(PUBLIC['program-attendance-verify.php']({ program_id: '9' }), '/admin/programs/9#desk');
+  assert.equal(PUBLIC['partner-facilities.php']({ type: 'hospital', view: 'table' }), '/partner-facilities?type=hospital&view=table');
+  assert.equal(PUBLIC['sahakari-patro.php']({ cal_year: '2082', cal_month: '4', sel_day: '3' }), '/calendar?y=2082&m=4');
+  assert.equal(PUBLIC['honor-apply.php']({ program_id: '3' }), '/apply/honor?program=3');
+  assert.equal(PUBLIC['news.php']({ page: '2' }), '/news?page=2');
+  assert.equal(PUBLIC['notices.php']({ page: '3' }), '/notices?page=3');
+});
+
+// ---------------------------------------------------------------- B-13 / B-17 help_topics → chatbot answers; PHP VAPID keys
+test('B-13 / B-17: help topics become assistant answers once; the PHP Web Push key pair is read and checked', async () => {
+  const mig = require('../src/lib/site-migration');
+  await inA(() => db.query(`INSERT INTO help_topics (title, title_np, content, content_np, category, is_active) VALUES
+    ('How to open an account', 'खाता कसरी खोल्ने', 'Bring citizenship.', 'नागरिकता ल्याउनुहोस्।', 'accounts', 1),
+    ('Hidden', 'लुकेको', 'x', 'x', 'general', 0)`));
+  assert.equal(await inA(() => mig.importHelpTopics()), 1);
+  assert.equal(await inA(() => mig.importHelpTopics()), 0, 'only once');
+  const faq = await inA(() => db.one("SELECT * FROM chatbot_faqs WHERE question = 'खाता कसरी खोल्ने'"));
+  assert.equal(faq.question_en, 'How to open an account');
+  assert.equal(faq.answer, 'नागरिकता ल्याउनुहोस्।');
+  // VAPID: generate a pair, write it the way push-vapid.local.php does
+  const crypto = require('crypto');
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const pem = privateKey.export({ type: 'sec1', format: 'pem' }).trim();
+  const jwk = privateKey.export({ format: 'jwk' });
+  const pub = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]).toString('base64url');
+  const php = `<?php\ndefine('COOP_VAPID_PUBLIC_KEY', '${pub}');\ndefine(\n  'COOP_VAPID_PRIVATE_PEM',\n  ` + pem.split('\n').map(l => `"${l}\\n"`).join(' .\n  ') + `\n);\n`;
+  const root = fs.mkdtempSync(path.join(require('os').tmpdir(), 'phpsite-'));
+  try {
+    fs.mkdirSync(path.join(root, 'includes'));
+    fs.writeFileSync(path.join(root, 'includes/push-vapid.local.php'), php);
+    const site = mig.readPhpSite(root);
+    assert.deepEqual(site.vapid, { publicKey: pub, privateKey: jwk.d });
+    assert.equal(mig.parseVapid(php.replace(pub, pub.slice(0, -4) + 'AAAA')), null, 'mismatched pair rejected');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+// ---------------------------------------------------------------- B-15 pages.is_new / new_until
+test('B-15: dynamic page menu items show a "New" chip until new_until', async () => {
+  const { resources } = require('../src/modules/resources');
+  assert.ok(resources.pages.fields.some(f => f.name === 'is_new') && resources.pages.fields.some(f => f.name === 'new_until'));
+  await inA(async () => {
+    await db.query(`INSERT INTO pages (slug, title, title_np, content, show_in_menu, menu_position, is_new, new_until, is_active) VALUES
+      ('fresh-page', 'Fresh page', 'नयाँ पृष्ठ', 'x', 1, 'about', 1, CURRENT_DATE + 5, 1), ('old-page', 'Old page', 'पुरानो पृष्ठ', 'x', 1, 'about', 1, CURRENT_DATE - 1, 1)`);
+    require('../src/lib/navigation').invalidate();
+    require('../src/lib/public-cache').clear();
+  });
+  const html = (await client().get('/lang/en?next=/').then(() => null), (await request(app).get('/').set('Host', HA).set('Cookie', 'lang=en')).text);
+  assert.match(html, /Fresh page <span class="badge badge-info">New<\/span>/);
+  assert.doesNotMatch(html, /Old page <span class="badge badge-info">/);
+});
+
+// ---------------------------------------------------------------- SM-20 applicant opens own documents
+test('SM-20: a member opens the documents of their own application (comma lists by ?i=), never another one', async () => {
+  const dir = path.join(config.uploadDir, A, '_private', 'loan');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'own1.pdf'), '%PDF-1.4 one');
+  fs.writeFileSync(path.join(dir, 'own2.pdf'), '%PDF-1.4 two');
+  await seedMember('OW-1000', '9841600012');
+  const ids = await inA(async () => ({
+    mine: await db.value("INSERT INTO loan_applications (full_name, mobile, documents, tracking_id) VALUES ('Own', '9841600012', '_private/loan/own1.pdf,_private/loan/own2.pdf', 'LN-OWN1') RETURNING id"),
+    other: await db.value("INSERT INTO loan_applications (full_name, mobile, documents, tracking_id) VALUES ('Other', '9841699999', '_private/loan/own1.pdf', 'LN-OTH1') RETURNING id"),
+  }));
+  const m = await memberClient('OW-1000');
+  const page = await m.get(`/member/requests/loan/${ids.mine}`);
+  assert.match(page.text, new RegExp(`/member/requests/loan/${ids.mine}/file/documents\\?i=1`));
+  let r = await m.get(`/member/requests/loan/${ids.mine}/file/documents?i=1`);
+  assert.equal(r.status, 200);
+  assert.match(String(r.body || r.text), /two/);
+  assert.equal((await m.get(`/member/requests/loan/${ids.other}/file/documents`)).status, 404, 'not their application');
+  assert.equal((await m.get(`/member/requests/loan/${ids.mine}/file/full_name`)).status, 404, 'only file fields');
+});
+
+// ---------------------------------------------------------------- SM-21 TOTP replay guard in the database
+test('SM-21: a TOTP step is accepted once per account, across processes (stored in the DB)', async () => {
+  const totp = require('../src/lib/totp');
+  const { m } = await seedMember('TP-1100', '9841600013');
+  const step = totp.currentStep();
+  await inA(async () => {
+    assert.equal(await totp.claimStep('members', m.id, step), true);
+    assert.equal(await totp.claimStep('members', m.id, step), false, 'replay refused');
+    assert.equal(await totp.claimStep('members', m.id, step - 1), false, 'older step refused');
+    assert.equal(await totp.claimStep('members', m.id, step + 1), true);
+    const admin = await db.value("SELECT id FROM admin_users WHERE username = 'admin'");
+    assert.equal(await totp.claimStep('admin_users', admin, step), true);
+    assert.equal(await totp.claimStep('admin_users', admin, step), false);
+    assert.equal(await totp.claimStep('pg_user', 1, step), false, 'table whitelist');
+  });
+});
+
+// ---------------------------------------------------------------- SM-13 social in-app browser / crawler bounce
+test('SM-13: crawlers and cold Facebook in-app opens of a report file land on the page; our own links go through', async () => {
+  const dir = path.join(config.uploadDir, A, 'reports');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'pub.pdf'), '%PDF-1.4 pub');
+  const id = await inA(() => db.value("INSERT INTO reports (title, title_np, file_path, access_level, is_active) VALUES ('Pub', 'सार्वजनिक', 'reports/pub.pdf', 'none', 1) RETURNING id"));
+  const get = (url, ua, ref) => { const r = request(app).get(url).set('Host', HA).set('User-Agent', ua); return ref ? r.set('Referer', ref) : r; };
+  let r = await get(`/reports/${id}/file`, 'facebookexternalhit/1.1');
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.location, '/reports?id=' + id);
+  r = await get(`/reports/${id}/file?nav=1`, 'facebookexternalhit/1.1');
+  assert.equal(r.status, 302, 'crawlers always get the page');
+  r = await get(`/reports/${id}/file`, 'Mozilla/5.0 [FBAN/FBIOS;FBAV/400.0]');
+  assert.equal(r.status, 302);
+  assert.equal((await get(`/reports/${id}/file?nav=1`, 'Mozilla/5.0 [FBAN/FBIOS;FBAV/400.0]')).status, 200);
+  assert.equal((await get(`/reports/${id}/file`, 'Mozilla/5.0 [FBAN/FBIOS]', `http://${HA}/reports`)).status, 200, 'same-site referer');
+  assert.equal((await get(`/reports/${id}/file`, 'Mozilla/5.0 (X11; Linux) Firefox/120')).status, 200, 'normal browsers unchanged');
+  await inA(() => require('../src/lib/public-cache').clear());
+  assert.match((await client().get('/reports')).text, new RegExp(`/reports/${id}/file\\?nav=1`));
+});
+
+// ---------------------------------------------------------------- SM-15 tracker: POST lookup, notify chips
+test('SM-15: tracker looks up by POST (phone kept out of the URL) and shows email / SMS delivery chips', async () => {
+  const id = await inA(async () => {
+    const lid = await db.value("INSERT INTO loan_applications (full_name, mobile, tracking_id, status) VALUES ('Trk', '9841600014', 'LN-TRK-0001', 'approved') RETURNING id");
+    await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, created_at, notify_sent, admin_chose_to_notify, notify_email_status, notify_email_reason, notify_sms_status)
+                    VALUES ('loan', $1, 'pending', 'approved', 'ok', now(), 1, 1, 'failed', 'SMTP 550 secret reason', 'sent')`, [lid]);
+    return lid;
+  });
+  assert.ok(id);
+  const c = client();
+  const page = await c.get('/track');
+  assert.match(page.text, /<form class="form-card" method="post" action="\/track">\s*<input type="hidden" name="_csrf"[^>]*><input type="hidden" name="mode" value="id">/);
+  const r = await c.form('/track', { mode: 'id', id: 'ln-trk-0001', phone: '9841600014' }, '/track');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /LN-TRK-0001/);
+  assert.match(r.text, /Email: (असफल|failed)/);
+  assert.match(r.text, /SMS: (पठाइयो|sent)/);
+  assert.doesNotMatch(r.text, /SMTP 550/, 'no failure reasons in public');
+  assert.equal((await c.get('/track?id=LN-TRK-0001&phone=9841600014')).status, 200, 'old GET links still work');
+});
+
+// ---------------------------------------------------------------- §6.3 marketplace availability fields on the member form
+test('§6.3: member marketplace form saves available from / until (B.S. accepted) and daily hours', async () => {
+  await seedMember('MK-1200', '9841600015');
+  const m = await memberClient('MK-1200');
+  const tok = await m.token('/member/marketplace/new');
+  let r = await m.agent.post('/member/marketplace?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('listing_type', 'product').field('category', 'other').field('title', 'Honey').field('description', 'Pure')
+    .field('available_from', '2083-01-01').field('available_until', '2090-01-01').field('available_until_time', '18:30')
+    .field('available_time_from', '09:00').field('available_time_to', '17:00');
+  assert.equal(r.status, 302, r.text && r.text.slice(0, 200));
+  const nd = require('../src/lib/nepali-date');
+  const row = await inA(() => db.one("SELECT available_from::text AS f, available_until::text AS u, available_time_from::text AS tf, available_time_to::text AS tt FROM member_marketplace_listings WHERE title = 'Honey'"));
+  assert.equal(row.f, nd.bsToAd('2083-01-01'));
+  assert.equal(row.u, nd.bsToAd('2090-01-01') + ' 18:30:00');
+  assert.equal(row.tf, '09:00:00');
+  assert.equal(row.tt, '17:00:00');
+  const id = await inA(() => db.value("SELECT id FROM member_marketplace_listings WHERE title = 'Honey'"));
+  const edit = await m.get(`/member/marketplace/${id}/edit`);
+  assert.match(edit.text, new RegExp(`name="available_from" value="${nd.bsToAd('2083-01-01')}"`));
+  assert.match(edit.text, /name="available_time_from" value="09:00"/);
+});

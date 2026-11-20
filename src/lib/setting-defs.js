@@ -29,7 +29,11 @@ const DEFS = [
   d('logo_en', 'general', 'image', 'लोगो (English पृष्ठ)', 'Logo (English pages)', { hint: 'खाली = मुख्य लोगो / blank = main logo' }),
   d('site_favicon', 'general', 'image', 'फेभिकन (ब्राउजर ट्याब)', 'Favicon (browser tab)', { hint: 'वर्गाकार PNG, कम्तीमा 192px / square PNG, at least 192 px' }),
   d('site_url', 'general', 'url', 'वेबसाइट URL', 'Website URL'),
+  d('hero_title', 'general', 'text', 'मुख्य पृष्ठ शीर्षक (स्लाइडर नभएमा)', 'Home page heading (when there is no slider)', { max: 200 }),
+  d('hero_subtitle', 'general', 'text', 'मुख्य पृष्ठ उपशीर्षक (स्लाइडर नभएमा)', 'Home page sub-heading (when there is no slider)', { max: 200 }),
+  d('pwa_app_name', 'general', 'text', 'एपको पूरा नाम (PWA)', 'App name (PWA)', { max: 60, hint: 'खाली = संस्थाको नाम / blank = organisation name' }),
   d('pwa_short_name', 'general', 'text', 'एपको छोटो नाम (PWA)', 'App short name (PWA)', { max: 30 }),
+  d('site_version', 'general', 'text', 'वेबसाइट संस्करण', 'Website version', { max: 20, hint: 'प्रशासन पृष्ठको तल देखिन्छ / shown at the foot of admin pages' }),
   d('site_launch_date', 'general', 'text', 'वेबसाइट सुरु मिति', 'Website launch date', { max: 40 }),
   // header background (PHP header.php himal_bg / himal_bg_opacity)
   d('himal_bg', 'general', 'image', 'हेडर पृष्ठभूमि फोटो', 'Header background image', { hint: 'चौडा फोटो (जस्तै हिमाल), लोगो र मेनु पढ्न मिल्ने गरी / a wide photo (e.g. mountains) that keeps the logo and menu readable' }),
@@ -171,7 +175,7 @@ const AI_MODELS = {
 
 /** Keys owned by other admin pages (member portal, client protection, theme, security policy…): not "imported". */
 const MANAGED_GROUPS = new Set(['members', 'protection', 'appearance', 'internal', 'theme', 'program', 'programs']);
-const MANAGED_KEY = /^(admin_2fa_required|admin_idle_minutes|admin_hidden_menu_groups|push_vapid_\w+|theme_\w+|layout_\w+|lang_\w+|starter_design|program_\w+|notify_(email|sms)_[a-z_]+|card_prefix|member_\w+|ai_welcome|deposit_tax_rate|protection_\w+|satisfaction_widget_enabled)$/;
+const MANAGED_KEY = /^(admin_2fa_required|admin_idle_minutes|admin_hidden_menu_groups|push_vapid_\w+|theme_\w+|layout_\w+|lang_\w+|starter_design|program_\w+|notify_(email|sms)_[a-z_]+|card_prefix|member_\w+|ai_welcome|deposit_tax_rate|protection_\w+|satisfaction_widget_enabled|license_renewal_amount|license_esewa_id|license_khalti_id)$/;
 
 /** site_settings.setting_type has a CHECK (text, textarea, image, number, color, url): the stored type for a def. */
 const storeType = t => ({ richtext: 'textarea', map: 'url', email: 'text', bool: 'text', select: 'text', secret: 'text' }[t] || t);

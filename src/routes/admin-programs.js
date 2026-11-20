@@ -127,7 +127,7 @@ router.get('/:id', ah(loadProgram), ah(async (req, res) => {
   const myDesk = desks.find(d => Number(d.is_active) && d.assigned_staff_admin_id === req.admin.id);
   const qr = p.qr_token ? await QRCode.toDataURL(qrUrl(req, p.qr_token), { margin: 1, width: 260 }) : null;
   for (const o of occurrences) o.qr = o.qr_token ? await QRCode.toDataURL(qrUrl(req, o.qr_token), { margin: 1, width: 180 }) : null;
-  res.render('admin/program-detail', { title: p.title, p, occurrences, showDone: req.query.show_done === '1', attendance, requests, prereg, desks, staff, myDeskId: myDesk ? myDesk.id : 0, smsResult: req.session.smsResult || null, qr, qrLink: p.qr_token ? qrUrl(req, p.qr_token) : null, qrUrl: t => qrUrl(req, t), deskResult: req.session.deskResult || null });
+  res.render('admin/program-detail', { title: p.title, p, occurrences, showDone: req.query.show_done === '1', attendance, requests, prereg, desks, staff, myDeskId: myDesk ? myDesk.id : 0, smsResult: req.session.smsResult || null, qr, qrLink: p.qr_token ? qrUrl(req, p.qr_token) : null, qrUrl: t => qrUrl(req, t), deskResult: req.session.deskResult || null, canVoid: a => att.canVoid(req.admin, a, req.permCtx) });
   delete req.session.deskResult;
   delete req.session.smsResult;
 }));
@@ -392,8 +392,13 @@ router.post('/:id/requests/:rid/create-member', auth.requireAdmin('admin'), ah(l
 }));
 
 router.post('/:id/attendance/:aid/void', ah(loadProgram), ah(async (req, res) => {
-  const belongs = await db.value('SELECT 1 FROM member_program_attendance WHERE id = $1 AND program_id = $2', [util.int(req.params.aid), req.program.id]);
-  const row = belongs ? await att.voidAttendance(util.int(req.params.aid), req.admin.id, req.body.reason || 'admin void') : null;
+  const rec = await db.one('SELECT id, staff_admin_id FROM member_program_attendance WHERE id = $1 AND program_id = $2', [util.int(req.params.aid), req.program.id]);
+  if (rec && !att.canVoid(req.admin, rec, req.permCtx)) {
+    flash(req, 'error', res.locals.t('तपाईंले आफूले लिएको उपस्थिति मात्र रद्द गर्न सक्नुहुन्छ।', 'You can only void check-ins you recorded yourself.'));
+    return res.redirect('/admin/programs/' + req.program.id + '#attendance');
+  }
+  const belongs = !!rec;
+  const row = belongs ? await att.voidAttendance(util.int(req.params.aid), req.admin.id, req.body.reason || 'admin void', req.ip) : null;
   if (row) await auth.audit(req, 'attendance_void', 'member_program_attendance', row.id, `Voided attendance of member #${row.member_id}`);
   res.redirect('/admin/programs/' + req.program.id + '#attendance');
 }));

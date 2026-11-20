@@ -21,6 +21,8 @@ Status: **COVERED** = parity or better · **PARTIAL** = exists, named logic miss
 **Totals (rows):** COVERED 210 · PARTIAL 29 · MISSING 1 · NOT-NEEDED 24 (+1 mixed core row). Root 76 rows (59/14/0/3), member/ 35 (29/5/0/1), core 10, config.php groups 28 (25/1/0/2), includes 101 files / 946 functions (80/9/0/12 files), assets/js 15 (11/0/1/3).
 Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs, SM-3 gated upload folders left public after migration (all P1).
 
+**Update (coverage-gaps work, migration 065, tests in `test/coverage-gaps.test.js`):** SM-1 … SM-21 and Part B §7 items 1–3, 5–7, 9–19 are closed (each item below says where). Still open, handled in a separate parallel change: admin help guide (`help-guide.php`), committee / KYC webcam capture, `himal_bg` header image.
+
 ## 1. Repository root `*.php` (+ sw.js, .htaccess, router.php, version.txt)
 
 | PHP file | Node equivalent (route · src · view) | Status | Notes / gap |
@@ -31,12 +33,12 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | about.php | GET /about · public.js:132 · public/about.ejs | COVERED | pages slug=about, history, values, org chart, stats, anchors (1-public P1-3) |
 | api-ai-chat.php | POST /api/chat · public.js:1025 · lib/ai-chat.js + ai-guard.js | COVERED | session-held history, limiter 30/10 min |
 | api-public-chat.php | — (contact form `POST /contact`) | NOT-NEEDED | Live-chat panel folded into the contact form (1-public: "contact form covers it", P3) — record it in docs/parity as deliberate |
-| application-tracker.php | GET/POST /track · public-members.js · public/track.ejs; GET /track/attachment (public.js:994) | PARTIAL | ID + phone (stricter than PHP), phone+email+tracking listing, 7-fail/15-min guard, details grid, stepper, signed card link: all done. Missing: per-channel notify chips (email/SMS sent/failed/skipped) in the public history (`application-tracker.php:1585-1620`) → SM-15. GET /track?id=&phone= performs the lookup from query string (PHP only prefilled on GET; phone ends up in access logs) → SM-15 |
+| application-tracker.php | GET/POST /track · public-members.js · public/track.ejs; GET /track/attachment (public.js:994) | COVERED | notify chips + POST lookup (SM-15). Was: ID + phone (stricter than PHP), phone+email+tracking listing, 7-fail/15-min guard, details grid, stepper, signed card link: all done. Missing: per-channel notify chips (email/SMS sent/failed/skipped) in the public history (`application-tracker.php:1585-1620`) → SM-15. GET /track?id=&phone= performs the lookup from query string (PHP only prefilled on GET; phone ends up in access logs) → SM-15 |
 | appointment.php | /apply/appointment · applications.js `appointment` · hooks.appointment | COVERED | office-time slots, cooperative visit, legacy purpose keys |
 | attend.php | public.js:1074 → /member/attend?t= ; legacy-urls `attend.php` | COVERED | |
 | auction.php | /auctions, /auctions/:id · /apply/bid · hooks.bid · lib/auctions.js | COVERED | window, min price, 24 h dup, BID tracking, filter chips |
 | awards.php | /awards, /awards/:id | COVERED | |
-| backup-restore.php | /admin/backup, /admin/backup/restore (admin-system.js) | PARTIAL | Root `backup-restore.php` (redirect to admin) is not in legacy-urls PUBLIC map → 404 (SM-16, P3) |
+| backup-restore.php | /admin/backup, /admin/backup/restore (admin-system.js); root + admin `backup-restore.php` redirect | COVERED | SM-16 done. Was: Root `backup-restore.php` (redirect to admin) is not in legacy-urls PUBLIC map → 404 (SM-16, P3) |
 | career-detail.php | /careers/:id · /apply/job · hooks.job (allow_online_apply, deadline, dup email/phone) | COVERED | |
 | career.php | /careers (days-left, urgent, new, search, filters) | COVERED | |
 | ceo-message.php | /message/ceo | COVERED | |
@@ -54,13 +56,13 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | faqs.php | /faqs (FAQPage JSON-LD in seo.js) | COVERED | |
 | gallery.php | /gallery | COVERED | |
 | grievance.php | /apply/grievance · hooks.grievance; `?track=` → /track | COVERED | |
-| honor-apply.php | /apply/honor · renderHonorClosed · hooks.honor | PARTIAL | Legacy `honor-apply.php?program_id=` redirect drops the id (Node reads `?program=`) → SM-17 |
+| honor-apply.php | /apply/honor · renderHonorClosed · hooks.honor | COVERED | `?program_id=` kept (SM-17). Was: Legacy `honor-apply.php?program_id=` redirect drops the id (Node reads `?program=`) → SM-17 |
 | important-links.php | /important-links | COVERED | |
 | index.php | GET / · public.js:92 · home.ejs (public-cache 60 s) | COVERED | |
 | information-room-file.php | /member/information-room/:id (legacy map) | COVERED | |
 | install.php | platform console / scripts/tenant-create.js | NOT-NEEDED | multi-tenant platform |
 | institutional-profile-file.php | /institutional-profile/:id/file (canOpen + file token) | COVERED | |
-| institutional-profile.php | /institutional-profile | PARTIAL | Page covered; legacy `?id=` deep link dropped by legacy-urls (SM-17) |
+| institutional-profile.php | /institutional-profile | COVERED (page; `?id=` has no per-row target — FY/month filters instead) | Page covered; legacy `?id=` deep link dropped by legacy-urls (SM-17) |
 | interest-rates.php | /interest-rates | COVERED | |
 | loan-apply.php | /apply/loan | COVERED | |
 | login.php | → /member/login (legacy-urls) | COVERED | |
@@ -77,15 +79,15 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | online-account.php | /apply/account | COVERED | |
 | online-kyc.php | /apply/kyc (+ verify-first gate, locked fields, capture), /apply/membership (`?path=new`) | COVERED | `?kyc_id=` profile-edit link → member KYM is loaded from the session anyway |
 | page.php | /page/:slug, /page/by-id/:id | COVERED | |
-| partner-facilities.php | /partner-facilities | PARTIAL | Page covered; legacy `?type=&view=` dropped (SM-17) |
+| partner-facilities.php | /partner-facilities | COVERED | `?type=&view=` kept (SM-17). Was: Page covered; legacy `?type=&view=` dropped (SM-17) |
 | password-reset-request.php | → /member/forgot | COVERED | |
-| program-attendance-verify.php | legacy-urls → /member/programs | PARTIAL | PHP sends staff to the admin registration desk (`program-attendance-verify.php:12-27`); Node sends them to the member portal (SM-16) |
-| pwa-icon.php | /pwa-icon-:size.png | PARTIAL | `pwa-icon.php?s=192&maskable=1` not redirected (SM-16) |
-| report-file.php | /reports/:id/file (?dl=1, view_only, members-only token) | PARTIAL | social in-app/crawler bounce (`public-member-access.php:598-660`) missing; members-only files stay at their public /uploads path until first opened (SM-5, SM-13) |
+| program-attendance-verify.php | legacy-urls → /admin/programs/<id>#desk | COVERED | SM-16 done. Was: PHP sends staff to the admin registration desk (`program-attendance-verify.php:12-27`); Node sends them to the member portal (SM-16) |
+| pwa-icon.php | /pwa-icon-:size.png + legacy `pwa-icon.php?s=&maskable=` | COVERED | SM-16 done. Was: `pwa-icon.php?s=192&maskable=1` not redirected (SM-16) |
+| report-file.php | /reports/:id/file (?dl=1, view_only, members-only token) | COVERED | social bounce (SM-13) and private-from-upload (SM-5) done. Was: social in-app/crawler bounce (`public-member-access.php:598-660`) missing; members-only files stay at their public /uploads path until first opened (SM-5, SM-13) |
 | reports.php | /reports (type/year/month filters, unlock) | COVERED | |
 | robots.php | /robots.txt | COVERED | |
-| router.php | Express routing + lib/legacy-urls.js (publicRedirects, extensionlessRedirects, memberRedirects) | PARTIAL | `/assets/uploads/**` legacy URLs are not served or redirected (SM-2); gated-folder rule (→ upload-file.php) has no equivalent for migrated files (SM-3) |
-| sahakari-patro.php | /calendar | PARTIAL | Page covered (P1-11). Legacy `?cal_year=&cal_month=&sel_day=` dropped (SM-17). Rashifal/lagna/gunmilan tabs P3 "recommend not porting" (1-public) |
+| router.php | Express routing + lib/legacy-urls.js (publicRedirects, extensionlessRedirects, memberRedirects); app.js `/assets/uploads/*` | COVERED | `/assets/uploads/**` redirect + gated-folder rule (SM-2, SM-3) |
+| sahakari-patro.php | /calendar | COVERED | `?cal_year=&cal_month=` → `/calendar?y=&m=` (SM-17); rashifal tabs not ported (see note). Was: Page covered (P1-11). Legacy `?cal_year=&cal_month=&sel_day=` dropped (SM-17). Rashifal/lagna/gunmilan tabs P3 "recommend not porting" (1-public) |
 | service-centers.php | /service-centers | COVERED | |
 | services.php | /services, /services/:id | COVERED | |
 | share-og.php | /share-og.png, /share-og.svg | COVERED | |
@@ -93,13 +95,13 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | success-stories.php | /success-stories | COVERED | |
 | team.php | /team | COVERED | legacy `?cat=` not kept (P3, SM-17) |
 | tracker-id-card.php | /track/id-card (HMAC 15 min) | COVERED | old PHP-signed links → /track (by design) |
-| upload-file.php | uploads.js `_private` + /admin/files/* + member routes | PARTIAL | see upload-gate.php; `upload-file.php?d=&f=` not mapped (SM-3, SM-16) |
+| upload-file.php | uploads.js `_private` + /admin/files/* + member routes; `upload-file.php?d=&f=` → `/assets/uploads/…` | COVERED | SM-3/SM-16 done. Was: see upload-gate.php; `upload-file.php?d=&f=` not mapped (SM-3, SM-16) |
 | vendor-enlistment.php | /apply/vendor · promoteVendor on approval | COVERED | |
-| verify.php | GET/POST /verify, /verify/service, /verify/photo/:mid · public-members.js | PARTIAL | **Derived-CVV cards from PHP fail** (SM-1). Card-number / un-hyphenated code lookup missing (SM-6). Legacy `verify.php?partner=CODE` / `?partner_id=` desk-QR params dropped by legacy-urls (SM-7) |
+| verify.php | GET/POST /verify, /verify/service, /verify/photo/:mid · public-members.js | COVERED | derived CVV (SM-1), card-number / un-hyphenated lookup (SM-6), `verify.php?partner=` QR params (SM-7) |
 | vision-mission.php | /vision-mission | COVERED | |
 | why-choose.php | /about#why | COVERED | |
-| sw.js | public/sw.js (served by app.js:71) | PARTIAL | Offline fallback + push + notificationclick ported. PHP cached member pages (PAGES_CACHE) and showed `/member/offline.php` with cached name/unread; Node deliberately never caches member/admin HTML (privacy). Not recorded in docs/parity → record as deliberate (SM-18). |
-| .htaccess | Express (static only from /static, deny rules implicit), legacy-urls (extensionless, index.php→/), helmet | PARTIAL | Same as router.php: `/assets/uploads/...` (SM-2), gated folders (SM-3). Cache headers/compression handled by Express/nginx (deploy/) |
+| sw.js | public/sw.js (served by app.js:71) | COVERED (member-page cache deliberately dropped — docs/parity/README.md) | Offline fallback + push + notificationclick ported. PHP cached member pages (PAGES_CACHE) and showed `/member/offline.php` with cached name/unread; Node deliberately never caches member/admin HTML (privacy). Not recorded in docs/parity → record as deliberate (SM-18). |
+| .htaccess | Express (static only from /static, deny rules implicit), legacy-urls (extensionless, index.php→/), helmet | COVERED | `/assets/uploads/...` (SM-2) and gated folders (SM-3) done in app.js. Cache headers/compression handled by Express/nginx (deploy/) |
 | version.txt | package.json version | NOT-NEEDED | |
 
 ## 2. `member/`
@@ -112,7 +114,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | apply-frame.php | /apply (direct, no iframe) | NOT-NEEDED | iframe wrapper |
 | appointment.php | /apply/appointment | COVERED | |
 | attend.php | GET/POST /member/attend (QR token, window, eligibility, pending request) | COVERED | |
-| certificate.php | GET /member/certificate · views/member/certificate.ejs | PARTIAL | Node prints name / Member ID / since / QR only. PHP reads the linked KYM (`certificate.php:18-46`) and prints photo, father's name, DOB, permanent address, citizenship no., account type, KYM phone/email (SM-8) |
+| certificate.php | GET /member/certificate · views/member/certificate.ejs | COVERED | KYM details added (SM-8). Was: Node prints name / Member ID / since / QR only. PHP reads the linked KYM (`certificate.php:18-46`) and prints photo, father's name, DOB, permanent address, citizenship no., account type, KYM phone/email (SM-8) |
 | check-availability.php | GET /member/check-availability | COVERED | |
 | digital-service.php | /apply/digital | COVERED | |
 | election-vote.php | /member/elections/:id | COVERED | |
@@ -120,9 +122,9 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | honor-apply.php | /apply/honor | COVERED | |
 | id-card.php | /member/id-card (KYM photo, expiry warning, stars, unlock request) | COVERED | |
 | index.php | GET /member (KPIs, quick apply, partner services, elections) | COVERED | |
-| information-room-view.php | /member/information-room/:id/view | PARTIAL | watermark yes; copy/print/PrintScreen/blur deterrence missing (SM-19) |
+| information-room-view.php | /member/information-room/:id/view | COVERED (SM-19) | watermark yes; copy/print/PrintScreen/blur deterrence missing (SM-19) |
 | information-room.php | /member/information-room | COVERED | |
-| kyc-print.php | /member/kyc-print, /member/kyc-print/file/:field | PARTIAL | Works, but finds the KYM with an ad-hoc query (`member.js:318-335`: id OR member_id+exact phone) instead of `kym.loadLinkedKyc` (SSOT rule; exact phone compare misses +977 / dashes) (SM-10) |
+| kyc-print.php | /member/kyc-print, /member/kyc-print/file/:field | COVERED (SM-10: `kym.loadLinkedKyc`) | Works, but finds the KYM with an ad-hoc query (`member.js:318-335`: id OR member_id+exact phone) instead of `kym.loadLinkedKyc` (SSOT rule; exact phone compare misses +977 / dashes) (SM-10) |
 | kyc.php | → /apply/kyc | COVERED | |
 | loan-apply.php | /apply/loan | COVERED | |
 | login.php | /member/login, /member/register, /login/2fa (member.js, member-account.js) | COVERED | |
@@ -130,13 +132,13 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | marketplace.php | /member/marketplace | COVERED | |
 | notifications.php | /member/notifications | COVERED | |
 | oauth.php | /member/oauth/google*, /oauth/facebook* | COVERED | |
-| offline.php | /offline | PARTIAL | cached-dashboard offline view deliberately dropped (SM-18) |
+| offline.php | /offline | COVERED (cached dashboard deliberately dropped — docs/parity/README.md) | cached-dashboard offline view deliberately dropped (SM-18) |
 | password-reset-request.php | /member/forgot (+ verify/resend/cancel, office fallback) | COVERED | |
 | profile.php | /member/profile (+ details, phone OTP, kyc-docs, 2FA, OAuth) | COVERED | |
 | push-subscribe.php | /member/push/key, /push/subscribe, /push/unsubscribe | COVERED | |
 | scan.php | /member/scan · public/js/member-scan.js | COVERED | |
 | service-request.php | /member/service-request | COVERED | |
-| tracker.php | /member/requests, /member/requests/:module/:id | PARTIAL | Applicant cannot open their own uploaded documents (PHP `coop_upload_gate_member_owns`, `upload-gate.php:155-189`); only the office reply attachment is served (SM-20, P3) |
+| tracker.php | /member/requests, /member/requests/:module/:id | COVERED (SM-20: own documents) | Applicant cannot open their own uploaded documents (PHP `coop_upload_gate_member_owns`, `upload-gate.php:155-189`); only the office reply attachment is served (SM-20, P3) |
 | transactions.php | /member/accounts (CBS push data) | COVERED | PHP was a stub |
 | welfare.php | /apply/welfare + /member/requests | COVERED | |
 | includes/chrome.php, chrome-foot.php | views/layouts/member.ejs | COVERED | |
@@ -167,7 +169,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | `coop_sanitize_icon_class`, `coop_canonical_icon_for_storage`, `coop_canonicalize_icon_db_rows`, `coop_nav_icon_html` | lib/icons.js (faToNode + aliases) | COVERED | |
 | `coop_sanitize_cms_html`, `coop_render_cms_prose` | util.sanitizeHtml / richText | COVERED | |
 | `coop_notice_date_bs`, `coop_notice_date_ad`, `coop_notice_date_normalize_input`, `coop_notice_bs_day_month` | nepali-date isBsLike/toAd/toBs, scripts/normalise-bs-dates.js | COVERED | |
-| `coop_notice_media_src`, `safe_public_upload_path`, `safe_public_media_path`, `safe_media_src`, `coop_resolve_stored_upload_rel`, `coop_stored_upload_exists`, `coop_public_download_url`, `safe_versioned_media_src(_absolute)`, `getAssetUrl`, `coop_versioned_asset_url` | uploads.mediaUrl / resolveStored, /static | PARTIAL | DB-stored `assets/uploads/...` paths map correctly; literal `/assets/uploads/...` URLs inside HTML bodies and external links 404; `assets/images/*` default paths map to `/uploads/assets/images/*` (SM-2) |
+| `coop_notice_media_src`, `safe_public_upload_path`, `safe_public_media_path`, `safe_media_src`, `coop_resolve_stored_upload_rel`, `coop_stored_upload_exists`, `coop_public_download_url`, `safe_versioned_media_src(_absolute)`, `getAssetUrl`, `coop_versioned_asset_url` | uploads.mediaUrl / resolveStored, /static | COVERED (SM-2: `/assets/uploads/*` route, HTML rewrite on migration, `assets/images` defaults → '') | DB-stored `assets/uploads/...` paths map correctly; literal `/assets/uploads/...` URLs inside HTML bodies and external links 404; `assets/images/*` default paths map to `/uploads/assets/images/*` (SM-2) |
 | `safe_http_url`, `coop_safe_cta_url`, `coop_safe_webhook_url` | util.sanitizeHtml, notify.safeHttpsUrl (DNS-pinned) | COVERED | |
 | `coopAuthSecret`, `coopVerifyHmac` | config.sessionSecret HMACs (member-portal signCardLink, member-access fileToken) | COVERED | |
 | `coop_new_tracking_id`, `coop_is_public_tracking_id` | util.trackingId, tracker regex | COVERED | |
@@ -303,7 +305,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | coop-a11y.js (aria-labels for placeholder-only inputs, icon buttons) | partials/field.ejs, admin-field.ejs render real `<label>`s; icon buttons carry aria-label in views | COVERED | fixed at markup level instead of a runtime shim |
 | coop-mobile.js (mobile UX) | public/js/site.js + app.css mobile-first | COVERED | |
 | form-validation.js (10-digit 9XXXXXXXXX, email, inline errors) | public/js/forms.js + server forms.validate / RULES.mobile10 | COVERED | |
-| information-room-viewer.js (block copy/cut/contextmenu/drag, Ctrl+S/P/C/U/A, PrintScreen, blur when hidden) | — | MISSING | SM-19 (P3) |
+| information-room-viewer.js (block copy/cut/contextmenu/drag, Ctrl+S/P/C/U/A, PrintScreen, blur when hidden) | — | COVERED (`public/js/information-room-viewer.js`, SM-19) | SM-19 (P3) |
 | init-uniformity.js (BS date inputs) | public/js/forms.js bsdate + /js/form-data.js | COVERED | |
 | kyc-capture.js (camera, crop/rotate, signature pad, thumb, quality score) | public/js/kyc-capture.js + uploads.saveDataUrl | COVERED | |
 | main.js (popup carousel, loader, back-to-top, counters) | public/js/site.js, app.js, partials/notice-popup.ejs | COVERED | |
@@ -321,62 +323,62 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 
 ### P1
 
-**SM-1 · Card verification rejects every PHP-issued derived CVV (cards then lock).**
+**SM-1 · Card verification rejects every PHP-issued derived CVV (cards then lock).** — **COVERED**: `lib/member-portal.js` `deriveCardCvv` / `derivedCvvs` / `cvvMatches` (stored or derived, case-insensitive, constant time), used by both POST /verify paths (`routes/public-members.js`); `cvv` widened to VARCHAR(20) (`065_coverage_gaps.sql`); inputs `maxlength=20` text. The stored CVV is not overwritten on success (Node-printed 4-digit CVVs stay valid). Test: `test/coverage-gaps.test.js`.
 PHP (`includes/card-verify-helpers.php:89-120 deriveMemberCardCvv`, `:203-230 cvvCredentialsMatch`, `:553-610 verifyCardCredentials`, `:457-500 _finalizeCardVerifySuccess`; column widened to VARCHAR(20) at `:331`): the CVV printed on cards is *first 3 letters of the first name (Latin preferred, else Devanagari) + last 4 digits of the Member ID*, e.g. `SUJ0123`; input is compared case-insensitively against BOTH the stored `cvv` and a freshly derived one, and success re-stores the derived value.
 Node: `routes/public-members.js:177` `cvv = toLatinDigits(...).slice(0, 4)` and `card.cvv !== cvv`; `lib/member-portal.js:375` strips every non-digit and keeps 4; `views/public/verify.ejs:16,25` `inputmode="numeric" maxlength="4"`. A migrated card with `cvv='SUJ0123'` can never verify; five honest tries lock it (`cardFailure`).
 Spec: in `lib/member-portal.js` add `deriveCardCvv(fullName, memberNo)` (port exactly, incl. Devanagari 3-char + 'X' padding, last-4 digits zero-padded) and `cvvMatches(input, stored, derived)` (trim, remove whitespace, upper-case, constant-time compare per candidate). Use it in both POST /verify paths (code+CVV and name+ID+mobile) with derived = `deriveCardCvv(kyc.full_name_en||kyc.full_name||member.name, member.sadasyata_number||member.member_card_no||member.id)`. Accept up to 20 chars of input; change both inputs to `maxlength="20"` text (no `inputmode=numeric`). Keep 4-digit random CVVs issued by Node working (stored candidate). Tests: PHP-style card with derived CVV verifies; wrong derived CVV counts toward the lock; lowercase input accepted.
 
-**SM-2 · Legacy `/assets/uploads/...` URLs 404.**
+**SM-2 · Legacy `/assets/uploads/...` URLs 404.** — **COVERED**: `src/app.js` `GET /assets/uploads/*rest` → 301 `/uploads/…` (query kept); gated folders → 404 (302 to `/admin/files/_private/…` for signed-in staff); `uploads.mediaUrl` maps gated legacy paths to the private route and `assets/images/…` theme defaults to ''; migration rewrites `src=/href=` links (relative or the old `site_url` host) in every text column (`site-migration.protectGatedUploads`). Test: `test/coverage-gaps.test.js`.
 PHP served `assets/uploads/<folder>/<file>` directly (`.htaccess`, `router.php:36-49`); those URLs are embedded in migrated HTML (news/notice/page bodies, CMS rich text, AI-chat context), in links shared on social media, and in settings like `assets/images/logo.png`. Node maps DB *paths* (`uploads.mediaUrl`) but has no route for the URL and `site-migration.js` does not rewrite HTML bodies.
 Spec: in `src/app.js` before the public router add `app.get('/assets/uploads/*rest', …)` → 301 to `/uploads/<rest>` for non-gated folders; for gated folders (list in SM-3) → 404 (or `/admin/files/_private/<rest>` when `req.admin`). Optionally rewrite `src="(https?://old-host)?/?assets/uploads/` → `/uploads/` in rich-text columns during migration (`site-migration.js`, after copy). Also make `mediaUrl` treat `assets/images/…` defaults as `/static/img/…` or empty. Test: GET /assets/uploads/news/x.jpg → 301 /uploads/news/x.jpg; GET /assets/uploads/kyc/x.jpg → 404.
 
-**SM-3 · Confidential files in gated folders stay public after migration.**
+**SM-3 · Confidential files in gated folders stay public after migration.** — **COVERED**: `uploads.GATED_FOLDERS`/`isGated` (one list); `site-migration.protectGatedUploads` moves each gated folder wholesale to `_private/<folder>` (orphans included) and rewrites every single/comma-separated stored path in all text columns; the privatise step now handles comma lists; `admin_attachment` added to `fileColumns()`; `/uploads` returns 404 for gated folders; `resolveStored` falls back to the private copy for un-rewritten legacy paths. Fix-up for tenants already migrated: `node scripts/privatise-uploads.js --tenant=<slug>|--all`. Test: `test/coverage-gaps.test.js`.
 PHP gated `kyc, loan, accounts, welfare_claims, grievances, digital_services, honor_applications, appointments, admin-replies, job-applications, hrm` (`includes/upload-gate.php:21-27`, `.htaccess` rule) for every file in those folders. Node `site-migration.js:243-271` privatises only files referenced by single-path module/resource file columns: comma lists (`loan_applications.documents`, `member_welfare_claims.supporting_documents` — counted as "missing"), `admin_attachment` (office replies, not a field), KYC paths not modelled as fields, and orphan files remain under `uploads/<tenant>/<folder>/` and are served by the public `/uploads` static route (`app.js:163-168`).
 Spec: in `site-migration.js` after "copy uploads": move each gated folder wholesale to `_private/<folder>` (fs.renameSync dir), then for every text column of every module/resource table plus `admin_attachment`, `supporting_documents`, `documents`, rewrite each comma-separated path that starts with a gated folder to `_private/…` (SQL `regexp_replace`). Also add `admin_attachment` to `fileColumns()` as private. Add a defensive rule in the `/uploads` middleware: 404 for first segment in the gated list. Test with a fixture tenant.
 
 ### P2
 
-**SM-4 · (merged into SM-3)** — `admin_attachment` office replies of migrated rows publicly reachable.
+**SM-4 · (merged into SM-3)** — `admin_attachment` office replies of migrated rows publicly reachable. — **COVERED** with SM-3.
 
-**SM-5 · Members-only reports / institutional-profile files are public until first opened.**
+**SM-5 · Members-only reports / institutional-profile files are public until first opened.** — **COVERED**: `res.reports` / `res.institutional_profile` have `privateFiles` (admin uploads go to `_private` from the start); migration step `site-migration.privatiseFileColumns` moves every migrated report / profile file to `_private` (also handles comma lists); the same runs for tenants already migrated via `scripts/privatise-uploads.js`; the lazy move in `/reports/:id/file` stays as a last resort. Test: `test/coverage-gaps.test.js`.
 `routes/public.js:441-452` moves a members-only report into `_private` lazily on first access; until then `/uploads/reports/<file>` serves it to anyone. Spec: privatise rows with `access_level='member'` during migration and in the resource save hook (resources.js `reports`, `institutional_profile` afterSave: move file to `_private` when level = member, back when public).
 
-**SM-6 · Card lookup by card number / un-hyphenated code.**
+**SM-6 · Card lookup by card number / un-hyphenated code.** — **COVERED**: `routes/public-members.js` POST /verify matches the code as typed, the code without dashes, or `card_no` without dashes (input up to 40 chars, label "code or card number"). Test: `test/coverage-gaps.test.js`.
 PHP `normalizeCardLookupKey` (`card-verify-helpers.php:296-306`) and lookup `:569-575` accept `verification_code`, the code without dashes, or `card_no` without dashes. Node (`public-members.js:178`) matches `upper(verification_code)` exactly and requires ≥8 chars. Spec: `WHERE upper(verification_code)=$1 OR regexp_replace(upper(verification_code),'[^A-Z0-9]','','g')=$2 OR regexp_replace(upper(card_no),'[^A-Z0-9]','','g')=$2`; widen the input sanitiser to keep the raw then normalise.
 
-**SM-7 · Partner-desk QR codes lose the partner.**
+**SM-7 · Partner-desk QR codes lose the partner.** — **COVERED**: `legacy-urls.js` `verify.php` keeps `partner`, `partner_id`, `code`, `mode`. Test: `test/coverage-gaps.test.js`.
 `legacy-urls.js` `'verify.php': () => '/verify'` drops `?partner=CODE` / `?partner_id=` (PHP `verify.php:337-338`), although Node `/verify` supports both. Spec: `'verify.php': q => '/verify' + keep(q, ['partner', 'partner_id', 'code'])`. Test.
 
-**SM-8 · Membership certificate lacks KYM details.**
+**SM-8 · Membership certificate lacks KYM details.** — **COVERED**: `routes/member.js` GET /certificate loads `kym.loadLinkedKyc` and `views/member/certificate.ejs` prints photo (owner-only `/member/kyc-print/file/photo`), father's name, DOB (BS), permanent address, citizenship (masked except last 4), account type, mobile, email. Test: `test/coverage-gaps.test.js`.
 PHP `member/certificate.php:18-46,139-180`: photo, father's name, DOB, permanent address, citizenship no., account type, phone/email from the linked KYM. Node `member.js:309-317` + `certificate.ejs` print none of them. Spec: load `kym.loadLinkedKyc(req.member)` and pass `kyc`; render the photo through `/member/kyc-print/file/photo` (owner-only), mask citizenship except last 4 (CLAUDE.md PII rule), show DOB in BS via `nd`. Bilingual labels.
 
-**SM-9 · Any staff user can void any attendance.**
+**SM-9 · Any staff user can void any attendance.** — **COVERED**: `lib/attendance.canVoid` (admin+/super-admin, custom role with Delete on programmes, else only `staff_admin_id = me`) enforced in `admin-programs.js` POST `/:id/attendance/:aid/void` (flash + no change) and used to hide the Void button. `actionFlag` left as `e` so staff with edit rights can still void their own records (PHP behaviour). Test: `test/coverage-gaps.test.js`.
 PHP `programCanVoidAttendance` (`program-attendance-helpers.php:599-611`): role ≥ admin or explicit `d` permission on the desk; otherwise only the staff member who recorded it (`staff_admin_id = me`). Node `admin-programs.js:394-399` only requires `staff`, and `admin-perms.actionFlag` classifies `/void` as `e`. Spec: in the void route allow when `auth.roleLevel(req.admin.role) >= admin` or `perms.can(req.admin, section, 'd')` or `row.staff_admin_id === req.admin.id`; else 403 + flash. Add `void` to the delete regex in `actionFlag`. Test.
 
-**SM-12 · In-portal status notification goes to the wrong / no member.**
+**SM-12 · In-portal status notification goes to the wrong / no member.** — **COVERED**: `lib/notify.memberForRequest` (portal id → Member ID via `kym.findMemberBySadasyata` → unique normalised phone, email deciding when shared) + `memberStatusNotification` (PHP wording: "<first name> जी … «status» … Tracking ID … Admin टिप्पणी", link `/member/requests/<module>/<id>`), used by `admin-applications.changeStatus` and the API v1 status change. Test: `test/coverage-gaps.test.js`.
 Node `admin-applications.js:271-275` finds the member by `memberCol` value OR exact `phone = $1`, ignoring `member_portal_id` (stored on portal submissions, migrations 020/062) and normalised phones; a shared or reformatted phone notifies the wrong member or nobody. PHP `createMemberStatusNotification` (`member-auth.php:1481-1526`) also used email and wrote "<first name> जी, … Tracking ID … Admin टिप्पणी". Spec: resolve in order `row.member_portal_id` → `kym.findMemberBySadasyata(row[memberCol])` → `phoneDigitsSql` match on normalised phone AND (email match when present); message body as PHP; link `/member/requests/<module>/<id>`. Put it in `lib/notify.js` (`memberForRequest(mod,row)`) so api-v1 status changes reuse it.
 
 ### P3
 
-**SM-10 · SSOT: member KYM lookups not through `kym.loadLinkedKyc`.** `routes/member.js:318-335` (`ownKyc`, `/kyc-print`) query `kyc_applications` by id OR `member_id = ANY(...) AND mobile = m.phone` (exact string). Replace with `kym.loadLinkedKyc(req.member)` (PHP `member-portal-identity.php`, `memberSsotLoadLinkedKyc`).
+**SM-10 · SSOT: member KYM lookups not through `kym.loadLinkedKyc`.** — **COVERED**: `ownKyc` and `/kyc-print` in `routes/member.js` now use `kym.loadLinkedKyc`. `routes/member.js:318-335` (`ownKyc`, `/kyc-print`) query `kyc_applications` by id OR `member_id = ANY(...) AND mobile = m.phone` (exact string). Replace with `kym.loadLinkedKyc(req.member)` (PHP `member-portal-identity.php`, `memberSsotLoadLinkedKyc`).
 
-**SM-13 · Social in-app browser / crawler bounce for document links.** PHP `public-member-access.php:598-660` sends Facebook/Instagram in-app browsers and link-preview crawlers (facebookexternalhit, WhatsApp, Twitterbot…) from `report-file.php?id=` / `institutional-profile-file.php?id=` to the HTML page (OG card) unless `?nav=1` or same-site referer. Add `memberAccess.bounceSocial(req, res, pageUrl)` and call it in `/reports/:id/file` and `/institutional-profile/:id/file`; add `nav=1` to in-page links.
+**SM-13 · Social in-app browser / crawler bounce for document links.** — **COVERED**: `memberAccess.socialBounce` used by `/reports/:id/file` (→ `/reports?id=`) and `/institutional-profile/:id/file` (→ the page for that FY); in-page links carry `nav=1`; same-site Referer passes. Test: `test/coverage-gaps.test.js`. PHP `public-member-access.php:598-660` sends Facebook/Instagram in-app browsers and link-preview crawlers (facebookexternalhit, WhatsApp, Twitterbot…) from `report-file.php?id=` / `institutional-profile-file.php?id=` to the HTML page (OG card) unless `?nav=1` or same-site referer. Add `memberAccess.bounceSocial(req, res, pageUrl)` and call it in `/reports/:id/file` and `/institutional-profile/:id/file`; add `nav=1` to in-page links.
 
-**SM-14 · Pending attendance requests are not closed when attendance is recorded.** PHP `programClosePendingRequests` (`program-attendance-helpers.php:371-382`) marks the member's pending request for that programme approved when a desk/QR record succeeds. Add to `attendance.record()` after insert: `UPDATE member_program_attendance_requests SET status='approved', processed_at=now(), admin_id=$staff, admin_note='Closed by attendance record' WHERE member_id=$1 AND program_id=$2 AND status='pending'`.
+**SM-14 · Pending attendance requests are not closed when attendance is recorded.** — **COVERED**: `attendance.record()` closes the member's pending request (status approved, `admin_note='Closed by attendance record'`) except on the request-approval path itself. PHP `programClosePendingRequests` (`program-attendance-helpers.php:371-382`) marks the member's pending request for that programme approved when a desk/QR record succeeds. Add to `attendance.record()` after insert: `UPDATE member_program_attendance_requests SET status='approved', processed_at=now(), admin_id=$staff, admin_note='Closed by attendance record' WHERE member_id=$1 AND program_id=$2 AND status='pending'`.
 
-**SM-15 · Public tracker: notify-channel chips and GET lookups.** Show email/SMS sent/failed/skipped chips (no reasons) per history row in `views/public/track.ejs` (PHP `application-tracker.php:1585-1620`); consider making ID+phone lookup a POST (PHP never loaded PII on GET; phone currently lands in access logs/Referer).
+**SM-15 · Public tracker: notify-channel chips and GET lookups.** — **COVERED**: `views/partials/notify-chips.ejs` (Email / SMS sent · failed · skipped, no reasons) in the tracker history; the tracking-number form and the phone+email result list POST to `/track` (`mode=id`, `trackById` in `public-members.js`), so the phone stays out of URLs; GET `/track?id=&phone=` still answers old links. Test: `test/coverage-gaps.test.js`. Show email/SMS sent/failed/skipped chips (no reasons) per history row in `views/public/track.ejs` (PHP `application-tracker.php:1585-1620`); consider making ID+phone lookup a POST (PHP never loaded PII on GET; phone currently lands in access logs/Referer).
 
-**SM-16 · Unmapped legacy entry points.** Add to `legacy-urls.js`: `backup-restore.php` → `/admin/backup`; `upload-file.php` → 404 (or admin files when admin); `pwa-icon.php` → `/pwa-icon-<s>.png` (clamp 192/512, `maskable`); `program-attendance-verify.php` → `/admin/programs/<program_id>#desk` (currently `/member/programs`).
+**SM-16 · Unmapped legacy entry points.** — **COVERED** in `legacy-urls.js`: `backup-restore.php` → `/admin/backup`; `upload-file.php?d=&f=` → `/assets/uploads/<d>/<f>` (public folders redirect, gated folders staff-only / 404); `pwa-icon.php?s=&maskable=` → `/pwa-icon-<192|512>.png`; `program-attendance-verify.php?program_id=` → `/admin/programs/<id>#desk`. Test: `test/coverage-gaps.test.js`. Add to `legacy-urls.js`: `backup-restore.php` → `/admin/backup`; `upload-file.php` → 404 (or admin files when admin); `pwa-icon.php` → `/pwa-icon-<s>.png` (clamp 192/512, `maskable`); `program-attendance-verify.php` → `/admin/programs/<program_id>#desk` (currently `/member/programs`).
 
-**SM-17 · Legacy query params dropped.** `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=&sel_day=&tab=` (map to `/calendar?y=&m=&d=`), `institutional-profile.php?id=`, `honor-apply.php?program_id=` (→ `?program=`), `team.php?cat=`, `news.php?page=`/`notices.php?page=`.
+**SM-17 · Legacy query params dropped.** — **COVERED** for `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=` (→ `/calendar?y=&m=`), `honor-apply.php?program_id=` (→ `?program=`), `news.php?page=`, `notices.php?page=`. Not mapped (no Node equivalent to land on): `team.php?cat=` (Node uses `menu`/`item`), `institutional-profile.php?id=` (page has FY/month filters, no per-row anchor), `sel_day`/`tab` of the calendar. `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=&sel_day=&tab=` (map to `/calendar?y=&m=&d=`), `institutional-profile.php?id=`, `honor-apply.php?program_id=` (→ `?program=`), `team.php?cat=`, `news.php?page=`/`notices.php?page=`.
 
-**SM-18 · Record deliberate drops in docs/parity.** sw.js member-page offline cache + `member/offline.php` cached dashboard (privacy on shared phones), `api-public-chat.php` live chat (contact form), `scroll-accessibility.js`, `pull-to-refresh.js`, iframe `?embed=1` modes, `core/helpers.php` dead finance helpers. Also create `docs/parity/coverage.md` (CLAUDE.md §1 says it must exist; it does not).
+**SM-18 · Record deliberate drops in docs/parity.** — **COVERED**: table "Deliberately not ported" in `docs/parity/README.md`; `docs/parity/coverage.md` exists. sw.js member-page offline cache + `member/offline.php` cached dashboard (privacy on shared phones), `api-public-chat.php` live chat (contact form), `scroll-accessibility.js`, `pull-to-refresh.js`, iframe `?embed=1` modes, `core/helpers.php` dead finance helpers. Also create `docs/parity/coverage.md` (CLAUDE.md §1 says it must exist; it does not).
 
-**SM-19 · Information-room viewer deterrence + logging.** Port `assets/js/information-room-viewer.js` into `public/js/` (block copy/cut/contextmenu/dragstart, Ctrl/Cmd+S/P/C/U/A, PrintScreen; blur class on `visibilitychange`) for items with `allow_download=0`; log `view` when `/member/information-room/:id/view` is opened and log the inline fetch as `view` not `download` (`member.js:401-416`). Also move the viewer's inline `style=` into app.css (CLAUDE.md §4).
+**SM-19 · Information-room viewer deterrence + logging.** — **COVERED**: `public/js/information-room-viewer.js` (copy/cut/contextmenu/dragstart, Ctrl/Cmd+S/P/C/U/A, PrintScreen, blur on `visibilitychange`) on items with `restrict_copy`; print hidden via `@media print`; `/view` logs `view`, the inline fetch is not logged again, a direct open logs `download` only when allowed; viewer styles moved to `app.css`; legacy `information-room-view.php?id=` → `/member/information-room/<id>/view`. Port `assets/js/information-room-viewer.js` into `public/js/` (block copy/cut/contextmenu/dragstart, Ctrl/Cmd+S/P/C/U/A, PrintScreen; blur class on `visibilitychange`) for items with `allow_download=0`; log `view` when `/member/information-room/:id/view` is opened and log the inline fetch as `view` not `download` (`member.js:401-416`). Also move the viewer's inline `style=` into app.css (CLAUDE.md §4).
 
-**SM-20 · Applicant cannot open own uploaded documents.** PHP `coop_upload_gate_member_owns` (`upload-gate.php:155-189`) let the member open files on their own KYC/applications. Add `GET /member/requests/:module/:id/file/:field` (ownership via `myRequests`, field must be in `mod.fileFields`, comma lists → `?i=`) using `uploads.sendStored`.
+**SM-20 · Applicant cannot open own uploaded documents.** — **COVERED**: `GET /member/requests/:module/:id/file/:field` (`routes/member.js`; ownership via `myRequests`, file fields only, `?i=` for comma lists, `uploads.sendStored`) + "My documents" buttons on `member/request-detail.ejs`. Test: `test/coverage-gaps.test.js`. PHP `coop_upload_gate_member_owns` (`upload-gate.php:155-189`) let the member open files on their own KYC/applications. Add `GET /member/requests/:module/:id/file/:field` (ownership via `myRequests`, field must be in `mod.fileFields`, comma lists → `?i=`) using `uploads.sendStored`.
 
-**SM-21 · TOTP replay guard is per-process.** `usedSteps` Map in `routes/admin.js:76-82`, `member-account.js:225-227`, platform.js is lost on restart (and would not be shared if PM2 ever runs >1 instance) (PHP used a locked file per scope, `totp-2fa.php:73-111`). Store the last used step in `admin_users.twofa_last_step` / `members.twofa_last_step` (new migration) with `UPDATE … WHERE twofa_last_step < $step RETURNING`.
+**SM-21 · TOTP replay guard is per-process.** — **COVERED** for admins and members: `totp.claimStep` (atomic `UPDATE … SET twofa_last_step = $step WHERE twofa_last_step < $step`), columns added in `065_coverage_gaps.sql`; used by `/admin/login/2fa` and the member 2FA step. The platform operator console keeps its in-process map (single operator surface; its table lives in `platform.sql`, outside the tenant migration). `usedSteps` Map in `routes/admin.js:76-82`, `member-account.js:225-227`, platform.js is lost on restart (and would not be shared if PM2 ever runs >1 instance) (PHP used a locked file per scope, `totp-2fa.php:73-111`). Store the last used step in `admin_users.twofa_last_step` / `members.twofa_last_step` (new migration) with `UPDATE … WHERE twofa_last_step < $step RETURNING`.
 
 
 ---
@@ -387,7 +389,7 @@ Node `admin-applications.js:271-275` finds the member by `memberCol` value OR ex
 PHP: `/home/user/websourcecode` · Node: `/home/user/websitenextgen` (branch `claude/tender-ramanujan-e5xzgu`, HEAD d5b8018).
 Method: every PHP file was listed; per page the POST actions / GET filters / exports were extracted (`grep $_POST/$action/$_GET`) and checked against the Node route, lib and view by reading the code (not by name). The gap specs in `docs/parity/3-admin-system.md` and `4-admin-ops.md` were re-verified one by one; nearly all of them are now implemented on this branch (noted "verified" below). DB columns were compared with a parser over `database/install.sql` vs `db/schema.sql` + `db/migrations/*.sql`, then grepped for use in `src/`, `views/`, `scripts/`, `public/js/`.
 
-Note: `CLAUDE.md` says `docs/parity/coverage.md` maps every PHP file; **that file does not exist yet** — this matrix (with matrix A) is the material for it.
+Note: this file is `docs/parity/coverage.md` (CLAUDE.md §1).
 
 Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/routes/admin.js`, `res.<key>` = `src/modules/resources.js` resource, `inbox:<key>` = `src/modules/applications.js` module served by `src/routes/admin-applications.js`.
 
@@ -401,7 +403,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | about-settings.php | settings tab `about` (`src/lib/setting-defs.js`) | COVERED | update_history_text (history_content_np/en richtext), upload/remove_history_photo (image + `remove_` checkbox, admin.js:620), update_about_stats (years_experience, total_services, satisfaction_rate, total_members, established_year) all in defs. |
 | account-applications.php | `inbox:account` | COVERED | list/search/date/status, quick_status, update_status, delete, CSV, status cards (verified `statusCounts`). |
 | admin-roles.php | `/admin/roles` (admin-tools.js:21) | COVERED | save_role, delete_role. |
-| ai-settings.php | settings tab `ai` | PARTIAL | save (provider select, model + datalist, welcome NP/EN, enable) and clear_key (secret clear checkbox) covered. **Missing `test` action** (ai-settings.php:49-63: ping the provider with "Reply OK", flash provider/model/preview). |
+| ai-settings.php | settings tab `ai` + POST `/admin/settings/ai-test` | COVERED | connection test added (`ai-chat.testConnection`, B-5). Was: save (provider select, model + datalist, welcome NP/EN, enable) and clear_key (secret clear checkbox) covered. **Missing `test` action** (ai-settings.php:49-63: ping the provider with "Reply OK", flash provider/model/preview). |
 | analytics.php | `/admin/analytics` (admin-tools.js:88) | COVERED | members growth, applications by type, monthly, KYC/member status, welfare, attendance, visitors. |
 | app-features.php | `res.app_features` (minRole admin) | COVERED | add/edit/delete/toggle, is_new, icon. |
 | appointments.php | `inbox:appointment` | COVERED | kind filter, preferred_date order, cards (verified). |
@@ -426,7 +428,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | election-results.php | `/admin/elections/:id` (+finalize, convert) | COVERED | |
 | election-voting-attendance.php | `/admin/elections/:id/desk` | COVERED | mark_manual_vote. |
 | error-log.php | `/admin/error-log` (+clear) | COVERED | DB log instead of file. |
-| faqs.php | `res.faqs` | PARTIAL | add/edit/delete/toggle, category filter covered. **`bulk_status` missing** (faqs.php:46,129) — resource lacks `bulk: true`. |
+| faqs.php | `res.faqs` | COVERED | bulk activate/deactivate: every resource with `is_active` now gets `bulk` (resources.js, B-7). Was: add/edit/delete/toggle, category filter covered. **`bulk_status` missing** (faqs.php:46,129) — resource lacks `bulk: true`. |
 | feedbacks.php | `inbox:feedback` | COVERED | type filter, remove_attachment, note. |
 | footer-settings.php | settings tab `footer` (supported_name/url) + `views/layouts/public.ejs` | COVERED | |
 | gallery.php | `res.gallery_albums`, `res.gallery`, `/admin/gallery/upload`, `/admin/gallery/video` | COVERED | album CRUD + delete guard, update_media, album/media_type filters. |
@@ -442,7 +444,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | information-room-browse.php | `/admin/information-room/browse` | COVERED | |
 | information-room-logs.php | `/admin/information-room/logs` | COVERED | |
 | information-room-view.php | `/admin/information-room/view/:id` | COVERED | |
-| information-room.php | `res.information_room_items` (bulk, fixed categories) | PARTIAL | add/edit/delete/bulk_status/allow_download covered. **`restrict_copy` flag missing** (information-room.php:109,126,280; column exists in Node schema but is never read or edited; PHP default 1 = copy-protected viewer). |
+| information-room.php | `res.information_room_items` (bulk, fixed categories) | COVERED | `restrict_copy` field + `created_by` stamp (B-9). Was: add/edit/delete/bulk_status/allow_download covered. **`restrict_copy` flag missing** (information-room.php:109,126,280; column exists in Node schema but is never read or edited; PHP default 1 = copy-protected viewer). |
 | institutional-profile.php | `res.institutional_profile` + `/admin/institutional-welfare` | COVERED | 13 indicators, FY select, BS date → month/AD, duplicate guard, private attachment, welfare_prefill → welfare routes. |
 | institutional-welfare-opening.php | `/admin/institutional-welfare` (admin-welfare.js) | COVERED | |
 | interest-rates.php | `res.interest_rates` | COVERED | category filter. |
@@ -456,7 +458,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | manage-admins.php | `/admin/users` (requireAdmin admin) | COVERED | create, assign_role, reset_password, toggle_active, delete (soft), reset_2fa (superadmin), edit name/email; `normalize_role_aliases` NOT-NEEDED (no `super_admin` alias in Node). |
 | member-activities.php | `/admin/members/:id/activities(.csv)` | COVERED | partner services source added; member search goes through the members list. |
 | member-import-sample.php | `/members/import/sample.csv`, `/field-sample.csv` | COVERED | father/citizenship/membership_date/monthly_saving columns. |
-| member-import.php | `/admin/members/import*`, `src/lib/member-import.js` | PARTIAL | aliases, KYM stub soft-fill, ≤400-row ID cards, membership_date, errors.csv, field_update all present. **Commit is one synchronous request** for up to 20,000 rows (admin-members.js:206); PHP ran it as AJAX ticks with progress bar, resume and 10 retries (member-import.php:437-535). |
+| member-import.php | `/admin/members/import*`, `src/lib/member-import.js` | COVERED | Chunked commit (B-2): `memberImport.commitChunk` (200 rows / request, job `running` → `done`), `status.json`, progress bar + auto-continue with back-off retries in `public/js/admin-tools.js`, Continue + Retry-failed buttons. Earlier: aliases, KYM stub soft-fill, ≤400-row ID cards, membership_date, errors.csv, field_update all present. **Commit is one synchronous request** for up to 20,000 rows (admin-members.js:206); PHP ran it as AJAX ticks with progress bar, resume and 10 retries (member-import.php:437-535). |
 | member-marketplace.php | `/admin/marketplace`, `/:id` detail (marketplace.js:105-124) | COVERED | approve/reject/expire/extend/delete, inquiries, all tab. |
 | member-of-year.php | `res.member_of_year` | COVERED | quote_en/achievement_en, one per year. |
 | member-online-portal.php | `/admin/member-portal`, `/admin/password-requests`, `/members/:id/card(/unlock)` | COVERED | approve/reject, toggle_active, generate_id_card, unlock_card, approve_reset/reject_reset, stats, partner services, rating. |
@@ -468,7 +470,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | messages.php | `inbox:contact` | COVERED | filter/view/delete/read. |
 | news.php | `res.news` (bulk) | COVERED | |
 | notices.php | `res.notices` (bulk, is_popup filter) | COVERED | BS date entry (admin.js:409-415), remove_attachment / remove_popup_image via `remove_` checkbox, popup_photo_only. |
-| notification-settings.php | settings tab `notify` + `/admin/notifications/test` | PARTIAL | SMTP/SMS/recipients, per-event matrix, member toggles, test covered; legacy keys mapped (`settings.mapLegacy`). **`clear_log` action missing** (notification-settings.php:117-121, delete log rows older than 30 days on demand); Node only purges >365 days in `scripts/cleanup.js`. |
+| notification-settings.php | settings tab `notify` + `/admin/notifications/test` + `/admin/notifications/clear-old` | COVERED | clear old logs added (B-10). Was: SMTP/SMS/recipients, per-event matrix, member toggles, test covered; legacy keys mapped (`settings.mapLegacy`). **`clear_log` action missing** (notification-settings.php:117-121, delete log rows older than 30 days on demand); Node only purges >365 days in `scripts/cleanup.js`. |
 | notification-templates.php | `res.notification_templates` + `/admin/notifications/template-test` | COVERED | |
 | pages.php | `res.pages` + settings tab `sections` (static vision/mission/values/chairman/CEO NP+EN+titles) | COVERED | auto slug, footer position rule, menu_icon. (`is_new`/`new_until` were never editable in PHP admin either; see DB §4.) |
 | partner-facilities.php | `res.partner_facilities` + `/admin/partners` (PIN, promote vendor) | COVERED | clear_pin (`setPin` null), deactivate (toggle). |
@@ -490,11 +492,11 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | satisfaction-settings.php | `/admin/satisfaction` + `res.satisfaction_links` | COVERED | toggle_widget, link CRUD, icon. |
 | security-settings.php | `/admin/security` (admin-tools.js:246) | COVERED | 2FA policy, idle minutes, Turnstile (+clear). CSP toggles NOT-NEEDED (fixed strict CSP). |
 | service-centers.php | `res.service_centers` | COVERED | |
-| services.php | `res.services`, `res.service_categories`, `res.service_products` | PARTIAL | cat_*/product_* CRUD, icon, nav_group, category delete guard covered. **`bulk_status` missing** (services.php:104,250) — `services` lacks `bulk: true`. |
-| settings.php | `/admin/settings` (registry `setting-defs.js`) + `/admin/theme` | PARTIAL | ~90 keys, images with remove, secrets with clear, upload-error handling covered; colours → theme. **Not editable: `hero_title`, `hero_subtitle`** (read by `views/public/home.ejs:6`), **`pwa_app_name`** (read by `public.js:1080`), `site_version` (settings.php:47-66 textSettings), **`himal_bg` + `himal_bg_opacity`** header background photo (settings.php:293-300, `includes/header.php:52`) — no Node def, no public use. `public_ui_look` → replaced by themes (NOT-NEEDED). |
+| services.php | `res.services`, `res.service_categories`, `res.service_products` | COVERED | bulk status via the generic `bulk` default (B-7). Was: cat_*/product_* CRUD, icon, nav_group, category delete guard covered. **`bulk_status` missing** (services.php:104,250) — `services` lacks `bulk: true`. |
+| settings.php | `/admin/settings` (registry `setting-defs.js`) + `/admin/theme` | COVERED (himal_bg handled by the header-image work) | `hero_title`, `hero_subtitle`, `pwa_app_name`, `site_version` (admin footer) added to `setting-defs.js` (B-3). Was: ~90 keys, images with remove, secrets with clear, upload-error handling covered; colours → theme. **Not editable: `hero_title`, `hero_subtitle`** (read by `views/public/home.ejs:6`), **`pwa_app_name`** (read by `public.js:1080`), `site_version` (settings.php:47-66 textSettings), **`himal_bg` + `himal_bg_opacity`** header background photo (settings.php:293-300, `includes/header.php:52`) — no Node def, no public use. `public_ui_look` → replaced by themes (NOT-NEEDED). |
 | site-health.php | `/admin/system` | COVERED | create_folder NOT-NEEDED (uploads lib creates dirs). |
 | site-license-blocked.php | `/admin/license/blocked` (admin.js:116-147, rate-limited) | COVERED | |
-| site-license.php | `/admin/license` (+cancel) and platform `/tenants/:id/license` | PARTIAL | cancel_renewal_pending covered; vendor email on notice covered (env). **Renewal amount / eSewa / Khalti are one global env set** (`license.payInfo`, license.js:38) instead of per-site (PHP `site_license_renewal_amount` setting, save_renewal_settings); **licence date entered in AD only** (platform.js:219; PHP save_license_date took BS). |
+| site-license.php | `/admin/license` (+cancel) and platform `/tenants/:id/license` | COVERED | per-tenant amount / eSewa / Khalti overrides (tenant settings `license_*`, set from the platform console) and B.S. licence date (`license.parseUntil`) added (B-11). Was: cancel_renewal_pending covered; vendor email on notice covered (env). **Renewal amount / eSewa / Khalti are one global env set** (`license.payInfo`, license.js:38) instead of per-site (PHP `site_license_renewal_amount` setting, save_renewal_settings); **licence date entered in AD only** (platform.js:219; PHP save_license_date took BS). |
 | site-setup.php | platform console + settings | NOT-NEEDED | cPanel setup-config / installer lock. |
 | sliders.php | `res.sliders` | COVERED | |
 | staff.php | — | NOT-NEEDED | redirect alias of team.php. |
@@ -528,7 +530,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 |---|---|---|---|
 | includes/admin-excel-export.php | `util.sendCsv` (BOM, formula-safe), inbox/members export | COVERED | |
 | includes/admin-footer.php | `views/layouts/admin.ejs`, `public/js/admin-*.js` | COVERED | Bootstrap/jQuery/DataTables/Nepali datepicker → server search + `data-ad-date` (forms.js:92). CSRF inject N/A. |
-| includes/admin-header.php | `views/layouts/admin.ejs` (sidebar, quick search, bell) | PARTIAL | bell exists (admin.ejs:75-77) but only counts inbox modules + member-portal queue. **Bell lacks: KYC risk-review due, marketplace pending, programme attendance requests** (admin-header.php:1219-1238). **"New pending requests" popup** shown once when the total grows (admin-header.php:1243-1250, 1361-1404) missing. Help-guide link: sidebar + top bar → /admin/help. |
+| includes/admin-header.php | `views/layouts/admin.ejs` (sidebar, quick search, bell) | COVERED | bell now also counts KYM risk reviews, marketplace and attendance requests, opens once per increase (`admin-members.badges`, B-6). Was: bell exists (admin.ejs:75-77) but only counts inbox modules + member-portal queue. **Bell lacks: KYC risk-review due, marketplace pending, programme attendance requests** (admin-header.php:1219-1238). **"New pending requests" popup** shown once when the total grows (admin-header.php:1243-1250, 1361-1404) missing. Help-guide link missing (see help-guide). |
 | includes/admin-page-boot.php | `requireAdmin` + `admin-perms` middleware | COVERED | |
 | includes/admin-request-view.php | `views/admin/inbox-view.ejs` (tabs, docs grid, history with per-channel notify chips) | COVERED | |
 | includes/admin-ui.php | partials (page-head, pagination…), Live/Archive tabs (resource-list.ejs:7-9), fiscal-year select (`fyOptions`) | COVERED | |
@@ -564,16 +566,16 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | run-all-smokes.sh | `npm test` | COVERED | |
 | run-migration-safe.php | `scripts/migrate.js` | COVERED | |
 | reports/* (8 files: *.pruned.txt, *.json) | — | NOT-NEEDED | build artefacts. |
-| smoke-admin-buttons.php | — | MISSING | no test that every admin `<button>` has `type=`. P3 lint test over `views/admin/**`. |
+| smoke-admin-buttons.php | test/coverage-gaps.test.js "every admin <button> declares its type" | COVERED | 120 admin buttons given an explicit `type` |
 | smoke-admin-permissions.php | admin-tools.test.js "permission matrix…", "custom role limits…" | COVERED | |
 | smoke-cms-html.php | app.test.js "sanitizer strips…", security.test.js "rich text sanitizer…" | COVERED | |
 | smoke-contact-guard.php | admin-tools.test.js "spam heuristics…", "contact form rejects link spam", security2 antispam | COVERED | |
-| smoke-csp.php | — | MISSING | no test asserts the CSP header (no `unsafe-inline`, no CDN) nor that views carry no inline `<script>`/`on*=` (only one page checked, public-parity.test.js:126). P2 because CSP is a CLAUDE.md §6 rule. |
+| smoke-csp.php | test/coverage-gaps.test.js "B-1: strict CSP header…" | COVERED | header asserted on public/member/admin pages; views scanned for inline `<script>`, `on*=`, external assets. Was: no test asserts the CSP header (no `unsafe-inline`, no CDN) nor that views carry no inline `<script>`/`on*=` (only one page checked, public-parity.test.js:126). P2 because CSP is a CLAUDE.md §6 rule. |
 | smoke-css-order.php | — | NOT-NEEDED | |
 | smoke-deploy.php | — | NOT-NEEDED | cPanel. |
 | smoke-dynamic-pages-nav.php | admin-cms-parity.test.js (menu_position/show_in_menu) | COVERED | |
-| smoke-form-a11y.php | forms-member-parity.test.js (some label checks) | PARTIAL | no global "every input with id has a label for=" lint. P3. |
-| smoke-img-alt.php | — | MISSING | no `<img>` alt lint over views. P3. |
+| smoke-form-a11y.php | forms-member-parity.test.js + test/coverage-gaps.test.js label `for=` lint | COVERED | no global "every input with id has a label for=" lint. P3. |
+| smoke-img-alt.php | test/coverage-gaps.test.js (view lint) | COVERED | every `<img>` has `alt` |
 | smoke-information-room.php | admin-tools / admin-ops-parity / security tests | COVERED | |
 | smoke-member-import-optional.php | admin-ops-parity.test.js (father_name / citizenship_no / membership_date) | COVERED | |
 | smoke-member-marketplace.php | parity.test.js "marketplace…", forms-member-parity | COVERED | |
@@ -583,15 +585,15 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 | smoke-pii-crypto.php | applications / admin-ops-parity pii tests | COVERED | |
 | smoke-pretty-urls.php | members.test.js "legacy PHP URLs redirect (301)…" | COVERED | |
 | smoke-program-attendance-db.php | parity.test.js "programmes: defaults…, desks, pre-reg…" | COVERED | |
-| smoke-program-concurrency.php | DB unique index `member_program_attendance_uniq_scope_member_status` + sequential duplicate test (parity.test.js:195) | PARTIAL | no concurrent (Promise.all) double check-in test. P3. |
+| smoke-program-concurrency.php | DB unique index `member_program_attendance_uniq_scope_member_status` + sequential duplicate test (parity.test.js:195) + concurrent Promise.all test (test/coverage-gaps.test.js) | COVERED | no concurrent (Promise.all) double check-in test. P3. |
 | smoke-program-ui.php | — | NOT-NEEDED | PHP UI static check. |
 | smoke-public-cache.php | public-parity / parity Cache-Control tests | COVERED | |
-| smoke-pull-to-refresh.php | `public/js/site.js` (feature) — no test | PARTIAL | P3 (public slice). |
+| smoke-pull-to-refresh.php | — | NOT-NEEDED | custom pull-to-refresh deliberately not ported (browser-native; docs/parity/README.md), so there is nothing to smoke-test. |
 | smoke-quarantine-stubs.php | legacy redirect tests | COVERED | |
-| smoke-report-upload.php | app.test.js "POST without CSRF (multipart)" | PARTIAL | the over-size upload case (must report "too large", not a false CSRF error) is not tested. P3. |
+| smoke-report-upload.php | app.test.js "POST without CSRF (multipart)" + over-size upload test (test/coverage-gaps.test.js) | COVERED | the over-size upload case (must report "too large", not a false CSRF error) is not tested. P3. |
 | smoke-schema-ensure.php | migration.test.js | COVERED | |
 | smoke-scroll-a11y.php | — | NOT-NEEDED | PHP `scroll-accessibility.js` voice widget has no Node counterpart; confirm with public slice (matrix A) that dropping it is intended. |
-| smoke-security.php | security.test.js, security2.test.js | PARTIAL | headers (X-Frame-Options/nosniff/Referrer-Policy) and `rel=noopener` tabnabbing are not asserted. P3. |
+| smoke-security.php | security.test.js, security2.test.js, test/coverage-gaps.test.js (headers, `rel=noopener`) | COVERED | headers (X-Frame-Options/nosniff/Referrer-Policy) and `rel=noopener` tabnabbing are not asserted. P3. |
 | smoke-seo.php | public-parity.test.js (sitemap/robots), admin-tools "public SEO head…" | COVERED | |
 | smoke-upload-gate.php | api.test.js magic-byte, forms-member-parity saveDataUrl PHP-payload test | COVERED | |
 
@@ -601,31 +603,31 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 
 ### 6.1 Schema presence
 - 103 `CREATE TABLE` in `database/install.sql`; **all 103 exist in `db/schema.sql` (+ migrations) with every column** (parser comparison; the only diff was a comment parse artefact in `notification_log.module`). Node adds 15 tables (admin_roles, api_*, app_error_log, group_centres, institutional_profile_welfare, institutional_welfare_opening, member_accounts, member_documents, member_profile_change_requests, member_transactions, payment_channels, rate_disclosures).
-- `db/legacy/install.sql` differs from the PHP file (older copy); `npm run schema:convert` reads it — keep it in sync or point the script at the real PHP file (P3).
+- `db/legacy/install.sql` refreshed from the PHP file (B-18).
 
 ### 6.2 Tables present in schema but never used by Node code
 
 | Table | PHP use | Status | Notes |
 |---|---|---|---|
 | `activity_log` | written by admin/logout.php:9, change-password.php:59; never displayed by PHP | NOT-NEEDED | Node writes `audit_log`. Not purged by cleanup.js (add a rule or drop in a migration). |
-| `help_topics` | read by `includes/ai-chat-context.php:488` as AI context (no PHP admin UI; help-center uses chatbot_faqs) | PARTIAL | Imported help_topics rows are silently ignored by the Node assistant. Spec: in `site-migration.js`/`import-from-mysql.js` copy active rows into `chatbot_faqs` (question=title_np, question_en=title, answer=content_np, answer_en=content, category) once. P3. |
+| `help_topics` | read by `includes/ai-chat-context.php:488` as AI context (no PHP admin UI; help-center uses chatbot_faqs) | COVERED | copied into `chatbot_faqs` by the migration (`importHelpTopics`). Was: Imported help_topics rows are silently ignored by the Node assistant. Spec: in `site-migration.js`/`import-from-mysql.js` copy active rows into `chatbot_faqs` (question=title_np, question_en=title, answer=content_np, answer_en=content, category) once. P3. |
 
 ### 6.3 Columns in schema but never read or written by Node (that carried PHP behaviour)
 
 | Table.column | PHP behaviour | Status | Pri |
 |---|---|---|---|
-| `information_room_items.restrict_copy` | per-item copy protection flag (default 1), edited in information-room.php:109/126, badge :280; viewer disables copy/print | MISSING | P3 |
-| `information_room_items.created_by` | admin id stamped on insert (information-room.php:109) | MISSING | P3 (resource `afterSave`/insert should stamp `created_by`) |
-| `pages.is_new`, `pages.new_until` | "New" badge on dynamic page menu items until a date (`includes/header.php:419-474`); not editable in PHP admin | PARTIAL | P3 (`is_new` exists; neither shown in Node menu nor editable) |
+| `information_room_items.restrict_copy` | per-item copy protection flag (default 1), edited in information-room.php:109/126, badge :280; viewer disables copy/print | COVERED (B-9) | P3 |
+| `information_room_items.created_by` | admin id stamped on insert (information-room.php:109) | COVERED (B-9) | P3 (resource `afterSave`/insert should stamp `created_by`) |
+| `pages.is_new`, `pages.new_until` | "New" badge on dynamic page menu items until a date (`includes/header.php:419-474`); not editable in PHP admin | COVERED (B-15) | P3 (`is_new` exists; neither shown in Node menu nor editable) |
 | `kyc_applications.member_id_generated/member_generated_at/member_generated_by` | legacy stamps from the old kyc-generate-member flow (now a stub in PHP) | NOT-NEEDED | – |
 | `member_program_attendance.is_priority` | shown as "Priority" badge/column (program-attendance.php:85,836) but no PHP caller ever sets it to 1 | NOT-NEEDED | – |
-| `member_program_attendance.device_fingerprint` | stored on QR check-in (program-attendance-helpers.php:432,515) | MISSING | P3 (record `sha256(UA)` prefix from member QR flow; audit value only) |
-| `program_audit_logs.payload_json`, `.ip_address` | void audit stored payload + IP (program-attendance-helpers.php:351) | PARTIAL | P3 (attendance.js:98 omits both) |
+| `member_program_attendance.device_fingerprint` | stored on QR check-in (program-attendance-helpers.php:432,515) | COVERED (B-14) | P3 (record `sha256(UA)` prefix from member QR flow; audit value only) |
+| `program_audit_logs.payload_json`, `.ip_address` | void audit stored payload + IP (program-attendance-helpers.php:351) | COVERED (B-14) | P3 (attendance.js:98 omits both) |
 | `program_occurrences.venue_id` | DDL only, never used in PHP | NOT-NEEDED | – |
 | `visitor_counter.page_visited/ip_address/user_agent/visit_date` | per-hit log (includes/footer.php:47) | NOT-NEEDED | Node aggregates in `visitor_stats`; table only purged. |
 | `notification_templates.variables` | informational list of placeholders | NOT-NEEDED | Node shows placeholders as a hint. |
-| `member_import_jobs.error_message` | job-level failure text | PARTIAL | P3 (commit errors are flashed but not stored on the job) |
-| `member_marketplace_listings.available_from/available_time_from/available_time_to` | member form fields (member/marketplace.php:121-209) | PARTIAL | shown in admin view only; check member form in matrix A. |
+| `member_import_jobs.error_message` | job-level failure text | COVERED | `memberImport.setError` on a failed commit request, shown on the job page |
+| `member_marketplace_listings.available_from/available_time_from/available_time_to` | member form fields (member/marketplace.php:121-209) | COVERED (member form: from / until + time / daily hours, `marketplace.js readListing`) | shown in admin view only; check member form in matrix A. |
 | application tables `tracking_id`, `is_read`, `reviewed_by/at`, `resolved_at`, `service_type_np`, `member_portal_id`, `is_member` | | COVERED | used through the generic inbox/submission code (`cols.has(...)`), verified admin-applications.js:248-251, submissions.js:75-84, public.js:924-925. |
 
 ### 6.4 Tables with PHP admin features and where they are edited in Node
@@ -639,27 +641,27 @@ Every other install.sql table is edited through `res.*`, `inbox:*` or a dedicate
 - none found in this slice. All P1 items of reports 3 and 4 (2FA policy and forced enrolment, settings registry, legacy key mapping, about sections, audit filters + legacy rows, institutional profile, delete guards, auction exclusive winner) are implemented and were verified in code.
 
 ### P2
-1. **CSP regression test** (smoke-csp.php): `test/security*.test.js` — GET a public page, an admin page and a member page; assert `content-security-policy` has no `'unsafe-inline'` in `script-src` and no external host; walk `views/**/*.ejs` and fail on `<script>` without `src` or any ` on[a-z]+=` attribute.
-2. **Member import commit for large files** (member-import.php:437-535): commit runs inside one HTTP request for up to 20,000 rows. Spec: `POST /admin/members/import/:id/commit` sets `member_import_jobs.status='running'` and processes rows in batches of 200 via `notify.later`-style background loop (or `?step=1` ticks from `public/js/admin-tools.js`), updating `processed_rows`; `member-import-job.ejs` polls `GET /admin/members/import/:id/status.json` for a progress bar; rows already `imported` are skipped so a rerun resumes. Store failures in `member_import_jobs.error_message`.
-3. **Settings keys read by the site but not editable** (settings.php:47-66, 293-300): add to `src/lib/setting-defs.js` — `hero_title`, `hero_subtitle` (group general, text, max 200), `pwa_app_name` (general, text, max 60), `site_version` (general, text, max 20, shown in admin footer). Decide `himal_bg`/`himal_bg_opacity`: either port as theme header background (image + number 0-100 in `/admin/theme`, used by the public header) or record as deliberately dropped in docs/parity.
+1. **COVERED** (`test/coverage-gaps.test.js`) — **CSP regression test** (smoke-csp.php): `test/security*.test.js` — GET a public page, an admin page and a member page; assert `content-security-policy` has no `'unsafe-inline'` in `script-src` and no external host; walk `views/**/*.ejs` and fail on `<script>` without `src` or any ` on[a-z]+=` attribute.
+2. **COVERED** (`memberImport.commitChunk` / `progress` / `retryFailed`; routes `/commit` (JSON or form), `/status.json`, `/retry`; test in `test/coverage-gaps.test.js`) — **Member import commit for large files** (member-import.php:437-535): commit runs inside one HTTP request for up to 20,000 rows. Spec: `POST /admin/members/import/:id/commit` sets `member_import_jobs.status='running'` and processes rows in batches of 200 via `notify.later`-style background loop (or `?step=1` ticks from `public/js/admin-tools.js`), updating `processed_rows`; `member-import-job.ejs` polls `GET /admin/members/import/:id/status.json` for a progress bar; rows already `imported` are skipped so a rerun resumes. Store failures in `member_import_jobs.error_message`.
+3. **COVERED** for `hero_title`, `hero_subtitle`, `pwa_app_name`, `site_version` (`setting-defs.js`, version shown in `layouts/admin.ejs`); `himal_bg` is part of the separate header-background work — **Settings keys read by the site but not editable** (settings.php:47-66, 293-300): add to `src/lib/setting-defs.js` — `hero_title`, `hero_subtitle` (group general, text, max 200), `pwa_app_name` (general, text, max 60), `site_version` (general, text, max 20, shown in admin footer). Decide `himal_bg`/`himal_bg_opacity`: either port as theme header background (image + number 0-100 in `/admin/theme`, used by the public header) or record as deliberately dropped in docs/parity.
 
 ### P3
 4. **help-guide.php**: `/admin/help` (ALWAYS in admin-perms), `views/admin/help.ejs`, bilingual sections per sidebar group linking each page; content adapted from admin/help-guide.php minus cPanel/PHP parts; link in the admin top bar.
-5. **AI connection test** (ai-settings.php:49-63): POST `/admin/settings/ai-test` (admin), calls `ai-chat` provider with system "Reply with exactly: OK", user "ping", 10 s timeout; flash `Connection OK (<provider>/<model>): <first 80 chars>` or the error; button on the `ai` tab; audited.
-6. **Admin bell completeness** (admin-header.php:1219-1238): add to `pendingCounts` — `_kycRisk` (`kyc_applications status='approved' AND risk_review_status='due_review'` → `/admin/kyc-risk-reviews`), `_marketplace` (`member_marketplace_listings status='pending'` → `/admin/marketplace?tab=pending`), `_attendance` (`member_program_attendance_requests status='pending'` → `/admin/programs/register?tab=requests`), each gated by `can()`/plan. Optional once-per-increase popup: store `req.session.pendingSeen`; when the total grows, render the bell open (`<details open>`), no JS modal needed.
-7. **bulk_status for faqs and services** (faqs.php:46, services.php:104): add `bulk: true` to `res.faqs` and `res.services`.
+5. **COVERED** (`ai-chat.testConnection`, POST `/admin/settings/ai-test`, button on the AI tab, audited) — **AI connection test** (ai-settings.php:49-63): POST `/admin/settings/ai-test` (admin), calls `ai-chat` provider with system "Reply with exactly: OK", user "ping", 10 s timeout; flash `Connection OK (<provider>/<model>): <first 80 chars>` or the error; button on the `ai` tab; audited.
+6. **COVERED** (`admin-members.badges`: `_kycRisk`, `_marketplace`, `_attendance` + `bellLinks`, permission-gated in the layout; `<details open>` once per increase) — **Admin bell completeness** (admin-header.php:1219-1238): add to `pendingCounts` — `_kycRisk` (`kyc_applications status='approved' AND risk_review_status='due_review'` → `/admin/kyc-risk-reviews`), `_marketplace` (`member_marketplace_listings status='pending'` → `/admin/marketplace?tab=pending`), `_attendance` (`member_program_attendance_requests status='pending'` → `/admin/programs/register?tab=requests`), each gated by `can()`/plan. Optional once-per-increase popup: store `req.session.pendingSeen`; when the total grows, render the bell open (`<details open>`), no JS modal needed.
+7. **COVERED** (`resources.js`: `bulk` defaults to true for every resource with an `is_active` field) — **bulk_status for faqs and services** (faqs.php:46, services.php:104): add `bulk: true` to `res.faqs` and `res.services`.
 8. **Committee webcam photo** (committees.php:127-133): optional "Take photo" button on `image` fields with `capture: true` (set on `committee_members.photo`), reusing `public/js/kyc-capture.js` camera dialog to fill the file input through DataTransfer so the normal upload path applies.
-9. **Information room `restrict_copy`**: `B('restrict_copy', 'कपी रोक्ने', 'Block copy / print', { default: 1 })` on `res.information_room_items`; the member viewer adds `user-select:none`, blocks context menu/print CSS (`@media print { body { display:none } }`) when set; also stamp `created_by = req.admin.id` on create.
-10. **notification log clear** (notification-settings.php:117-121): POST `/admin/notifications/clear-old` (admin, audited) → `DELETE FROM notification_log WHERE created_at < now() - interval '30 days'`.
-11. **Licence per tenant** (site-license.php save_renewal_settings / save_license_date): optional per-tenant overrides `renewal_amount`, `esewa_id`, `khalti_id` on `platform.tenants` falling back to env in `license.payInfo(tenant)`; accept a BS date in platform `/tenants/:id/license` (`nd.bsToAd` when year ≥ 2050).
-12. **Legacy admin redirects for CMS pages**: `src/lib/legacy-admin-urls.js` maps ~50 pages but not news/notices/pages/sliders/team/staff/team-karmachari/settings/messages/faqs/downloads/gallery/services/… (list in §1). Add `news.php → /admin/r/news`, `messages.php → /admin/inbox/contact`, `settings.php → /admin/settings`, `staff.php|team-karmachari.php|team.php → /admin/r/team_members`, etc.; root `backup-restore.php → /admin/backup`.
-13. **help_topics import** into chatbot_faqs (§6.2).
-14. **Attendance audit details**: write `program_audit_logs.payload_json` + `ip_address` on void; `member_program_attendance.device_fingerprint` on member QR check-ins.
-15. **pages.is_new / new_until**: show a "New" chip on dynamic-page menu items while `is_new=1 AND (new_until IS NULL OR new_until >= CURRENT_DATE)` and expose both fields on `res.pages`.
-16. **Tests to add** (smoke parity): admin `<button>` type lint, `<img>` alt lint, label `for=` lint, security headers + `rel=noopener`, concurrent double check-in (Promise.all → one VALID row), over-size upload error message.
-17. **VAPID key import**: copy the PHP site's VAPID key pair (push-vapid.local.php / settings) into `push_vapid_public/private` during site migration so existing member push subscriptions keep working.
-18. `db/legacy/install.sql` is an older copy of the PHP file; refresh it or point `schema:convert` at the PHP repo copy.
-19. Create `docs/parity/coverage.md` (required by CLAUDE.md §1, currently absent) from this matrix + matrix A.
+9. **COVERED** (`res.information_room_items` `restrict_copy` + `afterSave` created_by; viewer deterrence SM-19) — **Information room `restrict_copy`**: `B('restrict_copy', 'कपी रोक्ने', 'Block copy / print', { default: 1 })` on `res.information_room_items`; the member viewer adds `user-select:none`, blocks context menu/print CSS (`@media print { body { display:none } }`) when set; also stamp `created_by = req.admin.id` on create.
+10. **COVERED** (POST `/admin/notifications/clear-old`, button on the delivery log, audited) — **notification log clear** (notification-settings.php:117-121): POST `/admin/notifications/clear-old` (admin, audited) → `DELETE FROM notification_log WHERE created_at < now() - interval '30 days'`.
+11. **COVERED** (overrides stored as tenant settings `license_renewal_amount/esewa_id/khalti_id` — no schema change; `license.payInfo(settings)`; platform form accepts a B.S. date) — **Licence per tenant** (site-license.php save_renewal_settings / save_license_date): optional per-tenant overrides `renewal_amount`, `esewa_id`, `khalti_id` on `platform.tenants` falling back to env in `license.payInfo(tenant)`; accept a BS date in platform `/tenants/:id/license` (`nd.bsToAd` when year ≥ 2050).
+12. **COVERED** (`legacy-admin-urls.js`: ~60 more CMS / settings / system pages; test checks every target answers) — **Legacy admin redirects for CMS pages**: `src/lib/legacy-admin-urls.js` maps ~50 pages but not news/notices/pages/sliders/team/staff/team-karmachari/settings/messages/faqs/downloads/gallery/services/… (list in §1). Add `news.php → /admin/r/news`, `messages.php → /admin/inbox/contact`, `settings.php → /admin/settings`, `staff.php|team-karmachari.php|team.php → /admin/r/team_members`, etc.; root `backup-restore.php → /admin/backup`.
+13. **COVERED** (`site-migration.importHelpTopics`, run during the site migration; once per question) — **help_topics import** into chatbot_faqs (§6.2).
+14. **COVERED** (`attendance.voidAttendance` writes `payload_json` + `ip_address`; member QR check-in stores `device_fingerprint` = sha256(UA) prefix) — **Attendance audit details**: write `program_audit_logs.payload_json` + `ip_address` on void; `member_program_attendance.device_fingerprint` on member QR check-ins.
+15. **COVERED** (`res.pages` fields + `navigation.js` `isNew` → "New" chip in `layouts/public.ejs`) — **pages.is_new / new_until**: show a "New" chip on dynamic-page menu items while `is_new=1 AND (new_until IS NULL OR new_until >= CURRENT_DATE)` and expose both fields on `res.pages`.
+16. **COVERED** (`test/coverage-gaps.test.js`: admin button type, img alt, label for=, headers + noopener, concurrent check-in, over-size upload) — **Tests to add** (smoke parity): admin `<button>` type lint, `<img>` alt lint, label `for=` lint, security headers + `rel=noopener`, concurrent double check-in (Promise.all → one VALID row), over-size upload error message.
+17. **COVERED** (`readPhpSite` reads `includes/push-vapid.local.php`, `parseVapid` converts the PEM and checks it matches the public key; migration stores `push_vapid_public/private`; the shared fallback pair in push-vapid-config.php is deliberately not imported — that private key is public in the PHP repo) — **VAPID key import**: copy the PHP site's VAPID key pair (push-vapid.local.php / settings) into `push_vapid_public/private` during site migration so existing member push subscriptions keep working.
+18. **COVERED** (refreshed from the PHP v7.0 `database/install.sql`: adds `reports.view_only`, already in Node via migrations) — 18. `db/legacy/install.sql` is an older copy of the PHP file; refresh it or point `schema:convert` at the PHP repo copy.
+19. **COVERED** — Create `docs/parity/coverage.md` (required by CLAUDE.md §1, currently absent) from this matrix + matrix A.
 
 ---
 

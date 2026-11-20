@@ -9,6 +9,6 @@
     <div class="field"><label for="es"><%= t('योग्य सदस्य दायरा', 'Eligible member scope') %></label><select class="select" id="es" name="eligible_scope"><% SCOPES.forEach(s => { %><option value="<%= s[0] %>" <%= v.scope === s[0] ? 'selected' : '' %>><%= t(s[1], s[2]) %></option><% }) %></select>
       <div class="field-hint"><%= t('साधारण सभाको गणपूरक संख्या / मतदाता योग्यता पछि यही दायराबाट थपिनेछ।', 'AGM quorum and voter eligibility will extend from this scope.') %></div></div>
   </div>
-  <% if (roleLevel(admin.role) >= 3) { %><div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div><% } %>
+  <% if (roleLevel(admin.role) >= 3) { %><div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div><% } %>
 </form>
 <div class="alert alert-info mt-3"><%- icon('info') %><span><%= t('कार्यक्रमका प्रकार: सामान्य, AGM, SGM, अभिमुखीकरण, तालिम, गोष्ठी, कार्यशाला, वित्तीय साक्षरता, अन्य — कार्यक्रम फारममा छान्न सकिन्छ।', 'Programme types: General, AGM, SGM, Orientation, Training, Seminar, Workshop, Financial literacy, Other — chosen on the programme form.') %></span></div>

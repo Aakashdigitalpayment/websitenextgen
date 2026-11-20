@@ -1,0 +1,4 @@
+<%# Per-channel delivery of a status change (application-tracker.php chips): email / SMS sent, failed or skipped — never the reason. %>
+<% const NC = { sent: ['badge-ok', t('पठाइयो', 'sent')], failed: ['badge-bad', t('असफल', 'failed')], skipped: ['', t('पठाइएन', 'skipped')] };
+   const chips = [['Email', h.notify_email_status], ['SMS', h.notify_sms_status]].filter(([, st]) => NC[st]); %>
+<% if (chips.length) { %><div class="flex gap-1 wrap mt-1"><% chips.forEach(([k, st]) => { %><span class="badge <%= NC[st][0] %>"><%= k %>: <%= NC[st][1] %></span><% }) %></div><% } %>

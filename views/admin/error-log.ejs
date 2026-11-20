@@ -1,6 +1,6 @@
 <div class="content-head">
   <div><h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1><div class="muted small"><%= t('सर्भर त्रुटि (HTTP 5xx) — यो सहकारीको मात्र', 'Server errors (HTTP 5xx) for this cooperative only') %></div></div>
-  <% if (pg.total) { %><form method="post" action="/admin/error-log/clear"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm" data-confirm="<%= t('लग खाली गर्ने?', 'Clear the log?') %>"><%- icon('trash') %><%= t('लग खाली गर्नुहोस्', 'Clear log') %></button></form><% } %>
+  <% if (pg.total) { %><form method="post" action="/admin/error-log/clear"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-outline btn-sm" data-confirm="<%= t('लग खाली गर्ने?', 'Clear the log?') %>"><%- icon('trash') %><%= t('लग खाली गर्नुहोस्', 'Clear log') %></button></form><% } %>
 </div>
 <% if (!pg.total) { %>
   <div class="alert alert-success"><%- icon('check') %><span><%= t('कुनै त्रुटि छैन। साइट राम्रोसँग चलिरहेको छ।', 'No errors recorded. The site is running fine.') %></span></div>

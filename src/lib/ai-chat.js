@@ -125,9 +125,9 @@ Use ONLY the facts below. If you do not know (e.g. account balances, personal da
 ${guard.redact(lines.join('\n'))}`;
 }
 
-async function httpJson(url, headers, body) {
+async function httpJson(url, headers, body, timeoutMs = 30_000) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30_000);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: ctrl.signal });
     const j = await r.json().catch(() => ({}));
@@ -136,11 +136,11 @@ async function httpJson(url, headers, body) {
   } finally { clearTimeout(timer); }
 }
 
-async function askProvider(provider, apiKey, model, system, history, message) {
+async function askProvider(provider, apiKey, model, system, history, message, timeoutMs) {
   const msgs = [...history.slice(-6), { role: 'user', content: message }];
   if (provider === 'openai' || provider === 'deepseek') {
     const url = provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.deepseek.com/v1/chat/completions';
-    const j = await httpJson(url, { authorization: 'Bearer ' + apiKey }, { model, temperature: 0.3, max_tokens: 400, messages: [{ role: 'system', content: system }, ...msgs] });
+    const j = await httpJson(url, { authorization: 'Bearer ' + apiKey }, { model, temperature: 0.3, max_tokens: 400, messages: [{ role: 'system', content: system }, ...msgs] }, timeoutMs);
     return j.choices?.[0]?.message?.content || '';
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -148,7 +148,7 @@ async function askProvider(provider, apiKey, model, system, history, message) {
     systemInstruction: { parts: [{ text: system }] },
     contents: msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
     generationConfig: { temperature: 0.3, maxOutputTokens: 400 },
-  });
+  }, timeoutMs);
   return (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
 }
 
@@ -186,6 +186,23 @@ async function reply(message, history = [], lang = 'np') {
   return { answer: (lang === 'en' ? 'Sorry, I could not find an answer. Please see our FAQs or contact the office.' : 'माफ गर्नुहोस्, उत्तर भेटिएन। FAQ हेर्नुहोस् वा कार्यालयमा सम्पर्क गर्नुहोस्।') + phone, source: 'fallback', links: links.length ? links : ['/faqs', '/contact'] };
 }
 
+/**
+ * ai-settings.php "test connection": one tiny request with the saved provider / model / key (10 s timeout).
+ * @returns {Promise<{ok:boolean, provider:string, model:string, text?:string, error?:string}>}
+ */
+async function testConnection() {
+  const s = await aiSettings();
+  const provider = ['gemini', 'openai', 'deepseek'].includes(s.ai_provider) ? s.ai_provider : 'gemini';
+  const model = s.ai_model || DEFAULT_MODEL[provider];
+  if (!s.ai_api_key) return { ok: false, provider, model, error: 'API key is not set' };
+  try {
+    const text = String(await askProvider(provider, s.ai_api_key, model, 'Reply with exactly: OK', [], 'ping', 10_000) || '').trim();
+    return text ? { ok: true, provider, model, text: text.slice(0, 80) } : { ok: false, provider, model, error: 'empty reply' };
+  } catch (e) {
+    return { ok: false, provider, model, error: (e.name === 'AbortError' ? 'timeout (10 s)' : String(e.message || e)).slice(0, 200) };
+  }
+}
+
 /** Up to 3 site pages that match the question's words (shown as chips under the answer). */
 function suggestLinks(message) {
   const idx = require('./search-index');
@@ -194,4 +211,4 @@ function suggestLinks(message) {
   return [...seen];
 }
 
-module.exports = { reply, instantAnswer, dataAnswer, context, retrieve, suggestLinks, DEFAULT_MODEL };
+module.exports = { reply, testConnection, instantAnswer, dataAnswer, context, retrieve, suggestLinks, DEFAULT_MODEL };

@@ -73,8 +73,8 @@
       <a class="btn btn-ghost btn-sm" href="/" target="_blank" rel="noopener"><%- icon('globe') %><span class="btn-text"><%= t('वेबसाइट', 'View site') %></span></a>
       <div class="qsearch" data-qsearch data-empty="<%= t('केही भेटिएन', 'No results') %>"><input class="input" type="search" placeholder="<%= t('खोज्नुहोस्… (/)', 'Search… (/)') %>" aria-label="<%= t('छिटो खोज', 'Quick search') %>" autocomplete="off"><div class="qsearch-results" data-qsearch-results hidden></div></div>
       <div class="grow"></div>
-      <% const bell = Object.entries(locals.pendingCounts || {}).filter(([, n]) => Number(n) > 0).map(([k, n]) => k === '_memberPortal' ? ['/admin/member-portal', t('सदस्य पोर्टल अनुरोध', 'Member portal queue'), n] : modules[k] ? ['/admin/inbox/' + k, t(...modules[k].title), n] : null).filter(b => b && (!locals.plan || plan.allows(b[0])) && (!locals.can || can(b[0] === '/admin/member-portal' ? 'member_portal' : 'inbox:' + b[0].split('/').pop()))); const bellTotal = bell.reduce((a, b) => a + Number(b[2]), 0); %>
-      <details class="bell"><summary class="btn btn-ghost btn-icon" aria-label="<%= t('सूचना', 'Notifications') %>"><%- icon('bell') %><% if (bellTotal) { %><span class="count"><%= num(bellTotal) %></span><% } %></summary>
+      <% const bl = locals.bellLinks || {}; const bell = Object.entries(locals.pendingCounts || {}).filter(([, n]) => Number(n) > 0).map(([k, n]) => bl[k] ? [bl[k][0], t(...bl[k][1]), n, bl[k][2]] : modules[k] ? ['/admin/inbox/' + k, t(...modules[k].title), n, 'inbox:' + k] : null).filter(b => b && (!locals.plan || plan.allows(b[0].split('?')[0])) && (!locals.can || can(b[3]))); const bellTotal = bell.reduce((a, b) => a + Number(b[2]), 0); %>
+      <details class="bell"<%= locals.bellOpen && bellTotal ? ' open' : '' %>><summary class="btn btn-ghost btn-icon" aria-label="<%= t('सूचना', 'Notifications') %>"><%- icon('bell') %><% if (bellTotal) { %><span class="count"><%= num(bellTotal) %></span><% } %></summary>
         <div class="bell-menu"><% if (!bell.length) { %><div class="qsearch-empty"><%= t('बाँकी केही छैन।', 'Nothing waiting.') %></div><% } %><% bell.forEach(([href, label, n]) => { %><a href="<%= href %>"><span><%= label %></span><small><%= num(n) %></small></a><% }) %></div>
       </details>
       <a class="btn btn-ghost btn-icon" href="/admin/help" aria-label="<%= t('सहायता पुस्तिका', 'Help guide') %>" title="<%= t('सहायता पुस्तिका', 'Help guide') %>"><%- icon('info') %></a>
@@ -88,6 +88,7 @@
       <% if (locals.license && license.configured && license.daysLeft <= 30) { %><div class="alert <%= license.expired ? 'alert-error' : 'alert-warn' %>"><%- icon('alert') %><span><%= license.expired ? t('वेबसाइट सेवाको म्याद सकियो — सार्वजनिक साइट बन्द छ।', 'Website licence expired — the public site is offline.') : t('वेबसाइट सेवाको म्याद ' + num(license.daysLeft) + ' दिनमा सकिँदैछ।', 'Website licence expires in ' + license.daysLeft + ' days.') %> <% if (roleLevel(admin.role) >= 3) { %><a href="/admin/license"><%= t('नवीकरण', 'Renew') %></a><% } %></span></div><% } %>
       <% if (admin.must_change_password && path !== '/admin/password') { %><div class="alert alert-warn"><%- icon('alert') %><span><%= t('सुरक्षाका लागि पासवर्ड परिवर्तन गर्नुहोस्।', 'Please change your password.') %> <a href="/admin/password"><%= t('अहिले परिवर्तन गर्नुहोस्', 'Change now') %></a></span></div><% } %>
       <%- body %>
+      <% if (locals.settings && settings.site_version) { %><p class="admin-version small faint"><%= t('संस्करण', 'Version') %> <%= settings.site_version %></p><% } %>
     </main>
   </div>
 </div>
