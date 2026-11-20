@@ -282,6 +282,7 @@ CREATE TABLE IF NOT EXISTS reports (
   report_quarter VARCHAR(10),
   file_path VARCHAR(255),
   access_level VARCHAR(20) NOT NULL DEFAULT 'none',
+  view_only SMALLINT NOT NULL DEFAULT 0,
   is_active SMALLINT DEFAULT 1,
   display_order INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
