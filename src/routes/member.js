@@ -287,7 +287,7 @@ router.post('/notifications/read-all', ah(async (req, res) => {
 }));
 router.post('/notifications/:id/read', ah(async (req, res) => {
   const n = await db.one('UPDATE member_notifications SET is_read = 1 WHERE id = $1 AND member_id = $2 RETURNING link', [util.int(req.params.id), req.member.id]);
-  const link = n && /^\/(?!\/)/.test(n.link || '') ? n.link : '/member/notifications';
+  const link = n ? auth.safeNext(n.link, '/member/notifications') : '/member/notifications'; // same-site paths only (never //host or /\\host)
   res.redirect(req.body.go === '1' ? link : '/member/notifications');
 }));
 

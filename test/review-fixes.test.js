@@ -78,3 +78,22 @@ test('careers: a BS deadline typed into the DATE column that has passed closes o
     assert.equal(await hooks.job(ctx(open, 2)), null, 'future BS deadline accepted');
   });
 });
+
+test('member notification: opening its link never redirects off-site', async () => {
+  const hash = await require('bcryptjs').hash('Member@12345!', 4);
+  const mid = await inA(async () => {
+    const id = await db.value(`INSERT INTO members (name, phone, sadasyata_number, approval_status, is_active, password_hash)
+                               VALUES ('Notif Member', '9841555666', 'RF-1', 'approved', 1, $1) RETURNING id`, [hash]);
+    return id;
+  });
+  const c = client();
+  const login = await c.form('/member/login', { identifier: '9841555666', password: 'Member@12345!' });
+  assert.equal(login.status, 302);
+  const nid = await inA(() => db.value("INSERT INTO member_notifications (member_id, title, link, is_read, created_at) VALUES ($1, 'x', '/\\evil.example', 0, now()) RETURNING id", [mid]));
+  const r = await c.form(`/member/notifications/${nid}/read`, { go: '1' }, '/member/notifications');
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.location, '/member/notifications');
+  const ok = await inA(() => db.value("INSERT INTO member_notifications (member_id, title, link, is_read, created_at) VALUES ($1, 'y', '/member/requests', 0, now()) RETURNING id", [mid]));
+  const r2 = await c.form(`/member/notifications/${ok}/read`, { go: '1' }, '/member/notifications');
+  assert.equal(r2.headers.location, '/member/requests');
+});
