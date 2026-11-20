@@ -418,3 +418,20 @@ test('B-3: hero_title / hero_subtitle / pwa_app_name / site_version are in the s
   assert.match((await c.get('/admin')).text, /admin-version[^>]*>[^<]*7\.1/);
   assert.match((await c.get("/admin/settings")).text, /name="s_hero_title"/);
 });
+
+// ---------------------------------------------------------------- B-7 bulk activate / deactivate on generic lists
+test('B-7: resource lists with an active switch get bulk activate / deactivate (faqs, services …)', async () => {
+  const { resources } = require('../src/modules/resources');
+  assert.equal(resources.faqs.bulk, true);
+  assert.equal(resources.services.bulk, true);
+  const ids = await inA(async () => [
+    await db.value("INSERT INTO faqs (question, answer, is_active) VALUES ('Q1', 'A1', 1) RETURNING id"),
+    await db.value("INSERT INTO faqs (question, answer, is_active) VALUES ('Q2', 'A2', 1) RETURNING id"),
+  ]);
+  const c = await adminClient();
+  assert.match((await c.get('/admin/r/faqs')).text, /action="\/admin\/r\/faqs\/bulk"/);
+  const r = await c.agent.post('/admin/r/faqs/bulk').set('Host', HA).type('form')
+    .send(`_csrf=${encodeURIComponent(await c.token('/admin/r/faqs'))}&action=deactivate&ids=${ids[0]}&ids=${ids[1]}`);
+  assert.equal(r.status, 302);
+  assert.equal(Number(await inA(() => db.value('SELECT count(*) FROM faqs WHERE id = ANY($1::int[]) AND is_active = 0', [ids]))), 2);
+});

@@ -450,6 +450,8 @@ for (const [key, r] of Object.entries(resources)) {
   r.table = r.table || key;
   r.fileFields = r.fields.filter(f => f.type === 'image' || f.type === 'file' || f.type === 'images');
   r.listFields = r.fields.filter(f => f.list);
+  // bulk activate / deactivate on every list with an "active" switch (faqs.php / services.php bulk_status); opt out with bulk: false
+  if (r.bulk === undefined && r.fields.some(f => f.name === 'is_active')) r.bulk = true;
 }
 
 module.exports = { resources, GROUPS };
