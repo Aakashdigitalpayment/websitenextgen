@@ -69,3 +69,4 @@
 .cal-legend { display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; }
 .cal-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot-holiday { background: var(--bad); } .dot-festival { background: var(--warn); } .dot-coop { background: var(--brand); }
+.share-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-top: 1px solid var(--line); padding-top: 12px; }

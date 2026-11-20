@@ -285,3 +285,20 @@ test('calendar: monthly recurring events show every month of their year; festiva
   r = await get('/calendar?y=2083&m=4');
   assert.ok(!r.text.includes('मासिक बैठक'), 'monthly events stay within their year');
 });
+
+// ---------------------------------------------------------------- P1-12 notice detail, P3 news share
+test('notice detail: image attachment inline, "View full notice", missing file message; share buttons', async () => {
+  const dir = path.join(config.uploadDir, A, 'notices');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'n.jpg'), Buffer.from('ffd8ffe000104a46494600010100000100010000ffd9', 'hex'));
+  const [a, b] = await inA(async () => [
+    await db.value("INSERT INTO notices (title, content, attachment, is_active) VALUES ('Img notice', 'x', 'notices/n.jpg', 1) RETURNING id"),
+    await db.value("INSERT INTO notices (title, content, attachment, is_active) VALUES ('Gone notice', 'x', 'notices/missing.pdf', 1) RETURNING id"),
+  ]);
+  let r = await get('/notices/' + a);
+  assert.match(r.text, /<img[^>]+notices\/n\.jpg/);
+  assert.ok(r.text.includes('पूरा सूचना हेर्नुहोस्'));
+  assert.ok(r.text.includes('facebook.com/sharer'));
+  r = await get('/notices/' + b);
+  assert.ok(r.text.includes('संलग्न फाइल उपलब्ध छैन'));
+});

@@ -270,13 +270,19 @@ router.get('/notices', ah(async (req, res) => {
   res.render('public/notices', { title: res.locals.t('सूचनाहरू', 'Notices'), items: rows, pg });
 }));
 
+/** A local attachment whose file is not on disk (PHP notices.php "Attached file is not available"). */
+const attachmentMissing = (req, stored) => {
+  if (!stored || /^https?:/i.test(stored)) return false;
+  const file = require('../lib/uploads').resolveStored(req, stored);
+  return !file || !require('fs').existsSync(file);
+};
 router.get('/notices/:id', ah(async (req, res, next) => {
   const item = await db.one(`SELECT * FROM notices WHERE id = $1 AND ${ACTIVE} AND ${NOT_DELETED}`, [util.int(req.params.id)]);
   if (!item) return next();
   const more = await db.many(`SELECT id, title, title_np, notice_date AS created_at FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} AND id <> $1 ORDER BY id DESC LIMIT 5`, [item.id]);
   const content = res.locals.f(item, 'content');
   res.locals.jsonLd.push(seo.newsArticle(req, res.locals.settings, { headline: res.locals.f(item, 'title'), desc: util.excerpt(content, 158), url: res.locals.seo.canonical, date: item.notice_date || item.created_at, image: item.popup_image }, req.lang === 'en'));
-  res.render('public/article', { title: res.locals.f(item, 'title'), description: util.excerpt(content, 158), ogImage: item.popup_image || null, breadcrumbs: [[res.locals.t('सूचना', 'Notices'), '/notices']], item, content, image: item.popup_image, attachment: item.attachment, date: item.notice_date || item.created_at, more, base: '/notices', crumb: res.locals.t('सूचना', 'Notices') });
+  res.render('public/article', { title: res.locals.f(item, 'title'), description: util.excerpt(content, 158), ogImage: item.popup_image || null, breadcrumbs: [[res.locals.t('सूचना', 'Notices'), '/notices']], item, content, image: item.popup_image, attachment: item.attachment, attachmentMissing: attachmentMissing(req, item.attachment), date: item.notice_date || item.created_at, more, base: '/notices', crumb: res.locals.t('सूचना', 'Notices') });
 }));
 
 // ---------------------------------------------------------------- media & documents

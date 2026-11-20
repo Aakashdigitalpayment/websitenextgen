@@ -3,7 +3,22 @@
   <article>
     <% if (image) { %><img src="<%= mediaUrl(image) %>"<%- srcset(image, '(max-width: 1180px) 100vw, 1180px') %> alt="" style="border-radius:var(--radius);margin-bottom:24px;width:100%"><% } %>
     <div class="prose"><%- util.richText(locals.content) %></div>
-    <% if (locals.attachment) { %><a class="btn btn-outline mt-2" href="<%= mediaUrl(attachment) %>" target="_blank" rel="noopener"><%- icon('download') %><%= t('संलग्न फाइल', 'Attachment') %></a><% } %>
+    <% if (locals.attachment) { const isImg = /\.(jpe?g|png|webp|gif)$/i.test(attachment), isPdf = /\.pdf$/i.test(attachment); %>
+      <% if (locals.attachmentMissing) { %><div class="alert alert-warn mt-2"><%- icon('alert') %><span><%= t('संलग्न फाइल उपलब्ध छैन।', 'Attached file is not available.') %></span></div>
+      <% } else { %>
+        <% if (isImg && attachment !== image) { %><img class="mt-2" src="<%= mediaUrl(attachment) %>"<%- srcset(attachment, '(max-width: 1180px) 100vw, 1180px') %> alt="<%= title %>" style="border-radius:var(--radius);width:100%" loading="lazy"><% } %>
+        <a class="btn <%= base === '/notices' ? 'btn-primary' : 'btn-outline' %> mt-2" href="<%= mediaUrl(attachment) %>" target="_blank" rel="noopener"><%- icon(isPdf ? 'file' : isImg ? 'eye' : 'download') %><%= base === '/notices' ? t('पूरा सूचना हेर्नुहोस्', 'View full notice') : t('संलग्न फाइल', 'Attachment') %></a>
+      <% } %>
+    <% } %>
+    <% const shareUrl = locals.seo && seo.canonical ? seo.canonical : ''; if (shareUrl) { %>
+    <div class="share-row mt-3" aria-label="<%= t('सेयर गर्नुहोस्', 'Share') %>">
+      <span class="small muted"><%= t('सेयर:', 'Share:') %></span>
+      <a class="btn btn-ghost btn-sm" href="https://www.facebook.com/sharer/sharer.php?u=<%= encodeURIComponent(shareUrl) %>" target="_blank" rel="noopener"><%- icon('facebook') %>Facebook</a>
+      <a class="btn btn-ghost btn-sm" href="https://twitter.com/intent/tweet?url=<%= encodeURIComponent(shareUrl) %>&text=<%= encodeURIComponent(title) %>" target="_blank" rel="noopener">X</a>
+      <a class="btn btn-ghost btn-sm" href="https://wa.me/?text=<%= encodeURIComponent(title + ' ' + shareUrl) %>" target="_blank" rel="noopener"><%- icon('whatsapp') %>WhatsApp</a>
+      <button type="button" class="btn btn-ghost btn-sm" data-share="<%= shareUrl %>" data-share-title="<%= title %>" data-share-done="<%= t('लिङ्क कपी भयो', 'Link copied') %>" hidden><%- icon('link') %><%= t('लिङ्क', 'Link') %></button>
+    </div>
+    <% } %>
   </article>
   <aside class="card">
     <h3><%= t('अन्य', 'More') %></h3>
