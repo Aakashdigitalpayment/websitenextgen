@@ -53,7 +53,8 @@
       <a class="side-link <%= cur.startsWith('/admin/audit') ? 'active' : '' %>" href="/admin/audit"><%- icon('eye') %><%= t('अडिट लग', 'Audit log') %></a>
       <a class="side-link <%= cur.startsWith('/admin/analytics') ? 'active' : '' %>" href="/admin/analytics"><%- icon('chart') %><%= t('विश्लेषण', 'Analytics') %></a>
       <a class="side-link <%= cur.startsWith('/admin/satisfaction') ? 'active' : '' %>" href="/admin/satisfaction"><%- icon('star') %><%= t('सन्तुष्टि विजेट', 'Satisfaction widget') %></a><% } %>
-      <% if (lvl >= 4) { %><a class="side-link <%= cur.startsWith('/admin/users') ? 'active' : '' %>" href="/admin/users"><%- icon('shield') %><%= t('प्रशासक', 'Admin users') %></a>
+      <% if (lvl >= 4) { %><a class="side-link <%= cur.startsWith('/admin/security') ? 'active' : '' %>" href="/admin/security"><%- icon('shield') %><%= t('सुरक्षा नीति', 'Security policy') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/users') ? 'active' : '' %>" href="/admin/users"><%- icon('shield') %><%= t('प्रशासक', 'Admin users') %></a>
       <a class="side-link <%= cur.startsWith('/admin/roles') ? 'active' : '' %>" href="/admin/roles"><%- icon('shield') %><%= t('भूमिका र अनुमति', 'Roles & permissions') %></a>
       <a class="side-link <%= cur.startsWith('/admin/menu-control') ? 'active' : '' %>" href="/admin/menu-control"><%- icon('layers') %><%= t('मेनु नियन्त्रण', 'Menu control') %></a>
       <a class="side-link <%= cur.startsWith('/admin/error-log') ? 'active' : '' %>" href="/admin/error-log"><%- icon('alert') %><%= t('त्रुटि लग', 'Error log') %></a>

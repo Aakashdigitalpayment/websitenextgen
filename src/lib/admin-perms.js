@@ -45,7 +45,7 @@ const ALIASES = [
   ['/files/_private/reports', 'r:reports'],
 ];
 // never grantable (requireAdmin('superadmin') guards them as well)
-const SUPER_ONLY = ['/users', '/roles', '/menu-control', '/domains', '/integrations', '/credentials', '/system', '/backup', '/error-log'];
+const SUPER_ONLY = ['/security', '/users', '/roles', '/menu-control', '/domains', '/integrations', '/credentials', '/system', '/backup', '/error-log'];
 
 const GROUP_LABELS = {
   applications: ['आवेदन तथा अनुरोध', 'Applications'], members: ['सदस्य', 'Members'],

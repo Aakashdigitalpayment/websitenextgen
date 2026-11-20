@@ -60,12 +60,21 @@ async function adminLogin(req, username, password) {
   await clearFailures(username, ip);
   await regenerate(req);
   req.session.tenantId = req.tenant.id;
-  if (user.twofa_enabled && user.twofa_secret) {
-    // password ok — second factor still required (bound to this tenant)
-    req.session.pending2fa = { id: user.id, tenantId: req.tenant.id, at: Date.now() };
-    return { user, needs2fa: true };
+  const mode = await admin2faMode(user);
+  if (mode) {
+    // password ok — second factor still required (bound to this tenant); 'setup' = the policy forces enrolment now
+    req.session.pending2fa = { id: user.id, tenantId: req.tenant.id, at: Date.now(), mode, secret: mode === 'setup' ? require('./totp').generateSecret() : null };
+    return { user, needs2fa: mode };
   }
   return completeAdminLogin(req, user);
+}
+
+/** Tenant policy (Admin → Security): '1' = every admin, superadmins included, must use an authenticator (legacy PHP behaviour). */
+const admin2faRequired = async () => (await require('./settings').get('admin_2fa_required', '0')) === '1';
+/** 'verify' when the admin has an authenticator, 'setup' when the policy requires one, else null. */
+async function admin2faMode(user) {
+  if (Number(user.twofa_enabled) && user.twofa_secret) return 'verify';
+  return (await admin2faRequired()) ? 'setup' : null;
 }
 
 async function completeAdminLogin(req, user) {
@@ -130,7 +139,7 @@ async function loadUsers(req, res, next) {
       req.session.tenantId = req.tenant.id;
     }
     if (req.session.adminId) {
-      req.admin = await db.one(`SELECT id, username, full_name, email, role, is_active, must_change_password, session_version, theme_pref FROM admin_users
+      req.admin = await db.one(`SELECT id, username, full_name, email, role, is_active, must_change_password, session_version, theme_pref, twofa_enabled FROM admin_users
                                 WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL`, [req.session.adminId]);
       // credentials changed since this session signed in → session is no longer valid
       if (!req.admin || (req.admin.session_version || 1) !== (req.session.adminVer || 1)) { req.admin = null; delete req.session.adminId; }
@@ -194,5 +203,5 @@ function logout(req) {
 
 module.exports = {
   checkPassword, hashPassword, roleLevel, adminLogin, completeAdminLogin, recordFailure, tooManyAttempts, clearFailures, bumpSessionVersion, logout, memberLogin, loadUsers,
-  member2faMode, startMemberSession, completeMemberLogin, requireAdmin, requireMember, audit, safeNext, regenerate,
+  admin2faMode, admin2faRequired, member2faMode, startMemberSession, completeMemberLogin, requireAdmin, requireMember, audit, safeNext, regenerate,
 };

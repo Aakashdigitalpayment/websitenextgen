@@ -1,0 +1,22 @@
+<div class="content-head"><h1><%= title %></h1></div>
+<form class="form-card maxw-md" method="post" action="/admin/security">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <h3><%= t('प्रशासक लगइन', 'Admin sign-in') %></h3>
+  <label class="choice"><input type="checkbox" name="admin_2fa_required" value="1" <%= s.admin_2fa_required === '1' ? 'checked' : '' %>> <span><%= t('सबै प्रशासक (सुपर प्रशासकसहित) लाई दुई-चरण प्रमाणीकरण अनिवार्य — सेटअप नभएकाले अर्को लगइनमा QR स्क्यान गरी सक्रिय गर्नुपर्छ', 'Require two-step sign-in for every admin, superadmins included — admins without it set it up (scan a QR code) at their next sign-in') %></span></label>
+  <p class="small muted"><%= t('अहिले', 'Now') %>: <%= num(coverage.on) %> / <%= num(coverage.total) %> <%= t('सक्रिय प्रशासकले 2FA प्रयोग गर्छन्।', 'active admins use 2FA.') %></p>
+  <div class="form-grid">
+    <div class="field"><label for="idle"><%= t('निष्क्रिय भएमा स्वतः लगआउट (मिनेट)', 'Sign out after inactivity (minutes)') %></label><input class="input" id="idle" name="admin_idle_minutes" type="number" min="5" max="720" value="<%= s.admin_idle_minutes || 30 %>"><div class="field-hint"><%= t('५–७२०; पूर्वनिर्धारित ३०', '5–720; default 30') %></div></div>
+  </div>
+  <h3 class="mt-2"><%= t('सदस्य लगइन', 'Member sign-in') %></h3>
+  <label class="choice"><input type="checkbox" name="member_2fa_required" value="1" <%= s.member_2fa_required === '1' ? 'checked' : '' %>> <span><%= t('सबै सदस्यलाई दुई-चरण प्रमाणीकरण अनिवार्य', 'Require two-step sign-in for every member') %></span></label>
+  <h3 class="mt-2"><%= t('स्प्याम सुरक्षा (Cloudflare Turnstile)', 'Anti-spam (Cloudflare Turnstile)') %></h3>
+  <div class="form-grid">
+    <div class="field"><label for="ts_site">Site key</label><input class="input" id="ts_site" name="turnstile_site_key" value="<%= s.turnstile_site_key || '' %>" autocomplete="off"></div>
+    <div class="field"><label for="ts_secret">Secret key</label><input class="input" id="ts_secret" name="turnstile_secret_key" type="password" value="" autocomplete="new-password" placeholder="<%= s.turnstile_secret_key ? '•••••••• ' + t('(सुरक्षित — खाली छोड्दा परिवर्तन हुँदैन)', '(saved — leave blank to keep)') : '' %>">
+      <% if (s.turnstile_secret_key) { %><label class="choice mt-1"><input type="checkbox" name="turnstile_clear_secret" value="1"> <%= t('Secret key हटाउने', 'Clear the secret key') %></label><% } %></div>
+  </div>
+  <div class="form-grid mt-2">
+    <div class="field"><label for="sec_pw"><%= t('तपाईंको पासवर्ड', 'Your password') %> *</label><input class="input" type="password" id="sec_pw" name="confirm_password" required autocomplete="current-password"></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save') %></button></div>
+</form>

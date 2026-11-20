@@ -51,29 +51,57 @@ function pending2fa(req) {
   const p = req.session.pending2fa;
   return p && p.tenantId === req.tenant.id && Date.now() - p.at < 5 * 60_000 ? p : null;
 }
-router.get('/login/2fa', (req, res) => {
-  if (!pending2fa(req)) return res.redirect('/admin/login');
-  res.render('admin/login-2fa', { layout: 'auth', title: '2FA', error: null });
-});
-router.post('/login/2fa', ah(async (req, res) => {
+const render2fa = async (req, res, p, extra = {}) => {
+  let qr = null;
+  if (p.mode === 'setup') {
+    const user = await db.one('SELECT username FROM admin_users WHERE id = $1', [p.id]);
+    qr = await QRCode.toDataURL(totp.provisioningUri(res.locals.siteName || req.tenant.name, user ? user.username : 'admin', p.secret), { margin: 1, width: 220 });
+  }
+  res.status(extra.status || 200).render('admin/login-2fa', { layout: 'auth', title: '2FA', error: null, mode: p.mode, qr, secret: p.mode === 'setup' ? p.secret : null, codes: null, ...extra });
+};
+router.get('/login/2fa', ah(async (req, res) => {
   const p = pending2fa(req);
   if (!p) return res.redirect('/admin/login');
+  if (p.mode === 'ack') return res.redirect('/admin/login'); // backup codes are shown once only
+  await render2fa(req, res, p);
+}));
+router.post('/login/2fa', ah(async (req, res) => {
+  const p = pending2fa(req);
+  if (!p || p.mode === 'ack') return res.redirect('/admin/login');
+  const setup = p.mode === 'setup';
   const user = await db.one("SELECT * FROM admin_users WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(status, 'active') = 'active'", [p.id]);
-  if (!user || !user.twofa_enabled || require('../lib/license').loginBlocked(req.tenant, user)) { delete req.session.pending2fa; return res.redirect('/admin/login'); }
+  if (!user || (!setup && !user.twofa_enabled) || (setup && user.twofa_enabled) || require('../lib/license').loginBlocked(req.tenant, user)) { delete req.session.pending2fa; return res.redirect('/admin/login'); }
   const key = db.currentSchema() + ':' + user.id;
-  if (await auth.tooManyAttempts('2fa:' + user.username, req.ip)) return res.status(429).render('admin/login-2fa', { layout: 'auth', title: '2FA', error: res.locals.t('धेरै गलत प्रयास। १५ मिनेटपछि प्रयास गर्नुहोस्।', 'Too many attempts. Try again in 15 minutes.') });
+  if (await auth.tooManyAttempts('2fa:' + user.username, req.ip)) return render2fa(req, res, p, { status: 429, error: res.locals.t('धेरै गलत प्रयास। १५ मिनेटपछि प्रयास गर्नुहोस्।', 'Too many attempts. Try again in 15 minutes.') });
   const code = String(req.body.code || '').trim();
   let ok = false;
-  const step = totp.verify(user.twofa_secret, code);
+  const step = totp.verify(setup ? p.secret : user.twofa_secret, code);
   if (step !== null && step > (usedSteps.get(key) || 0)) { usedSteps.set(key, step); ok = true; }
-  if (!ok && code.replace(/[^A-Za-z0-9]/g, '').length >= 8) {
+  if (!ok && !setup && code.replace(/[^A-Za-z0-9]/g, '').length >= 8) {
     const remaining = await totp.consumeBackupCode(code, user.twofa_backup_codes);
     if (remaining) { await db.query('UPDATE admin_users SET twofa_backup_codes = $1 WHERE id = $2', [JSON.stringify(remaining), user.id]); ok = true; }
   }
   if (!ok) {
     await auth.recordFailure('2fa:' + user.username, req.ip);
-    return res.status(401).render('admin/login-2fa', { layout: 'auth', title: '2FA', error: res.locals.t('कोड मिलेन।', 'Invalid code.') });
+    return render2fa(req, res, p, { status: 401, error: res.locals.t('कोड मिलेन।', 'Invalid code.') });
   }
+  if (setup) {
+    // forced enrolment (legacy admin/index.php setup → backup_ack): save, then show the backup codes once before signing in
+    const { codes, hashes } = await totp.backupCodes();
+    await db.query('UPDATE admin_users SET twofa_enabled = 1, twofa_secret = $1, twofa_backup_codes = $2, twofa_enabled_at = now(), session_version = COALESCE(session_version, 1) + 1 WHERE id = $3', [p.secret, JSON.stringify(hashes), user.id]);
+    await auth.audit(req, '2fa_enable', 'admin_users', user.id, '2FA enrolled at login (policy)', { actorId: user.id, actorName: user.username });
+    req.session.pending2fa = { id: user.id, tenantId: req.tenant.id, at: Date.now(), mode: 'ack' };
+    return res.render('admin/login-2fa', { layout: 'auth', title: '2FA', error: null, mode: 'ack', qr: null, secret: null, codes });
+  }
+  await auth.completeAdminLogin(req, user);
+  res.redirect(user.must_change_password ? '/admin/password' : auth.safeNext(req.query.next, '/admin'));
+}));
+// "I have saved my backup codes" → finish the sign-in that the forced enrolment started
+router.post('/login/2fa/ack', ah(async (req, res) => {
+  const p = pending2fa(req);
+  if (!p || p.mode !== 'ack') return res.redirect('/admin/login');
+  const user = await db.one("SELECT * FROM admin_users WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(status, 'active') = 'active' AND twofa_enabled = 1", [p.id]);
+  if (!user || require('../lib/license').loginBlocked(req.tenant, user)) { delete req.session.pending2fa; return res.redirect('/admin/login'); }
   await auth.completeAdminLogin(req, user);
   res.redirect(user.must_change_password ? '/admin/password' : auth.safeNext(req.query.next, '/admin'));
 }));
@@ -92,6 +120,13 @@ router.use((req, res, next) => {
   if (req.method === 'GET') return res.redirect('/admin/password');
   return res.status(403).render('admin/denied', { title: 'Change password first' });
 });
+
+// 2FA policy on, but this admin signed in before enrolling: enrol first (legacy PHP forced it at every login)
+router.use(ah(async (req, res, next) => {
+  if (Number(req.admin.twofa_enabled) || ['/2fa', '/2fa/enable', '/logout', '/password'].includes(req.path) || !(await auth.admin2faRequired())) return next();
+  if (req.method === 'GET') { flash(req, 'warn', res.locals.t('दुई-चरण प्रमाणीकरण अनिवार्य छ — पहिले सक्रिय गर्नुहोस्।', 'Two-step sign-in is required — turn it on first.')); return res.redirect('/admin/2fa'); }
+  return res.status(403).render('admin/denied', { title: '2FA required' });
+}));
 
 // custom roles (per-section matrix) + superadmin menu-group hiding
 router.use(require('../lib/admin-perms').middleware);
@@ -593,7 +628,7 @@ router.get('/2fa', ah(async (req, res) => {
   }
   let remaining = 0;
   try { remaining = JSON.parse(user.twofa_backup_codes || '[]').length; } catch { /* ignore */ }
-  res.render('admin/twofa', { title: res.locals.t('दुई-चरण प्रमाणीकरण', 'Two-factor authentication'), user, qr, secret, remaining, codes: null, error: null });
+  res.render('admin/twofa', { title: res.locals.t('दुई-चरण प्रमाणीकरण', 'Two-factor authentication'), user, qr, secret, remaining, codes: null, error: null, required: await auth.admin2faRequired() });
 }));
 
 router.post('/2fa/enable', ah(async (req, res) => {
@@ -617,6 +652,10 @@ router.post('/2fa/enable', ah(async (req, res) => {
 }));
 
 router.post('/2fa/disable', ah(async (req, res) => {
+  if (await auth.admin2faRequired()) {
+    flash(req, 'error', res.locals.t('सहकारीले सबै प्रशासकलाई 2FA अनिवार्य गरेको छ — बन्द गर्न मिल्दैन।', 'Two-step sign-in is required for every admin, so it cannot be turned off.'));
+    return res.redirect('/admin/2fa');
+  }
   const user = await db.one('SELECT * FROM admin_users WHERE id = $1', [req.admin.id]);
   if (!(await auth.checkPassword(req.body.password, user.password)) || totp.verify(user.twofa_secret, req.body.code) === null) {
     flash(req, 'error', res.locals.t('पासवर्ड वा कोड मिलेन।', 'Password or code is wrong.'));

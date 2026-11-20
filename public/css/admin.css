@@ -89,3 +89,8 @@ body.panel { background: var(--bg); }
 .log-stack { white-space: pre-wrap; font-size: .78rem; max-height: 260px; overflow: auto; background: var(--surface-2); padding: 10px; border-radius: 8px; }
 .roles-matrix td, .roles-matrix th { padding: 6px 10px; }
 @media (max-width: 960px) { .analytics-grid { grid-template-columns: 1fr; } .qsearch { display: none; } }
+/* ---- admin 2FA at sign-in ---- */
+.otp-input { font-size: 1.3rem; letter-spacing: .2em; text-align: center; }
+.qr-img { border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+.secret-key { display: block; word-break: break-all; font-size: 1rem; margin-bottom: 12px; }
+.backup-codes { font-family: ui-monospace, monospace; font-size: 1.05rem; gap: 6px 16px; }
