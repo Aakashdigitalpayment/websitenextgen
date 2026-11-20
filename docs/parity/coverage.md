@@ -338,7 +338,7 @@ Spec: in `site-migration.js` after "copy uploads": move each gated folder wholes
 
 **SM-4 · (merged into SM-3)** — `admin_attachment` office replies of migrated rows publicly reachable. — **COVERED** with SM-3.
 
-**SM-5 · Members-only reports / institutional-profile files are public until first opened.**
+**SM-5 · Members-only reports / institutional-profile files are public until first opened.** — **COVERED**: `res.reports` / `res.institutional_profile` have `privateFiles` (admin uploads go to `_private` from the start); migration step `site-migration.privatiseFileColumns` moves every migrated report / profile file to `_private` (also handles comma lists); the same runs for tenants already migrated via `scripts/privatise-uploads.js`; the lazy move in `/reports/:id/file` stays as a last resort. Test: `test/coverage-gaps.test.js`.
 `routes/public.js:441-452` moves a members-only report into `_private` lazily on first access; until then `/uploads/reports/<file>` serves it to anyone. Spec: privatise rows with `access_level='member'` during migration and in the resource save hook (resources.js `reports`, `institutional_profile` afterSave: move file to `_private` when level = member, back when public).
 
 **SM-6 · Card lookup by card number / un-hyphenated code.**

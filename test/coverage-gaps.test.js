@@ -165,3 +165,18 @@ test('SM-3: migration moves every file of the PHP-gated folders to private stora
   const admin = await adminClient();
   assert.equal((await admin.get('/admin/files/_private/loan/c.pdf')).status, 200);
 });
+
+// ---------------------------------------------------------------- SM-5 members-only reports private
+test('SM-5: report / institutional-profile files are private; migrated members-only files are moved up front', async () => {
+  const mig = require('../src/lib/site-migration');
+  const { resources } = require('../src/modules/resources');
+  assert.ok(resources.reports.privateFiles && resources.institutional_profile.privateFiles, 'uploads go to _private from the start');
+  const dir = path.join(config.uploadDir, A);
+  fs.mkdirSync(path.join(dir, 'reports'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'reports', 'agm.pdf'), '%PDF-1.4');
+  const id = await inA(() => db.value(`INSERT INTO reports (title, title_np, file_path, access_level, is_active) VALUES ('AGM', 'साधारण सभा', 'assets/uploads/reports/agm.pdf', 'member', 1) RETURNING id`));
+  await inA(() => mig.privatiseFileColumns(dir));
+  assert.equal(await inA(() => db.value('SELECT file_path FROM reports WHERE id = $1', [id])), '_private/reports/agm.pdf');
+  assert.equal((await client().get('/uploads/reports/agm.pdf')).status, 404);
+  assert.equal((await client().get('/reports/' + id + '/file')).status, 403, 'members only');
+});

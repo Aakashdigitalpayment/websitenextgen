@@ -143,6 +143,44 @@ async function protectGatedUploads(dest) {
   return out;
 }
 
+/**
+ * Move every file referenced by a private file column (application documents, information room, members-only
+ * reports and institutional-profile files) into _private/ and update the row; comma lists are handled per path.
+ * Runs inside the tenant schema; safe to re-run.
+ */
+async function privatiseFileColumns(dest) {
+  const cols = fileColumns();
+  let moved = 0, missing = 0;
+  const missingList = [];
+  for (const [table, list] of Object.entries(cols)) {
+    const tcols = await db.columns(table);
+    for (const { col, private: priv } of list) {
+      if (!tcols.has(col)) continue;
+      const rows = await db.many(`SELECT id, ${db.ident(col)} AS v FROM ${db.ident(table)} WHERE ${db.ident(col)} IS NOT NULL AND ${db.ident(col)} <> ''`);
+      for (const r of rows) {
+        // single paths and comma-separated lists (loan documents, welfare supporting documents)
+        const parts = String(r.v).split(',').map(x => x.trim()).filter(Boolean);
+        let changed = false;
+        const next = parts.map(v => {
+          if (/^https?:\/\//i.test(v)) return v;
+          const rel = v.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+          const abs = path.resolve(dest, rel);
+          if (!abs.startsWith(path.resolve(dest) + path.sep)) return v;
+          if (!fs.existsSync(abs)) { missing++; if (missingList.length < 50) missingList.push(`${table}.${col} #${r.id}: ${v}`); return v; }
+          if (!priv || rel.startsWith('_private/')) return v;
+          const target = path.join(dest, '_private', rel);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.renameSync(abs, target);
+          moved++; changed = true;
+          return '_private/' + rel;
+        });
+        if (changed) await db.query(`UPDATE ${db.ident(table)} SET ${db.ident(col)} = $1 WHERE id = $2`, [next.join(','), r.id]);
+      }
+    }
+  }
+  return { moved, missing, missingList };
+}
+
 // ---------------------------------------------------------------- sources
 /**
  * Where the old data comes from. Two kinds share one small interface:
@@ -308,35 +346,7 @@ async function migrate(o) {
 
   // ---- privatise confidential files (application documents, information room)
   await db.withSchema(tenant.schema_name, async () => {
-    const cols = fileColumns();
-    let moved = 0, missing = 0;
-    const missingList = [];
-    for (const [table, list] of Object.entries(cols)) {
-      const tcols = await db.columns(table);
-      for (const { col, private: priv } of list) {
-        if (!tcols.has(col)) continue;
-        const rows = await db.many(`SELECT id, ${db.ident(col)} AS v FROM ${db.ident(table)} WHERE ${db.ident(col)} IS NOT NULL AND ${db.ident(col)} <> ''`);
-        for (const r of rows) {
-          // single paths and comma-separated lists (loan documents, welfare supporting documents)
-          const parts = String(r.v).split(',').map(x => x.trim()).filter(Boolean);
-          let changed = false;
-          const next = parts.map(v => {
-            if (/^https?:\/\//i.test(v)) return v;
-            const rel = v.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
-            const abs = path.resolve(dest, rel);
-            if (!abs.startsWith(path.resolve(dest) + path.sep)) return v;
-            if (!fs.existsSync(abs)) { missing++; if (missingList.length < 50) missingList.push(`${table}.${col} #${r.id}: ${v}`); return v; }
-            if (!priv || rel.startsWith('_private/')) return v;
-            const target = path.join(dest, '_private', rel);
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.renameSync(abs, target);
-            moved++; changed = true;
-            return '_private/' + rel;
-          });
-          if (changed) await db.query(`UPDATE ${db.ident(table)} SET ${db.ident(col)} = $1 WHERE id = $2`, [next.join(','), r.id]);
-        }
-      }
-    }
+    const { moved, missing, missingList } = await privatiseFileColumns(dest);
     report.files.privatised = moved;
     report.files.missing = missing;
     report.files.missing_examples = missingList;
@@ -472,4 +482,4 @@ async function convertPii(oldKey, step = () => {}, warn = () => {}) {
   return { ok, bad, found };
 }
 
-module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii, protectGatedUploads };
+module.exports = { readPhpSite, migrate, mysqlSource, htmlReport, fixValue, redact, fileColumns, convertPii, protectGatedUploads, privatiseFileColumns };
