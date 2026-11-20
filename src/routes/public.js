@@ -521,6 +521,7 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
   }
   let existingDocs = {};
   let locked = null, lockedValues = null;
+  if (mod.capture) res.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
   if (mod.key === 'kyc' && !req.member) {
     const gate = kymGate(req);
     if (!gate) return renderKymGate(req, res, { status: status === 200 ? 200 : 403, error: status === 200 ? null : res.locals.t('पहिले सदस्यता नम्बर र मोबाइल प्रमाणित गर्नुहोस्।', 'Please verify your Member ID and mobile first.') });
@@ -574,7 +575,7 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
   if (mod.key === 'kyc' && !req.member && !kymGate(req)) {
     return renderKymGate(req, res, { status: 403, error: res.locals.t('पहिले सदस्यता नम्बर र मोबाइल प्रमाणित गर्नुहोस्।', 'Please verify your Member ID and mobile first.') });
   }
-  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind, maxCount: f.multiple || 1 })), { private: true }) : [];
+  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind, maxCount: f.multiple || 1 })), { private: true, fieldSizeMb: mod.capture ? 8 : 0 }) : [];
   let i = 0;
   const step = err => (err ? next(err) : i < chain.length ? chain[i++](req, res, step) : handle());
   const handle = () => (async () => {
@@ -584,6 +585,15 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
       if (!gate) return renderForm(req, res, mod, {}, { _upload: 'gate' }, 403);
       const k = await kymLocked(gate);
       req.body = lockedBody(req.body, k.stored, k.locked);
+    }
+    // camera / signature pad (public/js/kyc-capture.js): a data: URL in <field>_data when no file was chosen
+    if (mod.capture) {
+      for (const f of mod.fileFields) {
+        const durl = req.body[f.name + '_data'];
+        if (f.type !== 'image' || (req.uploaded && req.uploaded[f.name]) || typeof durl !== 'string' || !durl.startsWith('data:image/')) continue;
+        const saved = require('../lib/uploads').saveDataUrl(req, mod.key, durl, { private: true, maxMb: 5 });
+        if (typeof saved === 'string') { req.uploaded = req.uploaded || {}; req.uploaded[f.name] = saved; } else req.uploadError = saved.error;
+      }
     }
     const scan = spamParts(mod, req.body);
     const block = await antispam.check(req, res.locals.settings, scan, 'apply:' + mod.key);

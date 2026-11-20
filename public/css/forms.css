@@ -45,3 +45,18 @@
 .wizard-steps button.is-done { border-color: var(--ok); color: var(--ok); }
 .wizard-steps button.is-incomplete { border-color: var(--warn); color: var(--warn); }
 .wizard-buttons { display: flex; justify-content: space-between; gap: 8px; margin: 12px 0; }
+/* KYM capture: camera dialog, crop preview, signature pad */
+.cam-dialog { width: min(680px, 94vw); border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--surface); color: var(--text); }
+.cam-dialog::backdrop { background: rgba(0, 0, 0, .6); }
+.cam-stage { background: #000; border-radius: 10px; overflow: hidden; display: grid; place-items: center; min-height: 200px; }
+.cam-stage video, .cam-stage canvas { display: block; max-width: 100%; max-height: 60vh; }
+.cam-stage [hidden] { display: none !important; }
+.cam-crop { touch-action: none; cursor: grab; }
+.cam-msg { margin: 8px 0; }
+.cam-zoom input { width: 100%; }
+.cam-zoom[hidden] { display: none; }
+.cam-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.cam-actions [hidden] { display: none !important; }
+.sig-pad { margin-top: 8px; }
+.sig-pad[hidden] { display: none; }
+.sig-pad canvas { width: 100%; max-width: 600px; aspect-ratio: 3 / 1; border: 1px dashed var(--line); border-radius: 10px; background: #fff; touch-action: none; display: block; }

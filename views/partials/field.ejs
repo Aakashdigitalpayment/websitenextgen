@@ -22,7 +22,9 @@
     return o ? t(o[1], o[2]) : raw;
   };
 %>
-<% if (fl.type === 'heading') { %>
+<% if (fl.hiddenInput) { %>
+<input type="hidden" name="<%= fl.name %>" id="<%= id %>" value="<%= val %>">
+<% } else if (fl.type === 'heading') { %>
 <div class="span-2 form-subhead" <%- showAttrs %>><%= label %></div>
 <% } else if (isLocked) { %>
 <div class="field <%= wide ? 'span-2' : '' %>" <%- showAttrs %> data-locked>
@@ -88,7 +90,7 @@
       <div class="field-hint"><%= t('१ = असन्तुष्ट, ५ = धेरै सन्तुष्ट', '1 = poor, 5 = excellent') %></div>
     <% } else if (fl.type === 'file' || fl.type === 'image') { %>
       <% if (docs[fl.name]) { %><div class="field-hint" style="color:var(--ok)"><%= t('फाइलमा छ — खाली छाड्दा उही रहन्छ।', 'On file — leave blank to keep it.') %></div><% } %>
-      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" accept="<%= fl.type === 'image' ? 'image/jpeg,image/png,image/webp' : fl.kind === 'doc' ? '.pdf,.doc,.docx' : 'image/*,.pdf,.doc,.docx' %>" <%- fl.capture ? `capture="${fl.capture}"` : '' %> <%= fl.multiple ? 'multiple' : '' %> data-preview>
+      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" accept="<%= fl.type === 'image' ? 'image/jpeg,image/png,image/webp' : fl.kind === 'doc' ? '.pdf,.doc,.docx' : 'image/*,.pdf,.doc,.docx' %>" <%- fl.capture ? `capture="${fl.capture}"` : '' %> <%= fl.multiple ? 'multiple' : '' %> data-preview<%- locals.mod && mod.capture && fl.type === 'image' ? ` data-capture-field="${fl.name}" data-facing="${fl.capture || ''}" data-aspect="${fl.aspect || ''}"${fl.sign ? ' data-sign' : ''}${fl.name === 'photo' ? ' data-quality' : ''}` : '' %>>
       <div class="field-hint"><%= fl.type === 'image' ? 'JPG / PNG / WEBP' : 'PDF / DOC / JPG' %>, <%= t('बढीमा ८ MB', 'max 8 MB') %><% if (fl.capture) { %> · <%= t('मोबाइलमा क्यामेरा खुल्छ', 'opens the camera on mobile') %><% } %></div>
     <% } else if (fl.type === 'geo') { %>
       <div class="flex gap-1"><input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>" placeholder="27.7172, 85.3240" inputmode="decimal" data-geo>

@@ -289,6 +289,11 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
     if (nid.length !== 14) return err('नेपालको लागि National ID नम्बर १४ अङ्कको हुनुपर्छ।', 'For Nepal, the National ID number should be 14 digits.');
     if (cit && nid === cit) return err('नागरिकता नम्बर र National ID नम्बर ठ्याक्कै एउटै हुन मिल्दैन।', 'Citizenship number and National ID number cannot be exactly the same.');
   }
+  const score = Number(data.photo_quality_score) || 0;
+  if (data.photo && score > 0 && score < 30) {
+    return err(`फोटो गुणस्तर धेरै कम छ (Score: ${score}/100)। राम्रो उज्यालोमा स्पष्ट अनुहार देखिने फोटो फेरि खिच्नुहोस्।`, `Photo quality is too low (score: ${score}/100). Please retake with better lighting and a clear face.`);
+  }
+  if (!data.photo) delete data.photo_quality_score; // the score belongs to a new photo only
   if (data.photo && !body.passport_face_confirm) return err('पासपोर्ट फोटो guideline पुष्टि गर्नुहोस् (दुवै आँखा र दुवै कान स्पष्ट देखिनुपर्छ)।', 'Please confirm the passport photo guidelines (eyes and both ears visible).');
   data.risk_category = REVIEW_YEARS[data.risk_category] ? data.risk_category : 'medium';
   data.want_id_card = body.want_id_card ? 1 : 0;

@@ -486,3 +486,31 @@ test('wizard + draft hooks on long forms; receipt page clears the draft and offe
   assert.match(done.text, /data-copy-text="GR-/);
   assert.match(done.text, /href="\/apply\/grievance"/);
 });
+
+// ---------------------------------------------------------------- P2-5 KYM capture: camera / signature data URLs, photo quality
+test('KYM capture: camera and signature data URLs are checked and stored privately; low photo quality rejected', async () => {
+  const uploads = require('../src/lib/uploads');
+  const fakeReq = { tenant: { slug: B } };
+  assert.ok(uploads.saveDataUrl(fakeReq, 'kyc', 'data:image/png;base64,' + Buffer.from('<?php echo 1; ?>').toString('base64')).error, 'magic bytes checked');
+  assert.ok(uploads.saveDataUrl(fakeReq, 'kyc', 'data:text/html;base64,PGI+').error, 'only images');
+  await inB(() => db.query("INSERT INTO members (name, phone, sadasyata_number, approval_status, is_active) VALUES ('Cam', '9841980001', 'C-100', 'approved', 1)"));
+  const c = client(HB);
+  assert.equal((await c.form('/apply/kyc/verify', { member_id: 'C-100', mobile: '9841980001' }, '/apply/kyc')).status, 302);
+  const page = await c.get('/apply/kyc');
+  assert.match(page.headers['permissions-policy'] || '', /camera=\(self\)/);
+  assert.match(page.text, /kyc-capture\.js/);
+  assert.match(page.text, /data-capture-field="photo"/);
+  const jpg = 'data:image/jpeg;base64,' + JPG.toString('base64');
+  const base = { full_name: 'क्याम', email: 'cam@example.com', citizenship_no: '1-2', risk_category: 'low', declaration: '1', passport_face_confirm: '1',
+    permanent_province: 'बागमती प्रदेश', permanent_district: 'काठमाडौं', permanent_municipality: 'काठमाडौं महानगरपालिका', permanent_ward: '3',
+    photo_data: jpg, citizenship_front_data: jpg, citizenship_back_data: jpg, signature_data: jpg };
+  let r = await c.multipart('/apply/kyc', { ...base, photo_quality_score: '12' });
+  assert.equal(r.status, 422);
+  assert.match(r.text, /गुणस्तर/);
+  r = await c.multipart('/apply/kyc', { ...base, photo_quality_score: '81' });
+  assert.equal(r.status, 302, errs(r));
+  const k = await inB(() => db.one("SELECT * FROM kyc_applications WHERE member_id = 'C-100'"));
+  assert.match(k.photo, /^_private\/kyc\/[0-9a-f]{32}\.jpg$/);
+  assert.ok(k.signature);
+  assert.equal(Number(k.photo_quality_score), 81);
+});

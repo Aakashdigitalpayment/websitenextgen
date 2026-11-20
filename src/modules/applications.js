@@ -209,12 +209,13 @@ const modules = {
         BRANCH,
       ] },
       { title: ['कागजात र बायोमेट्रिक', 'Documents & biometrics'], fields: [
-        { name: 'photo', label: ['पासपोर्ट साइज फोटो', 'Passport photo'], type: 'image', capture: 'user', newRequired: true, hint: ['अनुहार सिधा, राम्रो उज्यालो; दुवै आँखा र कान देखिनुपर्छ', 'Face straight, good light; both eyes and ears visible'] },
+        { name: 'photo', label: ['पासपोर्ट साइज फोटो', 'Passport photo'], type: 'image', capture: 'user', aspect: 0.78, newRequired: true, hint: ['अनुहार सिधा, राम्रो उज्यालो; दुवै आँखा र कान देखिनुपर्छ', 'Face straight, good light; both eyes and ears visible'] },
+        { name: 'photo_quality_score', label: ['फोटो गुणस्तर', 'Photo quality'], type: 'number', min: 0, max: 100, hiddenInput: true },
         { name: 'passport_face_confirm', label: ['फोटोमा दुवै आँखा र दुवै कान स्पष्ट देखिएका छन् भनी पुष्टि गर्छु', 'I confirm both eyes and both ears are clearly visible'], type: 'checkbox', store: 'none' },
-        { name: 'citizenship_front', label: ['नागरिकता (अगाडि)', 'Citizenship (front)'], type: 'image', capture: 'environment', newRequired: true },
-        { name: 'citizenship_back', label: ['नागरिकता (पछाडि)', 'Citizenship (back)'], type: 'image', capture: 'environment', newRequired: true },
-        { name: 'national_id_card', label: ['राष्ट्रिय परिचयपत्र (NID)', 'National ID card'], type: 'image', capture: 'environment' },
-        { name: 'signature', label: ['हस्ताक्षर', 'Signature'], type: 'image', newRequired: true },
+        { name: 'citizenship_front', label: ['नागरिकता (अगाडि)', 'Citizenship (front)'], type: 'image', capture: 'environment', aspect: 1.5, newRequired: true },
+        { name: 'citizenship_back', label: ['नागरिकता (पछाडि)', 'Citizenship (back)'], type: 'image', capture: 'environment', aspect: 1.5, newRequired: true },
+        { name: 'national_id_card', label: ['राष्ट्रिय परिचयपत्र (NID)', 'National ID card'], type: 'image', capture: 'environment', aspect: 1.58 },
+        { name: 'signature', label: ['हस्ताक्षर', 'Signature'], type: 'image', sign: true, newRequired: true },
         { name: 'left_thumb', label: ['बायाँ औंठा छाप', 'Left thumb print'], type: 'image', capture: 'environment' },
         { name: 'right_thumb', label: ['दायाँ औंठा छाप', 'Right thumb print'], type: 'image', capture: 'environment' },
         { name: 'want_id_card', label: ['हो, मलाई डिजिटल सदस्य परिचयपत्र चाहिन्छ (केवाइएम स्वीकृत भएपछि स्वतः तयार हुन्छ)', 'Yes, I want a digital member ID card (issued automatically after approval)'], type: 'checkbox' },
@@ -452,7 +453,7 @@ const modules = {
 
 /** mobile10: the phone must be a 10-digit mobile ('strict' = 9XXXXXXXXX, as job and bid in PHP); guestEmail: email required for visitors. */
 const RULES = {
-  loan: { mobile10: true, guestEmail: true, wizard: true }, account: { mobile10: true, guestEmail: true, wizard: true }, kyc: { wizard: true }, grievance: { mobile10: true, guestEmail: true },
+  loan: { mobile10: true, guestEmail: true, wizard: true }, account: { mobile10: true, guestEmail: true, wizard: true }, kyc: { wizard: true, capture: true }, grievance: { mobile10: true, guestEmail: true },
   welfare: { mobile10: true }, digital: { mobile10: true, guestEmail: true }, honor: { mobile10: true }, feedback: { mobile10: true },
   appointment: { guestEmail: true }, job: { mobile10: 'strict' }, bid: { mobile10: 'strict' },
 };
