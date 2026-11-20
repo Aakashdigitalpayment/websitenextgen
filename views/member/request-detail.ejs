@@ -15,6 +15,10 @@
       <% if (sec.title) { %><h4 class="mt-3 mb-1"><%= t(...sec.title) %></h4><% } %>
       <div class="kv"><% rows.forEach(([k, v]) => { %><div><%= k %></div><div><%= v %></div><% }) %></div>
     <% }) %>
+    <% const myFiles = mod.fileFields.flatMap(fl => String(row[fl.name] || '').split(',').map(x => x.trim()).filter(Boolean).map((x, i) => [fl, i])); %>
+    <% if (myFiles.length) { %><h4 class="mt-3 mb-1"><%= t('मेरा कागजात', 'My documents') %></h4>
+      <div class="flex gap-1 wrap"><% myFiles.forEach(([fl, i]) => { %><a class="btn btn-outline btn-sm" href="/member/requests/<%= mod.key %>/<%= row.id %>/file/<%= fl.name %><%= i ? '?i=' + i : '' %>" target="_blank" rel="noopener"><%- icon('file') %><%= fl.label ? t(fl.label[0], fl.label[1]) : fl.name %><%= i ? ' ' + (i + 1) : '' %></a><% }) %></div>
+    <% } %>
     <% (mod.trackCols || []).forEach(([col, lb, fmt]) => { const v = row[col]; if (v === null || v === undefined || v === '' || (fmt === 'money' && !Number(v))) return; %>
       <div class="kv mt-1"><div><%= t(...lb) %></div><div><strong><%= fmt === 'money' ? 'रु. ' + money(v) : fmt === 'date' ? bsDate(v) : v %></strong></div></div>
     <% }) %>

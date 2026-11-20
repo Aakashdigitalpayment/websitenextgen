@@ -223,6 +223,21 @@ router.get('/requests/:module/:id/attachment', ah(async (req, res, next) => {
   require('../lib/uploads').sendStored(req, res, next, mine.row[m.attachCol]);
 }));
 
+/**
+ * The member's own uploaded documents on one of their applications (upload-gate.php coop_upload_gate_member_owns):
+ * only file fields of that form; comma-separated lists pick one with ?i=.
+ */
+router.get('/requests/:module/:id/file/:field', ah(async (req, res, next) => {
+  const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
+  const field = m && m.fileFields.find(f => f.name === req.params.field);
+  if (!field) return next();
+  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  const files = mine ? String(mine.row[field.name] || '').split(',').map(x => x.trim()).filter(Boolean) : [];
+  const stored = files[util.int(req.query.i, 0)] || null;
+  if (!stored || /^https?:/i.test(stored)) return next();
+  require('../lib/uploads').sendStored(req, res, next, stored, { download: req.query.dl === '1' });
+}));
+
 // ---------------------------------------------------------------- service request (member/service-request.php): one form → appointment or grievance
 const SERVICE_TYPES = {
   appointment: { label: ['भेटघाट — सेवा कार्यालय भ्रमण / भेट माग्ने', 'Appointment — visit the service office'], purpose: 'other' },

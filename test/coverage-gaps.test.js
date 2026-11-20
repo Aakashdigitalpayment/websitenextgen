@@ -623,3 +623,24 @@ test('B-15: dynamic page menu items show a "New" chip until new_until', async ()
   assert.match(html, /Fresh page <span class="badge badge-info">New<\/span>/);
   assert.doesNotMatch(html, /Old page <span class="badge badge-info">/);
 });
+
+// ---------------------------------------------------------------- SM-20 applicant opens own documents
+test('SM-20: a member opens the documents of their own application (comma lists by ?i=), never another one', async () => {
+  const dir = path.join(config.uploadDir, A, '_private', 'loan');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'own1.pdf'), '%PDF-1.4 one');
+  fs.writeFileSync(path.join(dir, 'own2.pdf'), '%PDF-1.4 two');
+  await seedMember('OW-1000', '9841600012');
+  const ids = await inA(async () => ({
+    mine: await db.value("INSERT INTO loan_applications (full_name, mobile, documents, tracking_id) VALUES ('Own', '9841600012', '_private/loan/own1.pdf,_private/loan/own2.pdf', 'LN-OWN1') RETURNING id"),
+    other: await db.value("INSERT INTO loan_applications (full_name, mobile, documents, tracking_id) VALUES ('Other', '9841699999', '_private/loan/own1.pdf', 'LN-OTH1') RETURNING id"),
+  }));
+  const m = await memberClient('OW-1000');
+  const page = await m.get(`/member/requests/loan/${ids.mine}`);
+  assert.match(page.text, new RegExp(`/member/requests/loan/${ids.mine}/file/documents\\?i=1`));
+  let r = await m.get(`/member/requests/loan/${ids.mine}/file/documents?i=1`);
+  assert.equal(r.status, 200);
+  assert.match(String(r.body || r.text), /two/);
+  assert.equal((await m.get(`/member/requests/loan/${ids.other}/file/documents`)).status, 404, 'not their application');
+  assert.equal((await m.get(`/member/requests/loan/${ids.mine}/file/full_name`)).status, 404, 'only file fields');
+});
