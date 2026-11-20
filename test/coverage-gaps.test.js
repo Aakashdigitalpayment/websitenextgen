@@ -256,3 +256,24 @@ test('SM-9: staff void only their own check-ins; SM-14: a check-in closes the pe
   assert.equal(JSON.parse(log.payload_json).attendance_method, 'ADMIN_MANUAL');
   assert.ok(log.ip_address);
 });
+
+// ---------------------------------------------------------------- SM-12 status notification goes to the right member
+test('SM-12: status notification resolves the member by portal id, Member ID, then a unique phone (+ email)', async () => {
+  const notify = require('../src/lib/notify');
+  const modules = require('../src/modules/applications');
+  const loan = modules.loan;
+  const { m: a } = await seedMember('NT-0600', '9841600007');
+  const { m: b } = await seedMember('NT-0601', '9841600008');
+  await inA(() => db.query("UPDATE members SET phone = '+977-9841600007' WHERE id = $1", [b.id])); // shared, reformatted phone
+  const row = { id: 77, tracking_id: 'LN-TEST', [loan.nameCol]: 'Ram Bahadur', [loan.phoneCol]: '9841600007' };
+  assert.equal(await inA(() => notify.memberForRequest(loan, row)), null, 'shared phone without email: nobody');
+  assert.equal((await inA(() => notify.memberForRequest(loan, { ...row, email: 'nt-0601@example.com' }))).id, b.id, 'email decides');
+  assert.equal((await inA(() => notify.memberForRequest(loan, { ...row, member_portal_id: a.id }))).id, a.id, 'portal id first');
+  if (loan.memberCol) assert.equal((await inA(() => notify.memberForRequest(loan, { ...row, [loan.memberCol]: 'nt-0601' }))).id, b.id, 'Member ID');
+  await inA(() => notify.memberStatusNotification(loan, { ...row, member_portal_id: a.id }, 'approved', 'OK from office'));
+  const n = await inA(() => db.one('SELECT * FROM member_notifications WHERE member_id = $1 ORDER BY id DESC LIMIT 1', [a.id]));
+  assert.match(n.message, /^Ram जी, तपाईंको .+ आवेदनको अवस्था «स्वीकृत» भएको छ।/);
+  assert.match(n.message, /Tracking ID: LN-TEST/);
+  assert.match(n.message, /Admin टिप्पणी: OK from office/);
+  assert.equal(n.link, '/member/requests/loan/77');
+});

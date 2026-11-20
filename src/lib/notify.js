@@ -180,6 +180,47 @@ async function notifyMember(memberId, title, message = null, link = null, type =
   later(() => push.sendToMember(memberId, { title, body: message || '', url: link || '/member/notifications' }));
 }
 
+/**
+ * The member a public-form request belongs to (createMemberStatusNotification / findMemberByContact):
+ * the portal account that submitted it, else its Member ID, else a unique match on the normalised mobile
+ * (and on the email when the request has one). null when unsure — never notify the wrong member.
+ */
+async function memberForRequest(mod, row) {
+  if (Number(row.member_portal_id) > 0) {
+    const m = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [Number(row.member_portal_id)]);
+    if (m) return m;
+  }
+  const kym = require('./kym');
+  if (mod.memberCol && row[mod.memberCol]) {
+    const m = await kym.findMemberBySadasyata(row[mod.memberCol]);
+    if (m) return m;
+  }
+  const mob = kym.normalizeMobile(row[mod.phoneCol]);
+  if (!/^\d{10}$/.test(mob)) return null;
+  const { phoneDigitsSql } = require('./member-portal');
+  let list = await db.many(`SELECT * FROM members WHERE deleted_at IS NULL AND ${phoneDigitsSql('phone')} = $1 ORDER BY id LIMIT 5`, [mob]);
+  const email = String(row.email || '').trim().toLowerCase();
+  if (email && list.length) {
+    const same = list.filter(m => String(m.email || '').trim().toLowerCase() === email);
+    if (same.length || list.length > 1) list = same;
+  }
+  return list.length === 1 ? list[0] : null;
+}
+
+/** In-portal status notification for the member who owns a request (PHP createMemberStatusNotification wording). */
+async function memberStatusNotification(mod, row, status, remarks = '') {
+  const member = await memberForRequest(mod, row);
+  if (!member) return null;
+  const sText = require('./forms').statusLabel(status, 'np');
+  const svc = mod.title[0];
+  const firstName = String(row[mod.nameCol] || member.name_np || member.name || '').trim().split(/\s+/)[0] || 'सदस्य';
+  let msg = `${firstName} जी, तपाईंको ${svc} आवेदनको अवस्था «${sText}» भएको छ।`;
+  if (row.tracking_id) msg += `\nTracking ID: ${row.tracking_id}`;
+  if (remarks) msg += `\nAdmin टिप्पणी: ${remarks}`;
+  await notifyMember(member.id, `${svc} — ${sText}`, msg, `/member/requests/${mod.key}/${row.id}`, 'status');
+  return member;
+}
+
 // ---------------------------------------------------------------- templated events
 async function template(event, audience, channel) {
   return db.one('SELECT * FROM notification_templates WHERE event_type = $1 AND audience = $2 AND channel = $3 AND enabled = 1', [event, audience, channel]);
@@ -270,4 +311,4 @@ function later(fn) {
   setImmediate(() => db.withSchema(schema, () => Promise.resolve().then(fn).catch(e => console.error('later:', e.message))));
 }
 
-module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, recordOutcome, adminEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };
+module.exports = { sendSms, sendEmail, notifyMember, memberForRequest, memberStatusNotification, applicationEvent, recordOutcome, adminEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };

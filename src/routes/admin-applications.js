@@ -268,11 +268,7 @@ async function changeStatus(req, m, row, { status, comment = '', note, attachmen
     const hid = await db.value(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), 0, 0) RETURNING id`, [m.key, row.id, row.status || null, data.status || row.status || null, comment || null, req.admin.id, req.admin.full_name || req.admin.username]);
     if (m.key === 'bid') await bidSideEffects(req, row, data.status);
-    const memberKey = (m.memberCol && row[m.memberCol]) || row[m.phoneCol];
-    if (memberKey) {
-      const member = await db.one('SELECT id FROM members WHERE deleted_at IS NULL AND (sadasyata_number = $1 OR member_card_no = $1 OR phone = $1) LIMIT 1', [String(memberKey)]);
-      if (member) await notify.notifyMember(member.id, m.title[0] + ': ' + forms.statusLabel(data.status || row.status), comment || null, row.tracking_id ? '/track?id=' + encodeURIComponent(row.tracking_id) : null, 'status');
-    }
+    await notify.memberStatusNotification(m, { ...row, ...data }, data.status || row.status, comment || '');
     return hid;
   });
   const out = {};
