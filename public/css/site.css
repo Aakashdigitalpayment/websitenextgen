@@ -56,3 +56,16 @@
 .spotlight blockquote { border-left: 3px solid var(--brand); margin: 10px 0; padding-left: 12px; }
 @media (max-width: 600px) { .spotlight { grid-template-columns: 1fr; justify-items: center; text-align: center; } }
 .contact-cards { gap: 10px; } .contact-cards .card { display: flex; gap: 8px; align-items: center; padding: 10px 12px; } .contact-cards .icon-tile { margin: 0; }
+
+/* calendar: holidays, festivals, co-op events, selected day */
+.cal a.cal-d { color: var(--text); text-decoration: none; display: block; }
+.cal a.cal-d:hover { background: var(--surface-2); }
+.cal .is-holiday b { color: var(--bad); }
+.cal .is-festival b { color: var(--warn); }
+.cal .is-coop { box-shadow: inset 0 -3px 0 var(--brand); }
+.cal .is-selected { outline: 2px solid var(--brand); outline-offset: -2px; }
+.cal .ev-holiday { color: var(--bad); }
+.cal .ev-festival { color: var(--warn); }
+.cal-legend { display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; }
+.cal-legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot-holiday { background: var(--bad); } .dot-festival { background: var(--warn); } .dot-coop { background: var(--brand); }

@@ -540,15 +540,37 @@ router.get('/date-converter', (req, res) => {
   res.render('public/date-converter', { title: res.locals.t('मिति परिवर्तन', 'Date converter'), out, today: nd.todayBs() });
 });
 
+// sahakari-patro.php: co-op events (once / monthly within its year / yearly), built-in festivals and holidays (2082–2084), selected day, next month
+const HOLIDAYS = require('../lib/nepal-holidays.json');
+const HOLIDAY_EN = { 'नेपाली नयाँ वर्ष': 'Nepali New Year', 'बुद्ध जयन्ती': 'Buddha Jayanti', 'जनै पूर्णिमा': 'Janai Purnima', 'कृष्ण जन्माष्टमी': 'Krishna Janmashtami',
+  'घटस्थापना': 'Ghatasthapana', 'फूलपाती': 'Fulpati', 'महाअष्टमी': 'Maha Ashtami', 'महानवमी': 'Maha Navami', 'विजया दशमी': 'Vijaya Dashami', 'लक्ष्मी पूजा': 'Laxmi Puja',
+  'गोवर्धन पूजा': 'Govardhan Puja', 'भाइटीका': 'Bhai Tika', 'छठ पर्व': 'Chhath', 'विवाह पञ्चमी': 'Vivah Panchami', 'माघे संक्रान्ति': 'Maghe Sankranti',
+  'महाशिवरात्रि': 'Maha Shivaratri', 'होली': 'Holi', 'राम नवमी': 'Ram Navami', 'जेष्ठपूर्णिमा': 'Jestha Purnima', 'हरिशयनी एकादशी': 'Harishayani Ekadashi',
+  'गुरु पूर्णिमा': 'Guru Purnima', 'नाग पञ्चमी': 'Nag Panchami', 'हरितालिका तीज': 'Teej', 'ऋषि पञ्चमी': 'Rishi Panchami', 'गाईजात्रा': 'Gai Jatra',
+  'इन्द्रजात्रा': 'Indra Jatra', 'कोजाग्रत पूर्णिमा': 'Kojagrat Purnima' };
+async function calendarMonth(y, m) {
+  const days = nd.monthLengths(y)[m - 1];
+  const events = await db.many(`SELECT * FROM sahakari_calendar_events WHERE ${ACTIVE}
+      AND (bs_year = $2 OR recurrence = 'yearly') AND (recurrence = 'monthly' OR bs_month = $1) AND bs_day <= $3 ORDER BY bs_day, id`, [m, y, days]);
+  const holidays = [];
+  for (let d = 1; d <= days; d++) for (const [name, type] of HOLIDAYS[`${y}-${m}-${d}`] || []) holidays.push({ day: d, name, name_en: HOLIDAY_EN[name] || name, type });
+  return { events, holidays, days };
+}
 router.get('/calendar', ah(async (req, res) => {
   const [ty, tm] = nd.todayBs().split('-').map(Number);
   let y = util.int(req.query.y, ty), m = util.int(req.query.m, tm);
   if (!nd.isValidBs(y, m, 1)) { y = ty; m = tm; }
   const grid = nd.monthGrid(y, m);
-  const events = await db.many(`SELECT * FROM sahakari_calendar_events WHERE ${ACTIVE} AND bs_month = $1 AND (bs_year = $2 OR bs_year IS NULL OR recurrence = 'yearly') ORDER BY bs_day`, [m, y]);
   const prev = m === 1 ? [y - 1, 12] : [y, m - 1];
   const next = m === 12 ? [y + 1, 1] : [y, m + 1];
-  res.render('public/calendar', { title: res.locals.t('सहकारी पात्रो', 'Cooperative calendar'), grid, events, prev, next, today: nd.todayBs() });
+  const nextOk = nd.isValidBs(next[0], next[1], 1);
+  const [cur, nxt] = await Promise.all([calendarMonth(y, m), nextOk ? calendarMonth(...next) : { events: [], holidays: [] }]);
+  const day = util.int(req.query.d, 0);
+  const selected = day >= 1 && day <= grid.days ? { day, bs: `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    ad: nd.bsToAd(`${y}-${m}-${day}`), events: cur.events.filter(e => e.bs_day === day), holidays: cur.holidays.filter(h => h.day === day) } : null;
+  const adEnd = nd.bsToAd(`${y}-${m}-${grid.days}`);
+  res.render('public/calendar', { title: res.locals.t('सहकारी पात्रो', 'Cooperative calendar'), grid, events: cur.events, holidays: cur.holidays, prev: nd.isValidBs(prev[0], prev[1], 1) ? prev : null,
+    next: nextOk ? next : null, nextEvents: nxt.events, nextHolidays: nxt.holidays, today: nd.todayBs(), selected, adRange: [grid.adStart, adEnd] });
 }));
 
 router.get('/exchange-rate', ah(async (req, res) => {

@@ -270,3 +270,18 @@ test('contact: map from a Google Maps share link or coordinates; mobile shown; u
   r = await get('/contact');
   assert.ok(r.text.includes('maps?q=27.5,85.1'));
 });
+
+// ---------------------------------------------------------------- P1-11 calendar
+test('calendar: monthly recurring events show every month of their year; festivals; selected day', async () => {
+  await inA(() => db.query(`INSERT INTO sahakari_calendar_events (title_np, title_en, recurrence, bs_year, bs_month, bs_day, is_active) VALUES
+    ('मासिक बैठक', 'Monthly meeting', 'monthly', 2082, NULL, 5, 1), ('एक पटक', 'Once', 'once', 2082, 3, 9, 1), ('वार्षिक सभा', 'AGM', 'yearly', 2070, 4, 2, 1)`));
+  let r = await get('/calendar?y=2082&m=6');
+  assert.ok(r.text.includes('मासिक बैठक'), 'monthly event in Asoj');
+  assert.ok(r.text.includes('विजया दशमी'), 'built-in festival');
+  assert.ok(r.text.includes('is-holiday'));
+  assert.ok(!r.text.includes('एक पटक'));
+  r = await get('/calendar?y=2082&m=4&d=2');
+  assert.ok(r.text.includes('वार्षिक सभा') && r.text.includes('id="day"'), 'yearly event + selected day panel');
+  r = await get('/calendar?y=2083&m=4');
+  assert.ok(!r.text.includes('मासिक बैठक'), 'monthly events stay within their year');
+});

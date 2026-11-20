@@ -1,16 +1,55 @@
 <%- include('../partials/page-head', {}) %>
+<% const MONTHS = lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP;
+   const adLabel = ad => { const d = new Date(ad + 'T00:00:00Z'); return d.toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }); };
+   const hName = h => (lang === 'en' ? h.name_en : h.name);
+   const pad = n => String(n).padStart(2, '0'); %>
 <section class="section"><div class="container">
-  <div class="flex justify-between items-center mb-2">
-    <a class="btn btn-outline btn-sm" href="?y=<%= prev[0] %>&m=<%= prev[1] %>"><%- icon('left') %></a>
-    <h2 class="mb-0"><%= (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[grid.month - 1] %> <%= num(grid.year) %></h2>
-    <a class="btn btn-outline btn-sm" href="?y=<%= next[0] %>&m=<%= next[1] %>"><%- icon('right') %></a>
+  <div class="flex justify-between items-center mb-2 gap-1">
+    <% if (prev) { %><a class="btn btn-outline btn-sm" href="?y=<%= prev[0] %>&m=<%= prev[1] %>" aria-label="<%= t('अघिल्लो महिना', 'Previous month') %>"><%- icon('left') %></a><% } else { %><span></span><% } %>
+    <div class="text-center"><h2 class="mb-0"><%= MONTHS[grid.month - 1] %> <%= num(grid.year) %></h2>
+      <div class="small muted"><%= adLabel(adRange[0]) === adLabel(adRange[1]) ? adLabel(adRange[0]) : adLabel(adRange[0]) + ' – ' + adLabel(adRange[1]) %></div></div>
+    <% if (next) { %><a class="btn btn-outline btn-sm" href="?y=<%= next[0] %>&m=<%= next[1] %>" aria-label="<%= t('अर्को महिना', 'Next month') %>"><%- icon('right') %></a><% } else { %><span></span><% } %>
   </div>
   <div class="cal">
     <% (lang === 'en' ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] : ['आइत','सोम','मंगल','बुध','बिही','शुक्र','शनि']).forEach(d => { %><div class="cal-h"><%= d %></div><% }) %>
     <% for (let i = 0; i < grid.startWeekday; i++) { %><div></div><% } %>
-    <% for (let d = 1; d <= grid.days; d++) { const ad = new Date(Date.parse(grid.adStart + 'T00:00:00Z') + (d - 1) * 86400000); const wd = (grid.startWeekday + d - 1) % 7; const bs = grid.year + '-' + String(grid.month).padStart(2, '0') + '-' + String(d).padStart(2, '0'); const ev = events.filter(e => e.bs_day === d); %>
-      <div class="cal-d <%= wd === 6 ? 'is-sat' : '' %> <%= bs === today ? 'is-today' : '' %>"><b><%= num(d) %></b><small><%= ad.getUTCDate() %> <%= ad.toUTCString().slice(8, 11) %></small><% ev.forEach(e => { %><span class="ev"><%= f(e, 'title') %></span><% }) %></div>
+    <% for (let d = 1; d <= grid.days; d++) { const ad = new Date(Date.parse(grid.adStart + 'T00:00:00Z') + (d - 1) * 86400000); const wd = (grid.startWeekday + d - 1) % 7; const bs = grid.year + '-' + pad(grid.month) + '-' + pad(d); const ev = events.filter(e => e.bs_day === d); const hol = holidays.filter(h => h.day === d);
+       const cls = [wd === 6 || hol.some(h => h.type === 'holiday') ? 'is-holiday' : '', hol.some(h => h.type !== 'holiday') ? 'is-festival' : '', ev.length ? 'is-coop' : '', bs === today ? 'is-today' : '', selected && selected.day === d ? 'is-selected' : ''].filter(Boolean).join(' '); %>
+      <a class="cal-d <%= cls %>" href="?y=<%= grid.year %>&m=<%= grid.month %>&d=<%= d %>#day" aria-label="<%= num(d) %> <%= MONTHS[grid.month - 1] %><%= hol.length ? ', ' + hol.map(hName).join(', ') : '' %><%= ev.length ? ', ' + ev.map(e => f(e, 'title')).join(', ') : '' %>"<%- bs === today ? ' aria-current="date"' : '' %>>
+        <b><%= num(d) %></b><small><%= ad.getUTCDate() %> <%= ad.toUTCString().slice(8, 11) %></small>
+        <% hol.forEach(h => { %><span class="ev ev-<%= h.type === 'holiday' ? 'holiday' : 'festival' %>"><%= hName(h) %></span><% }) %>
+        <% ev.forEach(e => { %><span class="ev"><%= f(e, 'title') %></span><% }) %>
+      </a>
     <% } %>
   </div>
-  <% if (events.length) { %><h3 class="mt-3"><%= t('यस महिनाका कार्यक्रम', 'This month') %></h3><ul class="list"><% events.forEach(e => { %><li class="list-item"><span class="badge badge-brand"><%= num(e.bs_day) %></span><div><div style="font-weight:500"><%= f(e, 'title') %></div><div class="small muted"><%= f(e, 'description') %></div></div></li><% }) %></ul><% } %>
+  <div class="cal-legend small muted mt-1"><span class="dot dot-holiday"></span><%= t('सार्वजनिक बिदा / शनिबार', 'Public holiday / Saturday') %> <span class="dot dot-festival"></span><%= t('चाडपर्व', 'Festival') %> <span class="dot dot-coop"></span><%= t('सहकारी कार्यक्रम', 'Co-op event') %></div>
+
+  <div class="grid grid-2 mt-3">
+    <div>
+      <% if (selected) { %>
+      <div class="card" id="day">
+        <h3><%= nd.formatBs(selected.bs, lang) %></h3>
+        <div class="small muted"><%= t('ईस्वी: ', 'AD: ') %><%= selected.ad %> · <%= (lang === 'en' ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] : nd.WEEKDAYS_NP)[new Date(selected.ad + 'T00:00:00Z').getUTCDay()] %></div>
+        <% if (!selected.events.length && !selected.holidays.length) { %><p class="muted mt-1"><%= t('यस दिन कुनै कार्यक्रम छैन।', 'Nothing on this day.') %></p><% } %>
+        <ul class="list"><% selected.holidays.forEach(h => { %><li class="list-item"><span class="badge <%= h.type === 'holiday' ? 'badge-bad' : 'badge-warn' %>"><%= h.type === 'holiday' ? t('बिदा', 'Holiday') : t('पर्व', 'Festival') %></span><%= hName(h) %></li><% }) %>
+          <% selected.events.forEach(e => { %><li class="list-item"><span class="badge badge-brand"><%= t('सहकारी', 'Co-op') %></span><div><div style="font-weight:500"><%= f(e, 'title') %></div><div class="small muted"><%= f(e, 'description') %></div></div></li><% }) %></ul>
+      </div>
+      <% } %>
+      <% if (events.length || holidays.length) { %><h3 class="mt-2"><%= t('यस महिनाका कार्यक्रम', 'This month') %></h3><ul class="list">
+        <% [...holidays.map(h => ({ d: h.day, h })), ...events.map(e => ({ d: e.bs_day, e }))].sort((a, b) => a.d - b.d).forEach(x => { %>
+          <li class="list-item"><span class="badge <%= x.h ? (x.h.type === 'holiday' ? 'badge-bad' : 'badge-warn') : 'badge-brand' %>"><%= num(x.d) %></span><div><div style="font-weight:500"><%= x.h ? hName(x.h) : f(x.e, 'title') %></div><% if (x.e && f(x.e, 'description')) { %><div class="small muted"><%= f(x.e, 'description') %></div><% } %></div></li>
+        <% }) %></ul><% } %>
+    </div>
+    <% if (next && (nextEvents.length || nextHolidays.length)) { %>
+    <div class="card card-flat">
+      <h3><%= t('अर्को महिना', 'Next month') %> · <%= MONTHS[next[1] - 1] %> <%= num(next[0]) %></h3>
+      <ul class="list small">
+        <% [...nextHolidays.map(h => ({ d: h.day, label: hName(h), cls: h.type === 'holiday' ? 'badge-bad' : 'badge-warn' })), ...nextEvents.map(e => ({ d: e.bs_day, label: f(e, 'title'), cls: 'badge-brand' }))].sort((a, b) => a.d - b.d).slice(0, 12).forEach(x => { %>
+          <li class="list-item"><span class="badge <%= x.cls %>"><%= num(x.d) %></span><%= x.label %></li>
+        <% }) %>
+      </ul>
+      <a class="small" href="?y=<%= next[0] %>&m=<%= next[1] %>"><%= t('अर्को महिना हेर्नुहोस् →', 'Open next month →') %></a>
+    </div>
+    <% } %>
+  </div>
 </div></section>
