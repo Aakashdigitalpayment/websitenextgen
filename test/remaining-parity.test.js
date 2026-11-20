@@ -63,3 +63,87 @@ test('notice ticker: list rendered twice (seamless loop), copy hidden from scree
   const css = fs.readFileSync(path.join(__dirname, '../public/css/site.css'), 'utf8');
   assert.match(css, /@keyframes ticker \{ from \{ transform: translateX\(0\); \} to \{ transform: translateX\(-50%\); \} \}/);
 });
+
+// ---------------------------------------------------------------- Google Maps short links
+const maps = require('../src/lib/maps');
+const PIN = 'https://www.google.com/maps/place/Office/@27.7172,85.324,17z/data=!3m1!4b1!3d27.7171!4d85.3241';
+function fakeFetch(table) {
+  const calls = [];
+  const fn = async (url, opts) => {
+    calls.push(url);
+    assert.equal(opts.redirect, 'manual');
+    assert.ok(opts.signal, 'timeout signal');
+    const loc = table[url];
+    if (loc instanceof Error) throw loc;
+    return { status: loc ? 302 : 200, headers: new Map(loc ? [['location', loc]] : []), body: null };
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+test('map short links: resolved through Google hosts only, max 3 hops, never arbitrary hosts', async () => {
+  assert.equal(maps.isShortLink('https://maps.app.goo.gl/AbC123'), true);
+  assert.equal(maps.isShortLink('https://goo.gl/maps/xyz9'), true);
+  assert.equal(maps.isShortLink('https://evil.com/maps.app.goo.gl/x'), false);
+  assert.equal(maps.isShortLink('https://maps.app.goo.gl.evil.com/x'), false);
+  assert.equal(maps.allowedHost('maps.google.com.np'), true);
+  assert.equal(maps.allowedHost('www.google.com'), true);
+  assert.equal(maps.allowedHost('google.com.evil.io'), false);
+  assert.equal(maps.allowedHost('127.0.0.1'), false);
+
+  let f = fakeFetch({ 'https://maps.app.goo.gl/AbC123': PIN });
+  let r = await maps.resolveShortLink('https://maps.app.goo.gl/AbC123', { fetchImpl: f });
+  assert.equal(r.lat, '27.7171'); assert.equal(r.lng, '85.3241');
+  assert.match(r.embed, /^https:\/\/www\.google\.com\/maps\?q=27\.7171,85\.3241&z=17&output=embed$/);
+  assert.deepEqual(f.calls, ['https://maps.app.goo.gl/AbC123'], 'the resolved Google URL itself is not fetched');
+
+  // redirect off Google → refused, the foreign host is never contacted
+  f = fakeFetch({ 'https://maps.app.goo.gl/Evil1': 'https://169.254.169.254/latest/meta-data' });
+  assert.equal(await maps.resolveShortLink('https://maps.app.goo.gl/Evil1', { fetchImpl: f }), null);
+  assert.equal(f.calls.length, 1);
+  f = fakeFetch({ 'https://maps.app.goo.gl/Evil2': 'http://www.google.com/maps/@1,2,3z' });
+  assert.equal(await maps.resolveShortLink('https://maps.app.goo.gl/Evil2', { fetchImpl: f }), null, 'no https downgrade');
+  f = fakeFetch({ 'https://maps.app.goo.gl/Evil3': 'https://www.google.com:8443/maps/@1,2,3z' });
+  assert.equal(await maps.resolveShortLink('https://maps.app.goo.gl/Evil3', { fetchImpl: f }), null, 'no odd ports');
+
+  // consent interstitial: destination taken from ?continue= without fetching consent.google.com
+  f = fakeFetch({ 'https://maps.app.goo.gl/Cons1': 'https://consent.google.com/m?continue=' + encodeURIComponent(PIN) });
+  r = await maps.resolveShortLink('https://maps.app.goo.gl/Cons1', { fetchImpl: f });
+  assert.equal(r.lat, '27.7171');
+  assert.equal(f.calls.length, 1);
+
+  // redirect loop between short links → gives up after 3 hops
+  f = fakeFetch({ 'https://maps.app.goo.gl/Loop1': 'https://goo.gl/maps/Loop2', 'https://goo.gl/maps/Loop2': 'https://maps.app.goo.gl/Loop1' });
+  assert.equal(await maps.resolveShortLink('https://maps.app.goo.gl/Loop1', { fetchImpl: f }), null);
+  assert.equal(f.calls.length, 3);
+
+  // network error / not a short link
+  f = fakeFetch({ 'https://maps.app.goo.gl/Down1': new Error('timeout') });
+  assert.equal(await maps.resolveShortLink('https://maps.app.goo.gl/Down1', { fetchImpl: f }), null);
+  f = fakeFetch({});
+  assert.equal(await maps.resolveShortLink('https://example.com/x', { fetchImpl: f }), null);
+  assert.equal(f.calls.length, 0);
+});
+
+test('admin settings: short map links are resolved on save; a short directions link fills an empty map embed', async () => {
+  const agent = await adminAgent();
+  const fetchBefore = maps.fetchImpl;
+  maps.fetchImpl = fakeFetch({ 'https://maps.app.goo.gl/Dir1': PIN, 'https://maps.app.goo.gl/Bad1': 'https://evil.example/x' });
+  try {
+    await setting('map_embed_url', '');
+    let page = await get('/admin/settings?tab=contact', agent);
+    let r = await agent.post('/admin/settings?_csrf=' + encodeURIComponent(csrfOf(page.text))).set('Host', HA).field('_csrf', csrfOf(page.text)).field('_tab', 'contact')
+      .field('s_google_map_url', 'https://maps.app.goo.gl/Dir1').field('s_map_embed_url', '');
+    assert.equal(r.status, 302);
+    const s = await inA(async () => { require('../src/lib/settings').invalidate(); return require('../src/lib/settings').all(); });
+    assert.equal(s.google_map_url, 'https://maps.app.goo.gl/Dir1', 'directions link kept as typed');
+    assert.match(s.map_embed_url, /q=27\.7171,85\.3241.*output=embed/);
+    assert.equal(s.map_lat, '27.7171');
+
+    page = await get('/admin/settings?tab=contact', agent);
+    r = await agent.post('/admin/settings?_csrf=' + encodeURIComponent(csrfOf(page.text))).set('Host', HA).field('_csrf', csrfOf(page.text)).field('_tab', 'contact')
+      .field('s_google_map_url', 'https://maps.app.goo.gl/Dir1').field('s_map_embed_url', 'https://maps.app.goo.gl/Bad1');
+    assert.equal(r.status, 422, 'short link that leaves Google is rejected');
+    assert.match(r.text, /Could not resolve the short link|छोटो लिङ्क खोल्न सकिएन/);
+  } finally { maps.fetchImpl = fetchBefore; }
+});

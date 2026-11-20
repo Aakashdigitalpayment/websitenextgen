@@ -43,7 +43,7 @@ const DEFS = [
   d('saturday_hours', 'contact', 'text', 'शनिबार/बिदा समय', 'Saturday / holiday hours', { max: 200 }),
   d('office_time_start', 'contact', 'text', 'कार्यालय खुल्ने (HH:MM)', 'Office opens (HH:MM)', { pattern: /^([01]\d|2[0-3]):[0-5]\d$/ }),
   d('office_time_end', 'contact', 'text', 'कार्यालय बन्द (HH:MM)', 'Office closes (HH:MM)', { pattern: /^([01]\d|2[0-3]):[0-5]\d$/ }),
-  d('map_embed_url', 'contact', 'map', 'Google नक्सा', 'Google map', { hint: 'Google Maps → Share → Embed को iframe वा लिङ्क टाँस्नुहोस् / paste the embed iframe or a maps link' }),
+  d('map_embed_url', 'contact', 'map', 'Google नक्सा', 'Google map', { hint: 'Google Maps → Share → Embed को iframe, पूरा लिङ्क वा छोटो maps.app.goo.gl लिङ्क टाँस्नुहोस् / paste the embed iframe, a maps link or a maps.app.goo.gl short link' }),
   d('google_map_url', 'contact', 'url', 'Google Maps लिङ्क (दिशा)', 'Google Maps link (directions)'),
   // ---- about
   d('established_year', 'about', 'text', 'स्थापना वर्ष', 'Established year', { max: 20 }),
@@ -175,7 +175,7 @@ const SECRET_KEY = /password|api_key|token|secret|private/;
 
 /**
  * Google Maps link / iframe → embeddable URL (legacy includes/google-map-embed.php). Short links
- * (maps.app.goo.gl) are not resolved over the network: they return '' so the admin pastes the full link.
+ * (maps.app.goo.gl) return '' here; the settings save resolves them first (lib/maps resolveShortLink).
  */
 function normalizeMapEmbed(raw) {
   let s = String(raw || '').trim().replace(/&amp;/g, '&');

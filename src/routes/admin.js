@@ -612,7 +612,22 @@ router.post('/settings', requireAdmin('admin'), (req, res, next) => {
   const defs = SD.DEFS.filter(d => d.group === tab);
   const current = await settings.all();
   const errors = {}, changes = [];
+  // Google Maps short links (maps.app.goo.gl): resolved here, Google hosts only (lib/maps resolveShortLink)
+  const maps = require('../lib/maps');
+  const posted = k => { const v = req.body['s_' + k]; return String(Array.isArray(v) ? v[v.length - 1] : v ?? '').trim(); };
+  const shortResolved = {};
   for (const def of defs) {
+    if ((def.type === 'map' || def.key === 'google_map_url') && maps.isShortLink(posted(def.key)) && posted(def.key) !== (current[def.key] ?? '')) {
+      shortResolved[def.key] = await maps.resolveShortLink(posted(def.key), { fetchImpl: maps.fetchImpl });
+    }
+  }
+  for (const def of defs) {
+    if (def.type === 'map' && shortResolved[def.key] !== undefined) {
+      const r = shortResolved[def.key];
+      if (r && r.embed) { if (r.embed !== (current[def.key] ?? '')) changes.push([def.key, r.embed.slice(0, 2000), { type: SD.storeType(def.type), group: def.group, label: def.label[1], sync: true }]); }
+      else errors[def.key] = t('छोटो लिङ्क खोल्न सकिएन — Google Maps को पूरा लिङ्क वा embed iframe टाँस्नुहोस्।', 'Could not resolve the short link — paste the full Google Maps link or the embed iframe.');
+      continue;
+    }
     const meta = { type: SD.storeType(def.type), group: def.group, label: def.label[1], sync: true };
     if (def.type === 'image') {
       const up = req.uploaded && req.uploaded['file_' + def.key];
@@ -626,6 +641,12 @@ router.post('/settings', requireAdmin('admin'), (req, res, next) => {
     const r = SD.clean(def, Array.isArray(raw) ? raw[raw.length - 1] : raw, util);
     if (r.error) errors[def.key] = r.error;
     else if (!r.skip && r.value !== (current[def.key] ?? '')) changes.push([def.key, r.value, meta]);
+  }
+  // a short directions link also fills an empty map embed (and the coordinates) so the contact page shows a map
+  const dir = shortResolved.google_map_url;
+  if (dir && dir.embed && !errors.google_map_url && !(current.map_embed_url || '').trim() && !posted('map_embed_url') && !changes.some(c => c[0] === 'map_embed_url')) {
+    changes.push(['map_embed_url', dir.embed.slice(0, 2000), { type: 'url', group: 'contact', label: 'Google map', sync: true }]);
+    if (dir.lat && dir.lng) changes.push(['map_lat', dir.lat, { type: 'text', group: 'contact', label: 'Map latitude' }], ['map_lng', dir.lng, { type: 'text', group: 'contact', label: 'Map longitude' }]);
   }
   if (Object.keys(errors).length) {
     for (const p of Object.values(req.uploaded || {})) remove(req, p);
