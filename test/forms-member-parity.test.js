@@ -272,3 +272,31 @@ test('every form: link spam scanned, 10-digit mobile, guest email required, anon
   r = await c.form('/apply/loan', { full_name: 'L', mobile: '9841900002', email: 'l@example.com', address: 'a', loan_type: loanType, loan_amount: '5000', loan_purpose: 'visit https://spam.example now' });
   assert.equal(r.status, 422, 'links in the loan purpose are blocked');
 });
+
+// ---------------------------------------------------------------- P2-1 math check when Turnstile is not set
+test('math check: required on public forms without Turnstile, one-shot, can be turned off', async () => {
+  const settings = require('../src/lib/settings');
+  await inA(() => settings.set('spam_math_captcha', '1'));
+  try {
+    const c = client();
+    const solve = html => {
+      const m = String(html).match(/([०-९0-9]+) \+ ([०-९0-9]+) = \?/);
+      assert.ok(m, 'math prompt rendered');
+      const n = s => Number(s.replace(/[०-९]/g, d => '०१२३४५६७८९'.indexOf(d)));
+      return String(n(m[1]) + n(m[2]));
+    };
+    const msg = { name: 'Ram', subject: 'Hello', message: 'खाता खोल्न के चाहिन्छ?' };
+    let r = await c.form('/contact', { ...msg, math_answer: '999' });
+    assert.equal(r.status, 422);
+    assert.match(r.text, /गणित/);
+    const page = await c.get('/contact');
+    const tok = page.text.match(/name="_csrf" value="([^"]+)"/)[1];
+    const answer = solve(page.text);
+    r = await c.agent.post('/contact').set('Host', HA).type('form').send({ _csrf: tok, ...msg, math_answer: answer });
+    assert.equal(r.status, 302);
+    r = await c.agent.post('/contact').set('Host', HA).type('form').send({ _csrf: tok, ...msg, math_answer: answer });
+    assert.equal(r.status, 422, 'the same answer cannot be replayed');
+  } finally {
+    await inA(() => settings.set('spam_math_captcha', '0'));
+  }
+});

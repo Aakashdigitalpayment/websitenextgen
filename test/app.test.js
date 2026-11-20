@@ -47,6 +47,7 @@ before(async () => {
   await tenants.applyPlatformSchema();
   await tenants.createTenant({ slug: A, name: 'Tenant A', domains: [HOST_A], adminPassword: PW });
   await tenants.createTenant({ slug: B, name: 'Tenant B', domains: [HOST_B], adminPassword: PW });
+  for (const s of [A, B]) await db.withSchema('tenant_' + s, () => require('../src/lib/settings').set('spam_math_captcha', '0')); // forms are posted without solving the math check
   app = require('http').createServer(createApp());
   await new Promise(r => app.listen(0, '127.0.0.1', r));
 });

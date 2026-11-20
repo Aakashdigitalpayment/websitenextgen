@@ -410,18 +410,20 @@ router.get('/exchange-rate', ah(async (req, res) => {
 // ---------------------------------------------------------------- contact
 router.get('/contact', ah(async (req, res) => {
   const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
+  antispam.mathPrompt(req, res, 'contact');
   res.render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: {}, errors: {} });
 }));
 
 router.post('/contact', submitLimiter, ah(async (req, res) => {
   const mod = modules.contact;
   if (isBot(req)) { flash(req, 'success', res.locals.t('सन्देश पठाइयो।', 'Message sent.')); return res.redirect('/contact'); }
-  const block = await antispam.check(req, res.locals.settings, [req.body.subject, req.body.message, req.body.name]);
+  const block = await antispam.check(req, res.locals.settings, [req.body.subject, req.body.message, req.body.name], 'contact');
   if (block && block.silent) { flash(req, 'success', res.locals.t('सन्देश पठाइयो।', 'Message sent.')); return res.redirect('/contact'); }
   const { data, errors } = forms.validate(mod, req.body, {}, {}, req.lang);
   if (block) errors._form = res.locals.t(...block.message);
   if (Object.keys(errors).length) {
     const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
+    antispam.mathPrompt(req, res, 'contact');
     return res.status(422).render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: req.body, errors });
   }
   const row = await forms.insertSubmission(mod, data, { is_read: 0 });
@@ -477,6 +479,7 @@ function lockedBody(body, stored, locked) {
   return out;
 }
 function renderKymGate(req, res, { error = null, values = {}, status = 200 } = {}) {
+  antispam.mathPrompt(req, res, 'kycgate');
   res.status(status).render('public/kyc-gate', { title: res.locals.t(...modules.kyc.title), mod: modules.kyc, error, values });
 }
 const gateLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip),
@@ -485,6 +488,8 @@ router.post('/apply/kyc/verify', gateLimiter, ah(async (req, res) => {
   if (req.member) return res.redirect('/apply/kyc');
   const values = { member_id: String(req.body.member_id || '').slice(0, 50), mobile: String(req.body.mobile || '').slice(0, 20) };
   if (isBot(req)) return renderKymGate(req, res, { values });
+  const block = await antispam.check(req, res.locals.settings, [], 'kycgate');
+  if (block) return renderKymGate(req, res, { status: 422, values, error: block.message ? res.locals.t(...block.message) : null });
   const auth = require('../lib/auth');
   const key = 'kycgate:' + (kym.normalizeId(values.member_id) || '-');
   if (await auth.tooManyAttempts(key, req.ip)) return renderKymGate(req, res, { status: 429, values, error: res.locals.t('धेरै पटक गलत प्रयास भयो। १५ मिनेटपछि फेरि प्रयास गर्नुहोस्।', 'Too many failed attempts. Try again in 15 minutes.') });
@@ -532,6 +537,7 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
     const mode = req.member ? 'all' : mod.memberGate.always ? 'personal' : null;
     for (const f of mod.fields) if (forms.identitySkipped(mod, f, mode)) skipFields.add(f.name);
   }
+  antispam.mathPrompt(req, res, 'apply:' + mod.key);
   if (req.query.program) values.program_id = values.program_id || req.query.program;
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
@@ -566,7 +572,7 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
       req.body = lockedBody(req.body, k.stored, k.locked);
     }
     const scan = spamParts(mod, req.body);
-    const block = await antispam.check(req, res.locals.settings, scan);
+    const block = await antispam.check(req, res.locals.settings, scan, 'apply:' + mod.key);
     if (block && block.silent) return res.redirect('/');
     const options = await forms.resolveOptions(mod);
     const { data, errors } = forms.validate(mod, req.body, req.uploaded, options, req.lang, { skipIdentity: submissions.identityMode(mod, req.member, req.body) });

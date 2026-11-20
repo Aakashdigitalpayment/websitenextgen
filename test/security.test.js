@@ -50,6 +50,7 @@ before(async () => {
   await tenants.createTenant({ slug: A, name: 'Sec A', domains: [HA], adminPassword: PW });
   await tenants.createTenant({ slug: B, name: 'Sec B', domains: [HB], adminPassword: PW });
   for (const s of [A, B]) await db.withSchema('tenant_' + s, () => db.query("UPDATE admin_users SET must_change_password = 0"));
+  for (const s of [A, B]) await db.withSchema('tenant_' + s, () => require('../src/lib/settings').set('spam_math_captcha', '0')); // forms are posted without solving the math check
   app = require('http').createServer(createApp());
   await new Promise(r => app.listen(0, '127.0.0.1', r));
 });

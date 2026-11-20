@@ -52,6 +52,7 @@ async function adminClient() {
 before(async () => {
   await tenants.applyPlatformSchema();
   await tenants.createTenant({ slug: A, name: 'App A', domains: [HA], adminPassword: PW });
+  await inA(() => require('../src/lib/settings').set('spam_math_captcha', '0')); // forms are posted without solving the math check
   await inA(() => db.query('UPDATE admin_users SET must_change_password = 0'));
   app = require('http').createServer(createApp());
   await new Promise(r => app.listen(0, '127.0.0.1', r));

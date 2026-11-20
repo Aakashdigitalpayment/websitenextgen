@@ -27,6 +27,7 @@
       <div class="field"><label for="g_member_id"><%= t('सदस्यता नम्बर (Member ID)', 'Member ID') %><span class="req">*</span></label><input class="input" id="g_member_id" name="member_id" value="<%= values.member_id || '' %>" required autocomplete="off"></div>
       <div class="field"><label for="g_mobile"><%= t('मोबाइल (१० अंक)', 'Mobile (10 digits)') %><span class="req">*</span></label><input class="input" id="g_mobile" name="mobile" type="tel" value="<%= values.mobile || '' %>" required inputmode="numeric" placeholder="98XXXXXXXX" autocomplete="tel"></div>
     </div>
+    <%- include('../partials/turnstile') %>
     <div class="form-actions">
       <button class="btn btn-primary"><%- icon('check') %><%= t('प्रमाणित गरी अगाडि', 'Verify & continue') %></button>
       <a class="btn btn-outline" href="/member/register"><%= t('पोर्टल लगइन अनुरोध', 'Request portal login') %></a>
