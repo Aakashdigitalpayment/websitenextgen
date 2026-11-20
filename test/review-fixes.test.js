@@ -59,3 +59,22 @@ test('audit: a summary longer than the 255-char column is truncated, not dropped
     assert.equal(row.summary.length, 255);
   });
 });
+
+test('careers: a BS deadline typed into the DATE column that has passed closes online applications', async () => {
+  const pastBs = nd.adToBs(new Date(Date.now() - 10 * 86400_000).toISOString().slice(0, 10));
+  const futureBs = nd.adToBs(new Date(Date.now() + 10 * 86400_000).toISOString().slice(0, 10));
+  const forms = require('../src/lib/forms');
+  const { hooks } = require('../src/lib/submissions');
+  await inA(async () => {
+    const closed = await db.value("INSERT INTO careers (title, deadline, is_active, allow_online_apply) VALUES ('Closed BS job', $1, 1, 1) RETURNING id", [pastBs]);
+    const open = await db.value("INSERT INTO careers (title, deadline, is_active, allow_online_apply) VALUES ('Open BS job', $1, 1, 1) RETURNING id", [futureBs]);
+    const ids = (await forms.optionSources.careers()).map(o => o[0]);
+    assert.ok(!ids.includes(String(closed)), 'closed BS job not offered');
+    assert.ok(ids.includes(String(open)), 'open BS job offered');
+    assert.ok((await forms.optionSources.careers({ admin: true })).some(o => o[0] === String(closed)), 'admin list keeps every job');
+    const ctx = (careerId, n) => ({ data: { career_id: careerId, email: `a${n}@example.com`, phone: '98410000' + String(n).padStart(2, '0') }, lang: 'en' });
+    const blocked = await hooks.job(ctx(closed, 1));
+    assert.ok(blocked && blocked.errors && /closed/.test(blocked.errors.career_id), 'past BS deadline rejected');
+    assert.equal(await hooks.job(ctx(open, 2)), null, 'future BS deadline accepted');
+  });
+});
