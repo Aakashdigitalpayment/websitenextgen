@@ -464,6 +464,43 @@ router.get('/page/:slug', ah(async (req, res, next) => {
   res.render('public/page', { title: res.locals.f(page, 'title'), html: util.richText(res.locals.f(page, 'content')) });
 }));
 
+// ---------------------------------------------------------------- site search (PHP had a client-side page list only)
+const searchLimiter = rateLimit({ windowMs: 60_000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip) });
+router.get('/search', searchLimiter, ah(async (req, res) => {
+  const t = res.locals.t;
+  const q = String(req.query.q || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const groups = [];
+  if (q.length >= 2) {
+    const like = '%' + q.replace(/[\\%_]/g, c => '\\' + c) + '%';
+    const L = 8;
+    const textCols = cols => '(' + cols.map(c => `COALESCE(${c}, '') ILIKE $1`).join(' OR ') + ')';
+    const [news, notices, pages, services, faqs, downloads, careers, reports, team] = await Promise.all([
+      db.many(`SELECT id, title, title_np, content, content_np FROM news WHERE ${ACTIVE} AND ${NOT_DELETED} AND ${textCols(['title', 'title_np', 'content', 'content_np'])} ORDER BY id DESC LIMIT ${L}`, [like]),
+      db.many(`SELECT id, title, title_np, content, content_np FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} AND ${textCols(['title', 'title_np', 'content', 'content_np'])} ORDER BY id DESC LIMIT ${L}`, [like]),
+      db.many(`SELECT slug, title, title_np, title_en, content, content_np FROM pages WHERE ${ACTIVE} AND ${textCols(['title', 'title_np', 'title_en', 'content', 'content_np'])} ORDER BY id DESC LIMIT ${L}`, [like]),
+      db.many(`SELECT id, title, title_np, title_en, description, description_np FROM services WHERE ${ACTIVE} AND ${textCols(['title', 'title_np', 'title_en', 'description', 'description_np'])} ORDER BY display_order, id LIMIT ${L}`, [like]),
+      db.many(`SELECT id, question, question_np, answer, answer_np FROM faqs WHERE ${ACTIVE} AND ${textCols(['question', 'question_np', 'answer', 'answer_np'])} ORDER BY display_order, id LIMIT ${L}`, [like]),
+      db.many(`SELECT id, title, title_np FROM downloads WHERE ${ACTIVE} AND ${NOT_DELETED} AND ${textCols(['title', 'title_np'])} ORDER BY id DESC LIMIT ${L}`, [like]),
+      db.many(`SELECT id, title, title_np, department, location FROM careers WHERE ${ACTIVE} AND ${NOT_DELETED} AND ${textCols(['title', 'title_np', 'department', 'location'])} ORDER BY id DESC LIMIT ${L}`, [like]),
+      db.many(`SELECT id, title, title_np, report_year FROM reports WHERE ${ACTIVE} AND COALESCE(access_level, 'none') <> 'member' AND ${textCols(['title', 'title_np'])} ORDER BY id DESC LIMIT ${L}`, [like]),
+      db.many(`SELECT id, name, name_en, position, position_np, position_en FROM team_members WHERE ${ACTIVE} AND ${textCols(['name', 'name_en', 'position', 'position_np', 'position_en'])} ORDER BY display_order, id LIMIT ${L}`, [like]),
+    ]);
+    const f = res.locals.f;
+    const add = (label, items) => { if (items.length) groups.push({ label, items }); };
+    add(t('पृष्ठहरू', 'Pages'), require('../lib/search-index').match(q).map(p => ({ href: p.href, title: t(...p.label) })));
+    add(t('सेवाहरू', 'Services'), services.map(s => ({ href: '/services/' + s.id, title: f(s, 'title'), text: util.excerpt(f(s, 'description'), 140) })));
+    add(t('सूचना', 'Notices'), notices.map(n => ({ href: '/notices/' + n.id, title: f(n, 'title'), text: util.excerpt(f(n, 'content'), 140) })));
+    add(t('समाचार', 'News'), news.map(n => ({ href: '/news/' + n.id, title: f(n, 'title'), text: util.excerpt(f(n, 'content'), 140) })));
+    add(t('जानकारी पृष्ठ', 'Information pages'), pages.map(p => ({ href: '/page/' + encodeURIComponent(p.slug), title: f(p, 'title'), text: util.excerpt(f(p, 'content'), 140) })));
+    add(t('प्रश्नोत्तर', 'FAQs'), faqs.map(x => ({ href: '/faqs', title: f(x, 'question'), text: util.excerpt(f(x, 'answer'), 140) })));
+    add(t('डाउनलोड', 'Downloads'), downloads.map(d => ({ href: '/downloads/' + d.id + '/file', title: f(d, 'title') })));
+    add(t('रोजगारी', 'Careers'), careers.map(c => ({ href: '/careers/' + c.id, title: f(c, 'title'), text: [c.department, c.location].filter(Boolean).join(' · ') })));
+    add(t('प्रतिवेदन', 'Reports'), reports.map(r => ({ href: '/reports?id=' + r.id + '#r' + r.id, title: f(r, 'title'), text: r.report_year || '' })));
+    add(t('टिम', 'Team'), team.map(p => ({ href: '/team', title: f(p, 'name'), text: f(p, 'position') })));
+  }
+  res.render('public/search', { title: q ? t('खोज: ', 'Search: ') + q : t('खोज्नुहोस्', 'Search'), q, groups, total: groups.reduce((a, g) => a + g.items.length, 0) });
+}));
+
 // ---------------------------------------------------------------- careers & auctions & elections
 /** careers: BS deadlines typed into the DATE column count as BS (nd.toAd); open = no deadline or deadline today or later. */
 const careerOpen = j => { const d = nd.daysUntil(j.deadline); return d === null || d >= 0; };

@@ -1,0 +1,17 @@
+<%- include('../partials/page-head', {}) %>
+<section class="section"><div class="container maxw-md" style="margin-left:0">
+  <form class="flex gap-1" method="get" action="/search" role="search">
+    <input class="input grow" type="search" name="q" value="<%= q %>" minlength="2" maxlength="80" required placeholder="<%= t('सेवा, सूचना, ब्याजदर… खोज्नुहोस्', 'Search services, notices, rates…') %>" aria-label="<%= t('खोज', 'Search') %>">
+    <button type="button" class="btn btn-ghost btn-icon" data-search-mic hidden aria-label="<%= t('बोलेर खोज्नुहोस्', 'Voice search') %>" data-lang="<%= lang === 'en' ? 'en-US' : 'ne-NP' %>"><%- icon('message') %></button>
+    <button class="btn btn-primary"><%- icon('search') %><%= t('खोज', 'Search') %></button>
+  </form>
+  <% if (q.length >= 2) { %>
+    <p class="muted mt-2" aria-live="polite"><%= total ? t(num(total) + ' नतिजा भेटियो', total + ' results') : t('कुनै नतिजा भेटिएन। अर्को शब्द प्रयोग गर्नुहोस्।', 'No results. Try another word.') %></p>
+    <% groups.forEach(g => { %>
+      <h2 class="mt-3"><%= g.label %></h2>
+      <ul class="list"><% g.items.forEach(i => { %>
+        <li class="list-item" style="flex-direction:column;gap:2px"><a href="<%= i.href %>" style="font-weight:500"><%= i.title %></a><% if (i.text) { %><span class="small muted"><%= i.text %></span><% } %></li>
+      <% }) %></ul>
+    <% }) %>
+  <% } else if (q) { %><p class="muted mt-2"><%= t('कम्तीमा २ अक्षर लेख्नुहोस्।', 'Type at least 2 characters.') %></p><% } %>
+</div></section>

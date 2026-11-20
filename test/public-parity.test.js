@@ -326,6 +326,15 @@ test('header: login menu with external links, bell, ticker (can be turned off), 
   assert.ok(r.text.includes('/pwa-icon/180.png'));
   r = await get('/notices?lang=en');
   assert.ok(r.text.includes('logos/en.png'), 'English logo');
+  // ---- P2-2 site search
+  r = await get('/search?q=' + encodeURIComponent('दैनिक'));
+  assert.equal(r.status, 200);
+  assert.ok(r.text.includes('/services/') && r.text.includes('दैनिक बचत'));
+  r = await get('/search?q=byaj');
+  assert.ok(r.text.includes('href="/interest-rates"'), 'romanised keyword → page index');
+  r = await get('/search?q=' + encodeURIComponent('100%_x'));
+  assert.equal(r.status, 200, 'LIKE wildcards escaped');
+  assert.equal((await get('/search.php?q=loan')).headers.location, '/search?q=loan');
   await setting('notice_ticker_enabled', '0');
   await clearCaches();
   r = await get('/notices');
