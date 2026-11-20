@@ -251,6 +251,7 @@ router.get('/oauth/facebook/callback', ah(async (req, res) => {
     if (!req.member) return fail(t('पहिले लगइन गर्नुहोस्।', 'Please sign in first.'));
     if (await db.value('SELECT 1 FROM members WHERE facebook_id = $1 AND id <> $2', [info.sub, req.member.id])) return fail(t('यो Facebook खाता अर्को सदस्यसँग जोडिएको छ।', 'This Facebook account is linked to another member.'));
     await db.query('UPDATE members SET facebook_id = $1 WHERE id = $2', [info.sub, req.member.id]);
+    if (/^https:\/\/[^\s"<>]{8,500}$/.test(info.picture || '')) await db.query("UPDATE members SET avatar_url = $1 WHERE id = $2 AND COALESCE(avatar_url, '') = ''", [info.picture, req.member.id]); // OAuth picture when there is no avatar yet
     await auth.audit(req, 'facebook_link', 'members', req.member.id, 'Facebook account linked');
     flash(req, 'success', t('Facebook खाता जोडियो।', 'Facebook account linked.'));
     return res.redirect('/member/profile');

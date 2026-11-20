@@ -723,6 +723,36 @@ router.get('/programs', ah(async (req, res) => {
   res.render('public/programs', { title: res.locals.t('कार्यक्रमहरू', 'Programmes'), upcoming, past });
 }));
 
+/**
+ * Public pre-registration (verify.php program_preregister) — Member ID AND the registered mobile, not the member number alone.
+ * Failures share the login throttle.
+ */
+const preregLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip) });
+router.post('/programs/:id/register', preregLimiter, ah(async (req, res) => {
+  const t = res.locals.t, back = () => res.redirect('/programs');
+  if (isBot(req)) return back();
+  const p = await db.one('SELECT * FROM upcoming_programs WHERE id = $1 AND is_active = 1 AND pre_registration_open = 1', [util.int(req.params.id)]);
+  if (!p) { flash(req, 'error', t('यो कार्यक्रममा पूर्व दर्ता खुला छैन।', 'Pre-registration is not open for this programme.')); return back(); }
+  const portal = require('../lib/member-portal'), auth = require('../lib/auth');
+  const key = 'prereg:' + (portal.normalizeId(req.body.member_no) || '-');
+  if (await auth.tooManyAttempts(key, req.ip)) { flash(req, 'error', t('धेरै पटक गलत प्रयास भयो। १५ मिनेटपछि फेरि प्रयास गर्नुहोस्।', 'Too many failed attempts. Try again in 15 minutes.')); return back(); }
+  const m = await portal.findBySadasyata(req.body.member_no);
+  const kyc = m ? await portal.linkedKyc(m) : null;
+  if (!m || m.approval_status !== 'approved' || !Number(m.is_active) || !(portal.phonesMatch(req.body.mobile, m.phone) || portal.phonesMatch(req.body.mobile, kyc?.mobile))) {
+    await auth.recordFailure(key, req.ip);
+    flash(req, 'error', t('सदस्यता नं. र दर्ता भएको मोबाइल मिलेन।', 'Member ID and registered mobile do not match.'));
+    return back();
+  }
+  const dup = await db.value('SELECT 1 FROM member_program_preregistrations WHERE member_id = $1 AND program_id = $2', [m.id, p.id]);
+  if (!dup) {
+    await db.query(`INSERT INTO member_program_preregistrations (member_id, member_card_no, member_name, phone, email, program_id, program_title, event_date, source, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'public_verify', now()) ON CONFLICT DO NOTHING`,
+      [m.id, m.member_card_no || m.sadasyata_number || null, m.name_np || m.name, m.phone, m.email, p.id, p.title, p.event_date]);
+  }
+  flash(req, dup ? 'info' : 'success', dup ? t('तपाईं पहिले नै दर्ता हुनुहुन्छ।', 'You are already registered.') : t(`पूर्व दर्ता भयो — ${p.title}`, `You are registered — ${p.title}`));
+  back();
+}));
+
 // QR codes printed at programmes point here; members sign in and confirm
 router.get('/attend', (req, res) => res.redirect('/member/attend?t=' + encodeURIComponent(String(req.query.t || '').replace(/[^A-Za-z0-9_-]/g, ''))));
 

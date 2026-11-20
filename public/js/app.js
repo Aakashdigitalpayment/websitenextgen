@@ -198,3 +198,31 @@ document.querySelectorAll('[data-draft-clear]').forEach(el => { try { localStora
 document.querySelectorAll('[data-copy-text]').forEach(b => b.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(b.dataset.copyText); const s = b.querySelector('span'); if (s) s.textContent = '✓'; } catch (e) { /* clipboard blocked */ }
 }));
+
+// ballot: list the chosen candidates per position before the vote is cast (member/election-vote.php confirm modal)
+document.querySelectorAll('form[data-ballot]').forEach(form => {
+  const btn = form.querySelector('[data-ballot-submit]');
+  if (!btn) return;
+  btn.addEventListener('click', ev => {
+    ev.preventDefault();
+    const lines = Array.from(form.querySelectorAll('[data-ballot-position]')).map(box => {
+      const picks = Array.from(box.querySelectorAll('input:checked')).map(i => i.dataset.candName);
+      return [box.dataset.ballotPosition, picks.length ? picks.join(', ') : btn.dataset.none];
+    });
+    if (typeof HTMLDialogElement !== 'function') { if (window.confirm(btn.dataset.confirmText + '\n\n' + lines.map(l => l[0] + ': ' + l[1]).join('\n'))) form.submit(); return; }
+    const dlg = document.createElement('dialog');
+    dlg.className = 'ballot-dialog';
+    const h = document.createElement('h3'); h.textContent = btn.dataset.confirmText; dlg.appendChild(h);
+    const dl = document.createElement('div'); dl.className = 'kv';
+    lines.forEach(([k, v]) => { const a = document.createElement('div'); a.textContent = k; const b = document.createElement('div'); b.textContent = v; b.style.fontWeight = '600'; dl.append(a, b); });
+    dlg.appendChild(dl);
+    const bar = document.createElement('div'); bar.className = 'flex gap-1 mt-2';
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'btn btn-primary'; ok.textContent = btn.dataset.ok;
+    const back = document.createElement('button'); back.type = 'button'; back.className = 'btn btn-ghost'; back.textContent = btn.dataset.back;
+    ok.addEventListener('click', () => { ok.disabled = true; form.submit(); });
+    back.addEventListener('click', () => dlg.close());
+    dlg.addEventListener('close', () => dlg.remove());
+    bar.append(ok, back); dlg.appendChild(bar);
+    document.body.appendChild(dlg); dlg.showModal();
+  });
+});

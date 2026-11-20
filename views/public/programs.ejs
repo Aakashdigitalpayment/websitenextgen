@@ -7,7 +7,15 @@
       <h3><%= p.title %></h3>
       <% if (p.location) { %><div class="small muted flex gap-1"><%- icon('pin') %><%= p.location %></div><% } %>
       <% if (p.description) { %><p class="small muted mt-1"><%= util.excerpt(p.description, 160) %></p><% } %>
-      <% if (Number(p.pre_registration_open)) { %><a class="btn btn-soft btn-sm mt-1" href="/member/programs"><%= t('पूर्व दर्ता (सदस्य)', 'Pre-register (members)') %></a><% } %>
+      <% if (Number(p.pre_registration_open)) { %>
+        <details class="mt-1"><summary class="btn btn-soft btn-sm"><%= t('पूर्व दर्ता (सदस्य)', 'Pre-register (members)') %></summary>
+          <form method="post" action="/programs/<%= p.id %>/register" class="mt-1">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <div class="field"><label class="small" for="pr_m_<%= p.id %>"><%= t('सदस्यता नं.', 'Member ID') %></label><input class="input" id="pr_m_<%= p.id %>" name="member_no" required autocomplete="off"></div>
+            <div class="field"><label class="small" for="pr_p_<%= p.id %>"><%= t('दर्ता भएको मोबाइल', 'Registered mobile') %></label><input class="input" id="pr_p_<%= p.id %>" name="mobile" type="tel" required inputmode="numeric"></div>
+            <button class="btn btn-primary btn-sm mt-1"><%= t('दर्ता गर्नुहोस्', 'Register') %></button> <a class="small" href="/member/programs"><%= t('वा लगइन गर्नुहोस्', 'or sign in') %></a>
+          </form></details>
+      <% } %>
     </div>
   <% }) %></div>
   <% if (past.length) { %><h2 class="mt-4"><%= t('विगतका कार्यक्रम', 'Past programmes') %></h2>

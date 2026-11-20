@@ -41,7 +41,7 @@ function createApp() {
         'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
         'img-src': ["'self'", 'data:', 'https:'],
-        'frame-src': ['https://www.google.com', 'https://maps.google.com', 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://www.facebook.com', 'https://challenges.cloudflare.com'],
+        'frame-src': ["'self'", 'https://www.google.com', 'https://maps.google.com', 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://www.facebook.com', 'https://challenges.cloudflare.com'],
         'form-action': ["'self'"],
         'upgrade-insecure-requests': config.isProd ? [] : null,
       },

@@ -64,6 +64,7 @@ router.get('/oauth/google/callback', ah(async (req, res) => {
     const taken = await db.value('SELECT 1 FROM members WHERE google_id = $1 AND id <> $2', [info.sub, req.member.id]);
     if (taken) return fail(res.locals.t('यो Google खाता अर्को सदस्यसँग जोडिएको छ।', 'This Google account is linked to another member.'));
     await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, req.member.id]);
+    if (/^https:\/\/[^\s"<>]{8,500}$/.test(info.picture || '')) await db.query("UPDATE members SET avatar_url = $1 WHERE id = $2 AND COALESCE(avatar_url, '') = ''", [info.picture, req.member.id]); // OAuth picture when there is no avatar yet
     await auth.audit(req, 'google_link', 'members', req.member.id, 'Google account linked');
     flash(req, 'success', res.locals.t('Google खाता जोडियो।', 'Google account linked.'));
     return res.redirect('/member/profile');
@@ -277,8 +278,17 @@ router.post('/service-request', ah(async (req, res) => {
 
 router.get('/notifications', ah(async (req, res) => {
   const rows = await db.many('SELECT * FROM member_notifications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 100', [req.member.id]);
-  await db.query('UPDATE member_notifications SET is_read = 1 WHERE member_id = $1 AND is_read = 0', [req.member.id]);
   res.render('member/notifications', { title: res.locals.t('सूचनाहरू', 'Notifications'), rows });
+}));
+// one notification read (opening its link marks it), or all with the button
+router.post('/notifications/read-all', ah(async (req, res) => {
+  await db.query('UPDATE member_notifications SET is_read = 1 WHERE member_id = $1 AND is_read = 0', [req.member.id]);
+  res.redirect('/member/notifications');
+}));
+router.post('/notifications/:id/read', ah(async (req, res) => {
+  const n = await db.one('UPDATE member_notifications SET is_read = 1 WHERE id = $1 AND member_id = $2 RETURNING link', [util.int(req.params.id), req.member.id]);
+  const link = n && /^\/(?!\/)/.test(n.link || '') ? n.link : '/member/notifications';
+  res.redirect(req.body.go === '1' ? link : '/member/notifications');
 }));
 
 // profile: see ./member-self.js
@@ -372,7 +382,20 @@ async function programStars(member) {
 router.get('/information-room', ah(async (req, res) => {
   if (!req.member.information_room_enabled) return res.status(403).render('public/error', { layout: 'member', title: res.locals.t('सूचना कक्ष', 'Information room'), code: 403, message: res.locals.t('तपाईंलाई सूचना कक्षको पहुँच छैन।', 'You do not have access to the information room.') });
   const items = await db.many('SELECT * FROM information_room_items WHERE is_active = 1 ORDER BY display_order, meeting_date DESC NULLS LAST, id DESC');
-  res.render('member/information-room', { title: res.locals.t('सूचना कक्ष', 'Information room'), items });
+  res.render('member/information-room', { title: res.locals.t('सूचना कक्ष', 'Information room'), items, categories: IR_CATEGORIES });
+}));
+
+const IR_CATEGORIES = { board_decision: ['बोर्ड निर्णय', 'Board decision'], policy: ['नीति', 'Policy'], karyabidhi: ['कार्यविधि', 'Procedure'], biniyam: ['बिनियम', 'Bylaws'],
+  meeting_minutes: ['बैठक माइन्युट', 'Meeting minutes'], circular: ['परिपत्र', 'Circular'], other: ['अन्य', 'Other'] };
+/** In-page viewer with a watermark (member name + time) for view-only documents (information-room-view.php). */
+router.get('/information-room/:id/view', ah(async (req, res, next) => {
+  if (!req.member.information_room_enabled) return res.redirect('/member/information-room');
+  const item = await db.one('SELECT * FROM information_room_items WHERE id = $1 AND is_active = 1', [util.int(req.params.id)]);
+  if (!item || !item.file_path) return next();
+  const ext = String(item.file_path).toLowerCase().split('.').pop();
+  res.set('Cache-Control', 'private, no-store');
+  res.render('member/information-room-view', { title: res.locals.f(item, 'title'), item, kind: ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? 'image' : ext === 'pdf' ? 'pdf' : 'other',
+    category: IR_CATEGORIES[item.category] || null, stamp: `${req.member.name_np || req.member.name} · ${req.member.sadasyata_number || ''} · ${nd.formatBs(nd.todayBs(), req.lang)} ${new Date(Date.now() + 345 * 60_000).toISOString().slice(11, 16)}` });
 }));
 
 router.get('/information-room/:id', ah(async (req, res, next) => {
@@ -386,7 +409,7 @@ router.get('/information-room/:id', ah(async (req, res, next) => {
   const file = path.resolve(base, String(item.file_path).replace(/^\/+/, '').replace(/^assets\/uploads\//, ''));
   if (!file.startsWith(base + path.sep)) return next(); // never outside this tenant's folder
   res.set('Cache-Control', 'private, no-store');
-  if (item.allow_download) return res.download(file, path.basename(file), err => err && next());
+  if (item.allow_download && !req.query.inline) return res.download(file, path.basename(file), err => err && next());
   res.set('Content-Disposition', 'inline');
   res.sendFile(file, err => err && next());
 }));

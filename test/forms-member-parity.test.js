@@ -514,3 +514,45 @@ test('KYM capture: camera and signature data URLs are checked and stored private
   assert.ok(k.signature);
   assert.equal(Number(k.photo_quality_score), 81);
 });
+
+// ---------------------------------------------------------------- P3: legacy URLs, notifications, profile KYC tab, ballot confirm, information room viewer, public pre-registration
+test('P3: legacy links, per-item notifications, KYC details on the profile, info room viewer, public pre-registration', async () => {
+  const pub = client(HB);
+  const loc = async u => (await pub.get(u)).headers.location;
+  assert.equal(await loc('/online-kyc.php?path=new'), '/apply/membership');
+  assert.equal(await loc('/grievance.php?track=GR-1-ABC'), '/track?id=GR-1-ABC');
+  assert.equal(await loc('/member-skills.php'), '/marketplace?type=skill');
+
+  const { m } = await seedMember('P-100', '9841990001', { password: 'Member@12345' });
+  await inA(() => db.query("UPDATE members SET information_room_enabled = 1 WHERE id = $1", [m.id]));
+  await inA(() => db.query("INSERT INTO member_notifications (member_id, title, message, link, is_read, created_at) VALUES ($1, 'N1', 'x', '/member/requests', 0, now()), ($1, 'N2', 'y', NULL, 0, now())", [m.id]));
+  const c = await memberClient('9841990001', 'Member@12345');
+  let r = await c.get('/member/notifications');
+  assert.match(r.text, /read-all/);
+  assert.equal(await inA(() => db.value('SELECT count(*) FROM member_notifications WHERE member_id = $1 AND is_read = 0', [m.id])), 2, 'opening the list does not mark everything read');
+  const n1 = await inA(() => db.value("SELECT id FROM member_notifications WHERE member_id = $1 AND title = 'N1'", [m.id]));
+  r = await c.form(`/member/notifications/${n1}/read`, { go: '1' }, '/member/notifications');
+  assert.equal(r.headers.location, '/member/requests');
+  assert.equal(await inA(() => db.value('SELECT count(*) FROM member_notifications WHERE member_id = $1 AND is_read = 0', [m.id])), 1);
+  r = await c.form('/member/notifications/read-all', {}, '/member/notifications');
+  assert.equal(await inA(() => db.value('SELECT count(*) FROM member_notifications WHERE member_id = $1 AND is_read = 0', [m.id])), 0);
+
+  r = await c.get('/member/profile');
+  assert.match(r.text, /id="kyc-details"/);
+  assert.match(r.text, /केवाइसी P-100/);
+
+  await inA(() => db.query("INSERT INTO information_room_items (title, category, file_path, is_active, allow_download) VALUES ('Minutes', 'meeting_minutes', 'ir/m.pdf', 1, 0)"));
+  r = await c.get('/member/information-room');
+  assert.match(r.text, /बैठक माइन्युट|Meeting minutes/);
+  const irId = await inA(() => db.value("SELECT id FROM information_room_items WHERE title = 'Minutes'"));
+  r = await c.get(`/member/information-room/${irId}/view`);
+  assert.equal(r.status, 200);
+  assert.match(r.text, /P-100/, 'watermark carries the member');
+
+  const prog = await inA(() => db.one("INSERT INTO upcoming_programs (title, event_date, is_active, pre_registration_open) VALUES ('AGM', CURRENT_DATE + 7, 1, 1) RETURNING id"));
+  const guest = client();
+  r = await guest.form(`/programs/${prog.id}/register`, { member_no: 'P-100', mobile: '9800000000' }, '/programs');
+  assert.equal(await inA(() => db.value('SELECT count(*) FROM member_program_preregistrations WHERE program_id = $1', [prog.id])), 0, 'member number alone is not enough');
+  r = await guest.form(`/programs/${prog.id}/register`, { member_no: 'p-100', mobile: '9841990001' }, '/programs');
+  assert.equal(await inA(() => db.value("SELECT source FROM member_program_preregistrations WHERE program_id = $1", [prog.id])), 'public_verify');
+});

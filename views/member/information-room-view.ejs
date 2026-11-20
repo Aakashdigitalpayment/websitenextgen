@@ -1,0 +1,13 @@
+<div class="content-head"><div><div class="crumbs"><a href="/member/information-room"><%= t('सूचना कक्ष', 'Information room') %></a></div><h1><%= title %></h1>
+  <div class="small muted"><% if (category) { %><span class="badge"><%= t(...category) %></span> <% } %><%= item.reference_no || '' %><%= item.meeting_date ? ' · ' + bsDate(item.meeting_date) : '' %></div></div>
+  <% if (item.allow_download) { %><a class="btn btn-outline btn-sm" href="/member/information-room/<%= item.id %>"><%- icon('download') %><%= t('डाउनलोड', 'Download') %></a><% } %></div>
+<% if (f(item, 'description')) { %><p class="muted"><%= f(item, 'description') %></p><% } %>
+<div class="ir-viewer" style="position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)">
+  <% if (kind === 'image') { %><img src="/member/information-room/<%= item.id %>?inline=1" alt="" style="display:block;max-width:100%;margin:0 auto">
+  <% } else if (kind === 'pdf') { %><iframe src="/member/information-room/<%= item.id %>?inline=1#toolbar=<%= item.allow_download ? 1 : 0 %>" title="<%= title %>" style="display:block;width:100%;height:78vh;border:0"></iframe>
+  <% } else { %><div class="empty"><%= t('यो फाइल यहाँ देखाउन मिल्दैन।', 'This file cannot be shown here.') %> <a href="/member/information-room/<%= item.id %>"><%= t('खोल्नुहोस्', 'Open') %></a></div><% } %>
+  <div aria-hidden="true" style="position:absolute;inset:0;pointer-events:none;display:grid;grid-template-columns:repeat(2,1fr);align-content:space-around;overflow:hidden;opacity:.16;font-weight:600;color:var(--text);transform:rotate(-24deg) scale(1.3);user-select:none">
+    <% for (let i = 0; i < 10; i++) { %><span style="text-align:center;white-space:nowrap;padding:28px 0"><%= stamp %></span><% } %>
+  </div>
+</div>
+<p class="small faint mt-2"><%= t('यो कागजात गोप्य हो; हेरेको अभिलेख राखिन्छ।', 'This document is confidential; access is logged.') %></p>
