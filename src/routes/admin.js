@@ -868,6 +868,14 @@ router.post('/notifications/push/clear-expired', requireAdmin('admin'), ah(async
   res.redirect('/admin/notifications');
 }));
 
+// notification-settings.php "clear old logs": delivery log entries older than 30 days
+router.post('/notifications/clear-old', requireAdmin('admin'), ah(async (req, res) => {
+  const r = await db.query("DELETE FROM notification_log WHERE created_at < now() - interval '30 days'");
+  await auth.audit(req, 'notification_log_clear', 'notification_log', null, `${r.rowCount} log entries older than 30 days removed`);
+  flash(req, 'success', res.locals.t(`${r.rowCount} पुराना लग हटाइए।`, `${r.rowCount} old log entries removed.`));
+  res.redirect('/admin/notifications');
+}));
+
 // send one template with sample values (legacy notification-templates.php test)
 router.post('/notifications/template-test', requireAdmin('admin'), ah(async (req, res) => {
   const tpl = await db.one('SELECT * FROM notification_templates WHERE id = $1', [util.int(req.body.template_id)]);

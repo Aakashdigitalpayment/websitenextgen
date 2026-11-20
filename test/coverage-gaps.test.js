@@ -500,3 +500,16 @@ test('B-9 / SM-19: information room "block copy / print", created_by stamp, view
   assert.deepEqual(log.map(x => x.action), ['view'], 'one view entry, no download');
   assert.equal(require('../src/lib/legacy-urls').PUBLIC['information-room-view.php']?.({ id: '5' }) ?? require('../src/lib/legacy-urls').MEMBER?.['information-room-view.php']?.({ id: '5' }), '/member/information-room/5/view');
 });
+
+// ---------------------------------------------------------------- B-10 clear old notification logs
+test('B-10: admin clears notification log entries older than 30 days (audited)', async () => {
+  await inA(() => db.query(`INSERT INTO notification_log (event_type, channel, recipient, subject, status, created_at) VALUES
+    ('t', 'sms', '98', 's', 'sent', now() - interval '40 days'), ('t', 'sms', '98', 's', 'sent', now())`));
+  const c = await adminClient();
+  assert.match((await c.get('/admin/notifications')).text, /action="\/admin\/notifications\/clear-old"/);
+  const r = await c.form('/admin/notifications/clear-old', {}, '/admin/notifications');
+  assert.equal(r.status, 302);
+  assert.equal(Number(await inA(() => db.value("SELECT count(*) FROM notification_log WHERE created_at < now() - interval '30 days'"))), 0);
+  assert.ok(Number(await inA(() => db.value('SELECT count(*) FROM notification_log'))) >= 1);
+  assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'notification_log_clear'")));
+});
