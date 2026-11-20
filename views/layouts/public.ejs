@@ -54,7 +54,7 @@
             <% if (item.children && item.children.length) { %>
               <button class="nav-link <%= isActive(item.href) && item.href !== '/' ? 'active' : '' %>" aria-haspopup="true"><%= t(...item.label) %><%- icon('chevron') %></button>
               <div class="dropdown">
-                <% item.children.forEach(c => { %><% if (c.heading) { %><a class="dropdown-heading" href="<%= c.href %>"><%= t(...c.label) %></a><% } else { %><a href="<%= c.href %>"<%- c.indent ? ' class="dropdown-sub"' : '' %>><%= t(...c.label) %><% if (c.badge) { %> <span class="badge badge-ok"><%= num(c.badge) %></span><% } %></a><% } %><% }) %>
+                <% item.children.forEach(c => { %><% if (c.heading) { %><a class="dropdown-heading" href="<%= c.href %>"><%= t(...c.label) %></a><% } else { %><a href="<%= c.href %>"<%- c.indent ? ' class="dropdown-sub"' : '' %>><%= t(...c.label) %><% if (c.badge) { %> <span class="badge badge-ok"><%= num(c.badge) %></span><% } %><% if (c.isNew) { %> <span class="badge badge-info"><%= t('नयाँ', 'New') %></span><% } %></a><% } %><% }) %>
               </div>
             <% } else { %>
               <a class="nav-link <%= isActive(item.href) ? 'active' : '' %>" href="<%= item.href %>"><%= t(...item.label) %></a>

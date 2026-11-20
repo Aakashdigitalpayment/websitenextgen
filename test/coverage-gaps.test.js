@@ -608,3 +608,18 @@ test('B-13 / B-17: help topics become assistant answers once; the PHP Web Push k
     assert.equal(mig.parseVapid(php.replace(pub, pub.slice(0, -4) + 'AAAA')), null, 'mismatched pair rejected');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+// ---------------------------------------------------------------- B-15 pages.is_new / new_until
+test('B-15: dynamic page menu items show a "New" chip until new_until', async () => {
+  const { resources } = require('../src/modules/resources');
+  assert.ok(resources.pages.fields.some(f => f.name === 'is_new') && resources.pages.fields.some(f => f.name === 'new_until'));
+  await inA(async () => {
+    await db.query(`INSERT INTO pages (slug, title, title_np, content, show_in_menu, menu_position, is_new, new_until, is_active) VALUES
+      ('fresh-page', 'Fresh page', 'नयाँ पृष्ठ', 'x', 1, 'about', 1, CURRENT_DATE + 5, 1), ('old-page', 'Old page', 'पुरानो पृष्ठ', 'x', 1, 'about', 1, CURRENT_DATE - 1, 1)`);
+    require('../src/lib/navigation').invalidate();
+    require('../src/lib/public-cache').clear();
+  });
+  const html = (await client().get('/lang/en?next=/').then(() => null), (await request(app).get('/').set('Host', HA).set('Cookie', 'lang=en')).text);
+  assert.match(html, /Fresh page <span class="badge badge-info">New<\/span>/);
+  assert.doesNotMatch(html, /Old page <span class="badge badge-info">/);
+});

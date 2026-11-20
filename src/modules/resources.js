@@ -129,7 +129,8 @@ const resources = {
     RT('content_np', 'सामग्री (नेपाली)', 'Content (Nepali)'), RT('content', 'सामग्री (English)', 'Content (English)'),
     IMG('featured_image', 'मुख्य फोटो', 'Featured image'), T('meta_keywords', 'ट्याग (अल्पविरामले छुट्याउनुहोस्)', 'Tags (comma separated)'),
     B('show_in_menu', 'मेनुमा देखाउने', 'Show in menu', { list: true }), SEL('menu_position', 'मेनु', 'Menu', [['about', 'हाम्रो बारेमा', 'About'], ['services', 'सेवाहरू', 'Services'], ['more', 'सूचना', 'Updates'], ['footer', 'फुटर', 'Footer']]),
-    ICON('menu_icon', 'मेनु आइकन', 'Menu icon'), N('menu_order', 'क्रम', 'Order', { default: 0 }), ACTIVE],
+    ICON('menu_icon', 'मेनु आइकन', 'Menu icon'), N('menu_order', 'क्रम', 'Order', { default: 0 }),
+    B('is_new', 'मेनुमा "नयाँ" चिन्ह', '"New" chip in the menu'), D('new_until', '"नयाँ" चिन्ह कहिलेसम्म', '"New" chip until', { hint: 'खाली = सधैं / blank = no end date' }), ACTIVE],
   // legacy pages.php: blank slug → from the title; a footer page shown in the menu goes under About
   beforeSave: async data => {
     const util = require('../lib/util');
