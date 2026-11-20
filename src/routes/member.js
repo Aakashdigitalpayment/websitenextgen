@@ -396,6 +396,8 @@ router.get('/information-room/:id/view', ah(async (req, res, next) => {
   const item = await db.one('SELECT * FROM information_room_items WHERE id = $1 AND is_active = 1', [util.int(req.params.id)]);
   if (!item || !item.file_path) return next();
   const ext = String(item.file_path).toLowerCase().split('.').pop();
+  await db.query(`INSERT INTO information_room_access_log (item_id, viewer_type, viewer_id, viewer_name, action, ip_address, created_at) VALUES ($1, 'member', $2, $3, 'view', $4, now())`,
+    [item.id, req.member.id, req.member.name, req.ip]);
   res.set('Cache-Control', 'private, no-store');
   res.render('member/information-room-view', { title: res.locals.f(item, 'title'), item, kind: ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? 'image' : ext === 'pdf' ? 'pdf' : 'other',
     category: IR_CATEGORIES[item.category] || null, stamp: `${req.member.name_np || req.member.name} · ${req.member.sadasyata_number || ''} · ${nd.formatBs(nd.todayBs(), req.lang)} ${new Date(Date.now() + 345 * 60_000).toISOString().slice(11, 16)}` });
@@ -405,16 +407,14 @@ router.get('/information-room/:id', ah(async (req, res, next) => {
   if (!req.member.information_room_enabled) return res.redirect('/member/information-room');
   const item = await db.one('SELECT * FROM information_room_items WHERE id = $1 AND is_active = 1', [util.int(req.params.id)]);
   if (!item || !item.file_path) return next();
-  await db.query(`INSERT INTO information_room_access_log (item_id, viewer_type, viewer_id, viewer_name, action, ip_address, created_at) VALUES ($1, 'member', $2, $3, $4, $5, now())`,
-    [item.id, req.member.id, req.member.name, item.allow_download ? 'download' : 'view', req.ip]);
-  const path = require('path');
-  const base = path.resolve(require('../lib/uploads').tenantDir(req));
-  const file = path.resolve(base, String(item.file_path).replace(/^\/+/, '').replace(/^assets\/uploads\//, ''));
-  if (!file.startsWith(base + path.sep)) return next(); // never outside this tenant's folder
-  res.set('Cache-Control', 'private, no-store');
-  if (item.allow_download && !req.query.inline) return res.download(file, path.basename(file), err => err && next());
-  res.set('Content-Disposition', 'inline');
-  res.sendFile(file, err => err && next());
+  // the in-page viewer's own fetch (?inline=1) was logged as a view by /view; a direct open is a download only when allowed
+  if (!req.query.inline) {
+    await db.query(`INSERT INTO information_room_access_log (item_id, viewer_type, viewer_id, viewer_name, action, ip_address, created_at) VALUES ($1, 'member', $2, $3, $4, $5, now())`,
+      [item.id, req.member.id, req.member.name, item.allow_download ? 'download' : 'view', req.ip]);
+  }
+  // never outside this tenant's folder (uploads.resolveStored); served relative to it so the dotfile check covers the stored path only
+  const inline = !item.allow_download || !!req.query.inline;
+  require('../lib/uploads').sendStored(req, res, next, item.file_path, { viewOnly: inline, download: !inline });
 }));
 
 // ---------------------------------------------------------------- programmes: QR check-in, pre-registration, history

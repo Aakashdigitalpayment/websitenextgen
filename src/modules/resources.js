@@ -17,6 +17,10 @@ const FILE = (name, np = 'फाइल', en = 'File', extra = {}) => T(name, np,
 const SEL = (name, np, en, options, extra = {}) => T(name, np, en, { type: 'select', options, ...extra });
 const REF = (name, np, en, table, label, extra = {}) => T(name, np, en, { type: 'select', ref: { table, label }, ...extra });
 const ICON = (name = 'icon', np = 'आइकन', en = 'Icon', extra = {}) => T(name, np, en, { type: 'icon', ...extra });
+/** information-room.php: the admin who added the item (created_by), stamped once. */
+async function stampCreatedBy(row, req) {
+  if (row && !row.created_by && req && req.admin) await require('../db').query('UPDATE information_room_items SET created_by = $1 WHERE id = $2 AND created_by IS NULL', [req.admin.id, row.id]);
+}
 const ACTIVE = B('is_active', 'सक्रिय', 'Active', { default: 1, list: true });
 const lazyDb = () => require('../db');
 
@@ -165,7 +169,8 @@ const resources = {
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
     SEL('category', 'समूह', 'Category', IR_CATEGORIES, { list: true, optionsFn: irCategoryOptions }), D('meeting_date', 'बैठक मिति', 'Meeting date', { list: true }), T('reference_no', 'च.नं./सन्दर्भ', 'Reference no.'),
     FILE('file_path', 'फाइल (PDF)', 'File (PDF)', { required: true }), TA('description_np', 'विवरण', 'Description'),
-    B('allow_download', 'डाउनलोड अनुमति', 'Allow download', { default: 0 }), ORDER, ACTIVE] },
+    B('allow_download', 'डाउनलोड अनुमति', 'Allow download', { default: 0 }), B('restrict_copy', 'कपी / प्रिन्ट रोक्ने', 'Block copy / print', { default: 1, list: true }), ORDER, ACTIVE],
+  afterSave: stampCreatedBy },
 
   // ---------------------------------------------------------------- services & rates
   service_categories: { group: 'services', icon: 'layers', title: ['सेवा समूह', 'Service groups'], order: 'display_order, id', fields: [

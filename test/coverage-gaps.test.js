@@ -473,3 +473,30 @@ test('B-6: admin bell counts KYM risk reviews, marketplace listings and attendan
   page = await c.get('/admin');
   assert.match(page.text, /<details class="bell">/, 'not opened again without a new item');
 });
+
+// ---------------------------------------------------------------- B-9 / SM-19 information room restrict_copy, created_by, view log
+test('B-9 / SM-19: information room "block copy / print", created_by stamp, view logged once', async () => {
+  const { resources } = require('../src/modules/resources');
+  assert.ok(resources.information_room_items.fields.some(f => f.name === 'restrict_copy'));
+  const c = await adminClient();
+  const tok = await c.token('/admin/r/information_room_items/new');
+  let r = await c.agent.post('/admin/r/information_room_items?_csrf=' + encodeURIComponent(tok)).set('Host', HA)
+    .field('_csrf', tok).field('title_np', 'Board minutes').field('category', 'meeting_minutes').field('restrict_copy', '1').field('is_active', '1')
+    .attach('file_path', Buffer.from('%PDF-1.4\n%%EOF\n'), 'minutes.pdf');
+  assert.equal(r.status, 302, r.text.slice(0, 300));
+  const item = await inA(() => db.one("SELECT * FROM information_room_items WHERE title_np = 'Board minutes'"));
+  assert.ok(item.created_by > 0, 'created_by stamped');
+  assert.equal(Number(item.restrict_copy), 1);
+  await seedMember('IR-0900', '9841600011');
+  await inA(() => db.query("UPDATE members SET information_room_enabled = 1 WHERE sadasyata_number = 'IR-0900'"));
+  const m = await memberClient('IR-0900');
+  r = await m.get(`/member/information-room/${item.id}/view`);
+  assert.equal(r.status, 200);
+  assert.match(r.text, /class="ir-viewer ir-restricted" id="irViewerWrap"/);
+  assert.match(r.text, /information-room-viewer\.js/);
+  assert.doesNotMatch(r.text, /class="ir-viewer[^"]*" style=/);
+  assert.equal((await m.get(`/member/information-room/${item.id}?inline=1`)).status, 200);
+  const log = await inA(() => db.many('SELECT action FROM information_room_access_log WHERE item_id = $1', [item.id]));
+  assert.deepEqual(log.map(x => x.action), ['view'], 'one view entry, no download');
+  assert.equal(require('../src/lib/legacy-urls').PUBLIC['information-room-view.php']?.({ id: '5' }) ?? require('../src/lib/legacy-urls').MEMBER?.['information-room-view.php']?.({ id: '5' }), '/member/information-room/5/view');
+});

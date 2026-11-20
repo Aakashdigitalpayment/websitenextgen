@@ -537,3 +537,15 @@ table.table { width: 100%; border-collapse: collapse; font-size: .93rem; }
 .quick-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--line); border-radius: 12px; text-align: center; font-size: .85rem; color: var(--text); }
 .quick-item:hover { border-color: var(--brand-line); text-decoration: none; }
 .quick-item .icon-tile { margin: 0; }
+
+/* information room viewer (member/information-room-view.ejs) */
+.ir-viewer { position: relative; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.ir-image { display: block; max-width: 100%; margin: 0 auto; }
+.ir-frame { display: block; width: 100%; height: 78vh; border: 0; }
+.ir-watermark { position: absolute; inset: 0; pointer-events: none; display: grid; grid-template-columns: repeat(2, 1fr); align-content: space-around; overflow: hidden;
+  opacity: .16; font-weight: 600; color: var(--text); transform: rotate(-24deg) scale(1.3); user-select: none; }
+.ir-watermark span { text-align: center; white-space: nowrap; padding: 28px 0; }
+.ir-restricted { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.ir-blurred > :not(.ir-watermark) { filter: blur(14px); }
+.ir-print-note { display: none; }
+@media print { .ir-restricted { display: none !important; } .ir-print-note { display: block; } }
