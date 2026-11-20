@@ -33,3 +33,15 @@
 .locked-value { padding: 9px 12px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface); color: var(--text); min-height: 40px; overflow-wrap: anywhere; }
 .locked-value .icon { width: 14px; height: 14px; vertical-align: -2px; color: var(--faint); margin-right: 4px; }
 .identity-card .kv { grid-template-columns: 130px 1fr; }
+/* wizard (loan / account / KYM) */
+.form-section[hidden], .form-actions[hidden], .wizard-buttons [hidden], .form-toc[hidden], .turnstile-wrap[hidden] { display: none !important; }
+.wizard-nav { margin-bottom: 16px; }
+.wizard-count { font-weight: 500; margin-bottom: 6px; }
+.wizard-bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.wizard-bar span { display: block; height: 100%; width: 0; background: var(--brand); transition: width .2s; }
+.wizard-steps { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 10px 0 0; }
+.wizard-steps button { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: .8rem; cursor: pointer; }
+.wizard-steps button.is-current { border-color: var(--brand); color: var(--brand); font-weight: 500; }
+.wizard-steps button.is-done { border-color: var(--ok); color: var(--ok); }
+.wizard-steps button.is-incomplete { border-color: var(--warn); color: var(--warn); }
+.wizard-buttons { display: flex; justify-content: space-between; gap: 8px; margin: 12px 0; }

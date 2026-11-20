@@ -452,7 +452,7 @@ const modules = {
 
 /** mobile10: the phone must be a 10-digit mobile ('strict' = 9XXXXXXXXX, as job and bid in PHP); guestEmail: email required for visitors. */
 const RULES = {
-  loan: { mobile10: true, guestEmail: true }, account: { mobile10: true, guestEmail: true }, grievance: { mobile10: true, guestEmail: true },
+  loan: { mobile10: true, guestEmail: true, wizard: true }, account: { mobile10: true, guestEmail: true, wizard: true }, kyc: { wizard: true }, grievance: { mobile10: true, guestEmail: true },
   welfare: { mobile10: true }, digital: { mobile10: true, guestEmail: true }, honor: { mobile10: true }, feedback: { mobile10: true },
   appointment: { guestEmail: true }, job: { mobile10: 'strict' }, bid: { mobile10: 'strict' },
 };

@@ -29,7 +29,7 @@
   <% } else if (member) { %><div class="alert alert-info"><%- icon('user') %><span><%= t('तपाईंको सदस्य विवरण पहिले नै भरिएको छ।', 'Your member details have been pre-filled.') %></span></div>
   <% } else if (mod.memberGate && mod.memberGate.always) { %><div class="alert alert-info"><%- icon('shield') %><span><%= t('सदस्यता नं. र दर्ता भएको मोबाइल मिलेपछि नाम, इमेल र ठेगाना तपाईंको स्वीकृत केवाइएमबाट लिइन्छ।', 'Once your Member ID and registered mobile match, your name, email and address are taken from your approved KYM.') %></span></div><% } %>
   <% if (mod.wide) { %><nav class="form-toc" aria-label="<%= t('खण्डहरू', 'Sections') %>"><% mod.sections.forEach((sec, i) => { if (!sec.title) return; %><a href="#sec_<%= i %>"><%= num(i + 1) %>. <%= t(...sec.title) %></a><% }) %></nav><% } %>
-  <form class="form-card" method="post" action="/apply/<%= mod.key %><%= mod.fileFields.length ? "?_csrf=" + encodeURIComponent(csrfToken) : "" %>" enctype="<%= mod.fileFields.length ? 'multipart/form-data' : 'application/x-www-form-urlencoded' %>" novalidate data-app-form data-lang="<%= lang %>">
+  <form class="form-card" method="post" action="/apply/<%= mod.key %><%= mod.fileFields.length ? "?_csrf=" + encodeURIComponent(csrfToken) : "" %>" enctype="<%= mod.fileFields.length ? 'multipart/form-data' : 'application/x-www-form-urlencoded' %>" novalidate data-app-form data-lang="<%= lang %>"<%- mod.wizard ? ' data-wizard' : '' %> data-draft-key="<%= locals.draftKey || '' %>" data-has-values="<%= locals.hasValues ? 1 : 0 %>">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
     <% mod.sections.forEach((sec, i) => { %>
       <div class="form-section" id="sec_<%= i %>">

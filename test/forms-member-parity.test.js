@@ -468,3 +468,21 @@ test('member portal: dashboard counters + quick apply, ID card expiry warning an
   r = await c.form('/member/service-request', { service_type: 'loan_inquiry', message: 'Rates?', preferred_date: '', preferred_time: '' });
   assert.equal(r.status, 422, 'appointment types need a date and time');
 });
+
+// ---------------------------------------------------------------- P2-4 / F10 wizard + draft hooks, receipt page
+test('wizard + draft hooks on long forms; receipt page clears the draft and offers copy / new application', async () => {
+  const c = client(HB);
+  const loan = await c.get('/apply/loan');
+  assert.match(loan.text, /data-wizard/);
+  assert.match(loan.text, new RegExp(`data-draft-key="draft:${B}:loan"`));
+  assert.match(loan.text, /data-has-values="0"/);
+  assert.doesNotMatch((await c.get('/apply/grievance')).text, /data-wizard/);
+  const js = await c.get('/static/js/forms.js');
+  assert.match(js.text, /citizenship_no\|national_id_number/, 'ID numbers are never kept in the draft');
+  const r = await c.form('/apply/grievance', { name: 'W', phone: '9841970001', email: 'w@example.com', subject: 'S', description: 'D', category: 'service' });
+  assert.equal(r.status, 302, errs(r));
+  const done = await c.get('/apply/grievance/done');
+  assert.match(done.text, new RegExp(`data-draft-clear="draft:${B}:grievance"`));
+  assert.match(done.text, /data-copy-text="GR-/);
+  assert.match(done.text, /href="\/apply\/grievance"/);
+});

@@ -555,7 +555,8 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
   res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...(mod.memberGate ? {} : prefillFromMember(req.member, mod)), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number,
-    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked, guestEmailRequired: !!(mod.guestEmail && !req.member), activeProgram });
+    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked, guestEmailRequired: !!(mod.guestEmail && !req.member), activeProgram,
+    draftKey: `draft:${req.tenant.slug}:${mod.key}`, hasValues: status !== 200 || (mod.key === 'kyc' && (!!req.member || !!locked)) });
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {
@@ -626,7 +627,7 @@ router.get('/apply/:key/done', (req, res, next) => {
   const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   const last = req.session.lastSubmission;
   if (!mod || !last || last.module !== mod.key) return res.redirect('/apply/' + req.params.key);
-  res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking, notice: last.notice || null });
+  res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking, notice: last.notice || null, draftKey: `draft:${req.tenant.slug}:${mod.key}` });
 });
 
 // ---------------------------------------------------------------- tracker, signed ID-card preview, ID card verification

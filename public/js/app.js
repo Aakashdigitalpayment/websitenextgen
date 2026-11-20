@@ -192,3 +192,9 @@ document.querySelectorAll('[data-print]').forEach(b => b.addEventListener('click
 if ('serviceWorker' in navigator && !/^\/(admin|platform)\b/.test(location.pathname)) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}));
 }
+
+// application received: drop the draft kept on this device; copy the tracking number
+document.querySelectorAll('[data-draft-clear]').forEach(el => { try { localStorage.removeItem(el.dataset.draftClear); localStorage.removeItem(el.dataset.draftClear + ':step'); } catch (e) { /* storage blocked */ } });
+document.querySelectorAll('[data-copy-text]').forEach(b => b.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(b.dataset.copyText); const s = b.querySelector('span'); if (s) s.textContent = '✓'; } catch (e) { /* clipboard blocked */ }
+}));
