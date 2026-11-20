@@ -1,6 +1,15 @@
 <%- include('../partials/page-head', { lead: t('घरमै बसेर सेवा लिनुहोस्।', 'Bank from wherever you are.') }) %>
 <section class="section"><div class="container">
-  <div class="grid grid-4">
+  <% /* digital-services.php process steps (४ चरण) */ const trackOk = !locals.plan || plan.allows('/track'); %>
+  <h2><%= t('कसरी काम गर्छ?', 'How it works') %></h2>
+  <ol class="how-steps mt-2 mb-3">
+    <li class="card card-flat"><h3><%= t('सेवा छान्नुहोस्', 'Choose a service') %></h3><p class="small muted"><%= t('तल चाहिएको डिजिटल सेवा छान्नुहोस्।', 'Pick the digital service you need below.') %></p></li>
+    <li class="card card-flat"><h3><%= t('फारम भर्नुहोस्', 'Fill in the form') %></h3><p class="small muted"><%= t('आफ्नो विवरण भरेर अनुरोध पठाउनुहोस् — सदस्य भए लगइन गर्दा विवरण आफैं भरिन्छ।', 'Send your request details — members who sign in get their details filled in.') %></p></li>
+    <li class="card card-flat"><h3><%= t('ट्र्याकिङ नम्बर पाउनुहोस्', 'Get a tracking number') %></h3><p class="small muted"><%= t('पठाउने बित्तिकै ट्र्याकिङ नम्बर पाउनुहुन्छ', 'You get a tracking number straight away') %><% if (trackOk) { %> — <a href="/track"><%= t('स्थिति हेर्नुहोस्', 'check the status') %></a><% } %>.</p></li>
+    <li class="card card-flat"><h3><%= t('सेवा पाउनुहोस्', 'Service delivered') %></h3><p class="small muted"><%= t('कार्यालयले प्रमाणीकरण गरी सम्पर्क गरेर सेवा सुरु गर्छ।', 'The office verifies your request, contacts you and activates the service.') %></p></li>
+  </ol>
+  <h2><%= t('उपलब्ध डिजिटल सेवाहरू', 'Available digital services') %></h2>
+  <div class="grid grid-4 mt-2">
     <% (types.length ? types : []).forEach(ty => { %>
       <a class="card card-link" href="/apply/digital?type=<%= encodeURIComponent(ty.slug) %>"><span class="icon-tile"><%- icon('phone') %></span><h3><%= f(ty, 'name') %></h3><p class="small muted"><%= t('अनुरोध गर्नुहोस्', 'Request') %> →</p></a>
     <% }) %>

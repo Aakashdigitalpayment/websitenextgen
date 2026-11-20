@@ -31,6 +31,10 @@ const DEFS = [
   d('site_url', 'general', 'url', 'वेबसाइट URL', 'Website URL'),
   d('pwa_short_name', 'general', 'text', 'एपको छोटो नाम (PWA)', 'App short name (PWA)', { max: 30 }),
   d('site_launch_date', 'general', 'text', 'वेबसाइट सुरु मिति', 'Website launch date', { max: 40 }),
+  // header background (PHP header.php himal_bg / himal_bg_opacity)
+  d('himal_bg', 'general', 'image', 'हेडर पृष्ठभूमि फोटो', 'Header background image', { hint: 'चौडा फोटो (जस्तै हिमाल), लोगो र मेनु पढ्न मिल्ने गरी / a wide photo (e.g. mountains) that keeps the logo and menu readable' }),
+  d('himal_bg_opacity', 'general', 'number', 'हेडर फोटोको स्पष्टता (०–१००)', 'Header image opacity (0–100)', { hint: 'खाली = १०० / blank = 100', min: 0, maxValue: 100 }),
+  d('mobile_bottom_nav', 'general', 'select', 'मोबाइलमा तलको छिटो मेनु', 'Bottom quick menu on phones', { options: [['1', 'देखाउने', 'Show'], ['0', 'नदेखाउने', 'Hide']], hint: 'खाली = देखाउने / blank = show' }),
   d('admin_date_input', 'general', 'select', 'प्रशासनमा मिति राख्ने तरिका', 'Date entry in the admin forms', { options: [['bs', 'वि.सं. पात्रो (ई.सं. मा स्वतः)', 'B.S. calendar (converted to A.D.)'], ['ad', 'ई.सं. मात्र', 'A.D. only']] }),
   // ---- contact
   d('phone', 'contact', 'text', 'फोन', 'Phone', { max: 100 }),
@@ -93,7 +97,9 @@ const DEFS = [
   d('twitter_url', 'social', 'url', 'X / Twitter', 'X / Twitter'),
   d('linkedin_url', 'social', 'url', 'LinkedIn', 'LinkedIn'),
   d('tiktok_url', 'social', 'url', 'TikTok', 'TikTok'),
-  d('whatsapp_number', 'social', 'text', 'WhatsApp नम्बर', 'WhatsApp number', { max: 30 }),
+  d('whatsapp_number', 'social', 'text', 'WhatsApp नम्बर', 'WhatsApp number', { max: 30, check: 'whatsapp', hint: 'देशको कोडसहित, जस्तै +977 98XXXXXXXX / with country code, e.g. +977 98XXXXXXXX' }),
+  d('whatsapp_float', 'social', 'select', 'WhatsApp तैरने बटन', 'Floating WhatsApp button', { options: [['1', 'देखाउने', 'Show'], ['0', 'नदेखाउने', 'Hide']], hint: 'खाली = नम्बर भए देखाउने / blank = show when a number is set' }),
+  d('whatsapp_message', 'social', 'text', 'WhatsApp सुरुको सन्देश', 'WhatsApp starting message', { max: 200 }),
   d('viber_number', 'social', 'text', 'Viber नम्बर', 'Viber number', { max: 30 }),
   // ---- apps
   d('play_store_url', 'apps', 'url', 'Play Store एप', 'Play Store app'),
@@ -197,6 +203,20 @@ function normalizeMapEmbed(raw) {
   return /output=embed/i.test(s) ? s : s + (s.includes('?') ? '&' : '?') + 'output=embed';
 }
 
+/**
+ * WhatsApp number for wa.me links: digits only with the country code (8–15 digits), or '' when not valid.
+ * Spaces, dashes, brackets and a leading + / 00 are dropped; a 10-digit Nepali mobile (98…/97…/96…) gets 977.
+ */
+function waNumber(raw) {
+  let v = String(raw || '').trim();
+  if (!v || /[^\d\s+()\-.]/.test(v)) return '';
+  v = v.replace(/[\s()\-.]/g, '');
+  if (v.startsWith('+')) v = v.slice(1); else if (v.startsWith('00')) v = v.slice(2);
+  if (!/^\d+$/.test(v)) return '';
+  if (/^9[678]\d{8}$/.test(v)) v = '977' + v;
+  return /^[1-9]\d{7,14}$/.test(v) ? v : '';
+}
+
 /** Coordinates → embed URL (legacy map_lat / map_lng settings). */
 const coordsEmbed = (lat, lng) => (/^-?\d{1,3}(\.\d+)?$/.test(String(lat).trim()) && /^-?\d{1,3}(\.\d+)?$/.test(String(lng).trim())
   ? `https://www.google.com/maps?q=${encodeURIComponent(String(lat).trim() + ',' + String(lng).trim())}&z=17&output=embed` : '');
@@ -213,7 +233,9 @@ function clean(def, raw, util) {
     case 'number': {
       if (v === '') return { value: '' };
       const n = Number(require('./nepali-date').toLatinDigits(v).replace(/,/g, ''));
-      return Number.isFinite(n) ? { value: String(n) } : { error: 'अंक / number' };
+      if (!Number.isFinite(n)) return { error: 'अंक / number' };
+      if ((def.min !== undefined && n < def.min) || (def.maxValue !== undefined && n > def.maxValue)) return { error: `${def.min ?? ''}–${def.maxValue ?? ''}` };
+      return { value: String(n) };
     }
     case 'email': return v === '' || util.isEmail(v) ? { value: v.toLowerCase().slice(0, 200) } : { error: 'इमेल मिलेन / invalid email' };
     case 'url':
@@ -230,8 +252,12 @@ function clean(def, raw, util) {
     default:
       if (def.key === 'google_site_verification') v = v.replace(/^[\s\S]*content=["']?([^"'\s>]+)[\s\S]*$/i, '$1').replace(/[^A-Za-z0-9_-]/g, '');
       if (def.pattern && v !== '' && !def.pattern.test(v)) return { error: 'HH:MM' };
+      if (def.check === 'whatsapp' && v !== '') {
+        v = require('./nepali-date').toLatinDigits(v);
+        if (!waNumber(v)) return { error: 'देशको कोडसहितको मोबाइल नम्बर, जस्तै +977 98XXXXXXXX / a mobile number with country code, e.g. +977 98XXXXXXXX' };
+      }
       return { value: v.slice(0, def.max || (def.type === 'textarea' ? 20000 : 1000)) };
   }
 }
 
-module.exports = { TABS, DEFS, byKey, storeType, AI_MODELS, MANAGED_GROUPS, MANAGED_KEY, SECRET_KEY, normalizeMapEmbed, coordsEmbed, clean };
+module.exports = { TABS, DEFS, byKey, storeType, AI_MODELS, MANAGED_GROUPS, MANAGED_KEY, SECRET_KEY, normalizeMapEmbed, coordsEmbed, waNumber, clean };

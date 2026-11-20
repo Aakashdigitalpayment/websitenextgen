@@ -184,3 +184,52 @@ test('help guide: content data is bilingual, links real admin pages, filtered by
   assert.match(r.text, /data-help-empty >|data-help-empty\s*>/);
   assert.ok(require('../src/lib/admin-perms').resolve('/help').always, 'open to every admin role');
 });
+
+// ---------------------------------------------------------------- public UX extras
+test('public extras: WhatsApp float (validated), bottom nav, header background, nav count badges, how it works', async () => {
+  const SD = require('../src/lib/setting-defs');
+  assert.equal(SD.waNumber('+977 981-2345678'), '9779812345678');
+  assert.equal(SD.waNumber('9812345678'), '9779812345678', 'Nepali mobile gets 977');
+  assert.equal(SD.waNumber('00977 9812345678'), '9779812345678');
+  assert.equal(SD.waNumber('javascript:alert(1)'), '');
+  assert.equal(SD.waNumber('12345'), '');
+  assert.ok(SD.clean(SD.byKey.whatsapp_number, 'call me', {}).error);
+  assert.equal(SD.clean(SD.byKey.whatsapp_number, '+977 9812345678', {}).value, '+977 9812345678');
+  assert.ok(SD.clean(SD.byKey.himal_bg_opacity, '101', {}).error);
+
+  // invalid stored number (e.g. imported): no float, no social link
+  await setting('whatsapp_number', 'not a number');
+  await clearCaches();
+  let r = await get('/about');
+  assert.ok(!/wa-float/.test(r.text) && !/wa\.me/.test(r.text));
+  assert.match(r.text, /class="bottom-nav"/);
+  assert.match(r.text, /has-bottom-nav/);
+  for (const href of ['/', '/services', '/apply', '/track', '/member/login']) assert.match(r.text, new RegExp(`<nav class="bottom-nav"[\\s\\S]*href="${href.replace(/\//g, '\\/')}"`));
+
+  await setting('whatsapp_number', '+977 981-2345678');
+  await setting('whatsapp_message', 'Namaste & hi');
+  await setting('himal_bg', 'settings/himal.jpg');
+  await setting('himal_bg_opacity', '40');
+  await setting('mobile_bottom_nav', '0');
+  await inA(async () => {
+    await db.query("INSERT INTO notices (title, title_np, content, is_active) VALUES ('Fresh', 'ताजा', 'x', 1)");
+    await db.query("INSERT INTO auction_notices (title, status, is_active, auction_date) VALUES ('Open lot', 'upcoming', 1, CURRENT_DATE + 3), ('Closed lot', 'completed', 1, CURRENT_DATE + 3), ('Past lot', 'upcoming', 1, CURRENT_DATE - 3)");
+  });
+  await clearCaches();
+  r = await get('/about');
+  assert.match(r.text, /class="wa-float[^"]*" href="https:\/\/wa\.me\/9779812345678\?text=Namaste%20%26%20hi"/);
+  assert.ok(!/class="bottom-nav"/.test(r.text), 'bottom nav can be switched off');
+  assert.match(r.text, /class="site-header has-bg" style="--himal-bg:url\('\/[^']*settings\/himal\.jpg'\);--himal-opacity:0\.4"/);
+  assert.match(r.text, /href="\/auctions">[^<]*<span class="badge badge-ok">१<\/span>/, 'one auction open for bids');
+  assert.match(r.text, /href="\/notices">[^<]*<span class="badge badge-ok">/, 'new notices counted');
+  assert.match(r.text, /class="nav-count"/);
+
+  await setting('whatsapp_float', '0');
+  await clearCaches();
+  r = await get('/about');
+  assert.ok(!/wa-float/.test(r.text) && /href="https:\/\/wa\.me\/9779812345678"/.test(r.text), 'float off, footer link stays');
+
+  r = await get('/digital-services');
+  assert.match(r.text, /class="how-steps/);
+  assert.equal((r.text.match(/<li class="card card-flat"><h3>/g) || []).length, 4);
+});

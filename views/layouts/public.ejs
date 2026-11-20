@@ -17,7 +17,8 @@
   <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= locals.theme ? theme.brand : brandColor %>">
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
-<body class="<%= locals.siteLayout ? siteLayout.bodyClass : '' %>">
+<% const bottomNav = settings.mobile_bottom_nav !== '0'; %>
+<body class="<%= locals.siteLayout ? siteLayout.bodyClass : '' %><%= bottomNav ? ' has-bottom-nav' : '' %>">
   <a class="sr-only" href="#main">Skip to content</a>
   <div class="topbar">
     <div class="container">
@@ -37,7 +38,9 @@
     </div>
   </div>
 
-  <header class="site-header">
+  <% const himal = settings.himal_bg ? mediaUrl(settings.himal_bg) : ''; const himalOp = Math.max(0, Math.min(100, String(settings.himal_bg_opacity ?? '').trim() === '' ? 100 : Number(settings.himal_bg_opacity) || 0)); /* header.php himal_bg */
+     const himalOk = himal && /^[^'"()\\\s<>]+$/.test(himal); %>
+  <header class="site-header<%= himalOk ? ' has-bg' : '' %>"<% if (himalOk) { %> style="--himal-bg:url('<%= himal %>');--himal-opacity:<%= himalOp / 100 %>"<% } %>>
     <div class="container">
       <a class="brand" href="/">
         <% if (siteLogo) { %><img src="<%= mediaUrl(siteLogo) %>"<%- srcset(siteLogo, '160px') %> alt="<%= siteName %>">
@@ -52,7 +55,7 @@
         <% (locals.nav || []).forEach(item => { %>
           <div class="nav-item">
             <% if (item.children && item.children.length) { %>
-              <button class="nav-link <%= isActive(item.href) && item.href !== '/' ? 'active' : '' %>" aria-haspopup="true"><%= t(...item.label) %><%- icon('chevron') %></button>
+              <button class="nav-link <%= isActive(item.href) && item.href !== '/' ? 'active' : '' %>" aria-haspopup="true"><%= t(...item.label) %><% if (item.badge) { %><span class="nav-count" aria-label="<%= t(num(item.badge) + ' नयाँ', item.badge + ' new') %>"><%= num(item.badge) %></span><% } %><%- icon('chevron') %></button>
               <div class="dropdown">
                 <% item.children.forEach(c => { %><% if (c.heading) { %><a class="dropdown-heading" href="<%= c.href %>"><%= t(...c.label) %></a><% } else { %><a href="<%= c.href %>"<%- c.indent ? ' class="dropdown-sub"' : '' %>><%= t(...c.label) %><% if (c.badge) { %> <span class="badge badge-ok"><%= num(c.badge) %></span><% } %></a><% } %><% }) %>
               </div>
@@ -99,7 +102,7 @@
             <% [['facebook_url','facebook'],['youtube_url','youtube'],['instagram_url','instagram'],['twitter_url','globe']].forEach(([k, ic]) => { if (/^https?:\/\/[^\s"'<>]+$/i.test(settings[k] || '')) { %>
               <a href="<%= settings[k] %>" target="_blank" rel="noopener" aria-label="<%= k === 'twitter_url' ? 'X' : ic %>"><%- icon(ic) %></a>
             <% } }) %>
-            <% if (settings.whatsapp_number) { %><a href="https://wa.me/<%= String(settings.whatsapp_number).replace(/\D/g,'') %>" target="_blank" rel="noopener" aria-label="WhatsApp"><%- icon('whatsapp') %></a><% } %>
+            <% if (locals.waSocial) { %><a href="<%= waSocial %>" target="_blank" rel="noopener" aria-label="WhatsApp"><%- icon('whatsapp') %></a><% } %>
           </div>
         </div>
         <div>
@@ -144,6 +147,7 @@
     </div>
   </footer>
   <%- include('../partials/float-widgets') %>
+  <% if (bottomNav) { %><%- include('../partials/bottom-nav') %><% } %>
   <%- include('../partials/notice-popup') %>
   <dialog class="search-dialog" data-search-dialog aria-label="<%= t('खोज्नुहोस्', 'Search') %>">
     <form method="get" action="/search" role="search" class="flex gap-1">
@@ -155,7 +159,9 @@
     <div class="flex gap-1 wrap mt-2 small"><% [['/interest-rates', t('ब्याजदर', 'Interest rates')], ['/apply/loan', t('ऋण आवेदन', 'Loan')], ['/notices', t('सूचना', 'Notices')], ['/contact', t('सम्पर्क', 'Contact')], ['/downloads', t('डाउनलोड', 'Downloads')]].forEach(l => { %><a class="tab" href="<%= l[0] %>"><%= l[1] %></a><% }) %></div>
   </dialog>
   <% const aiOn = settings.ai_enabled === '1'; /* FAQ-only assistant when AI is off but chatbot answers exist (footer.php FAQ widget) */
-     if ((aiOn || settings.chat_widget === '1' || (locals.floatWidgets && floatWidgets.chatFaqs)) && (!locals.plan || plan.has('ai_chat'))) { %>
+     const chatOn = (aiOn || settings.chat_widget === '1' || (locals.floatWidgets && floatWidgets.chatFaqs)) && (!locals.plan || plan.has('ai_chat')); %>
+  <% if (locals.waFloat) { %><a class="wa-float<%= chatOn ? ' with-chat' : '' %>" href="<%= waFloat %>" target="_blank" rel="noopener noreferrer" aria-label="<%= t('WhatsApp मा सम्पर्क गर्नुहोस्', 'Chat with us on WhatsApp') %>" title="<%= t('WhatsApp मा सम्पर्क गर्नुहोस्', 'Chat with us on WhatsApp') %>"><%- icon('whatsapp', 'icon-lg') %></a><% } %>
+  <% if (chatOn) { %>
   <div class="chat" data-chat data-csrf="<%= csrfToken %>" data-lang="<%= lang %>">
     <button class="chat-fab btn btn-primary" data-chat-toggle aria-label="<%= t('सहयोग', 'Help') %>"><%- icon('message', 'icon-lg') %></button>
     <div class="chat-panel" hidden role="dialog" aria-label="<%= t('सहयोगी', 'Assistant') %>">
