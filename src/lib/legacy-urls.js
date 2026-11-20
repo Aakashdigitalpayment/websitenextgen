@@ -27,14 +27,14 @@ const PUBLIC = {
   'interest-rates.php': () => '/interest-rates',
   'digital-services.php': () => '/digital-services',
   'service-centers.php': () => '/service-centers',
-  'partner-facilities.php': () => '/partner-facilities',
+  'partner-facilities.php': q => '/partner-facilities' + keep(q, ['type', 'view']),
   'team.php': q => '/team' + keep(q, ['menu', 'item', 'cmt', 'tenure']),
   'committees.php': q => (id(q.id || q.type) ? '/committees/' + id(q.id || q.type) + keep(q, ['tenure', 'past']) : '/committees'),
   'awards.php': q => (id(q.id) ? '/awards/' + id(q.id) : '/awards'),
   'success-stories.php': () => '/success-stories',
-  'news.php': () => '/news',
+  'news.php': q => '/news' + keep(q, ['page']),
   'news-detail.php': q => (id(q.id) ? '/news/' + id(q.id) : '/news'),
-  'notices.php': q => (id(q.id) ? '/notices/' + id(q.id) : '/notices'),
+  'notices.php': q => (id(q.id) ? '/notices/' + id(q.id) : '/notices' + keep(q, ['page'])),
   'gallery.php': q => '/gallery' + keep(q, ['type', 'album', 'category', 'page']),
   'downloads.php': () => '/downloads',
   'reports.php': q => '/reports' + keep(q, ['type', 'year', 'month', 'id']),
@@ -53,7 +53,7 @@ const PUBLIC = {
   'cooperative-programs.php': () => '/programs',
   'emi-calculator.php': () => '/emi-calculator',
   'date-converter.php': () => '/date-converter',
-  'sahakari-patro.php': () => '/calendar',
+  'sahakari-patro.php': q => '/calendar' + (id(q.cal_year) && id(q.cal_month) ? `?y=${id(q.cal_year)}&m=${id(q.cal_month)}` : ''),
   'exchange-rate.php': () => '/exchange-rate',
   'contact.php': () => '/contact',
   'member-marketplace.php': () => '/marketplace',
@@ -66,10 +66,16 @@ const PUBLIC = {
   'member-survey.php': () => '/apply/survey',
   'member-skills.php': () => '/marketplace?type=skill',
   'vendor-enlistment.php': () => '/apply/vendor',
-  'honor-apply.php': () => '/apply/honor',
+  'honor-apply.php': q => '/apply/honor' + (id(q.program_id || q.program) ? '?program=' + id(q.program_id || q.program) : ''),
   // QR codes and links printed by the PHP app
   'attend.php': q => (token(q.token || q.qr_token || q.t) ? '/member/attend?t=' + token(q.token || q.qr_token || q.t) : '/member/programs'),
-  'program-attendance-verify.php': () => '/member/programs',
+  // the PHP page sent staff to the admin registration desk of the programme
+  'program-attendance-verify.php': q => (id(q.program_id || q.id) ? `/admin/programs/${id(q.program_id || q.id)}#desk` : '/admin/programs'),
+  'backup-restore.php': () => '/admin/backup',
+  // upload-file.php?d=<folder>&f=<file>: the /assets/uploads route decides (public → /uploads, gated → staff only)
+  'upload-file.php': q => (/^[a-z0-9_-]{1,40}$/i.test(clean(q.d)) && /^[A-Za-z0-9._-]{1,200}$/.test(clean(q.f)) && !clean(q.f).startsWith('.')
+    ? `/assets/uploads/${clean(q.d)}/${clean(q.f)}` : '/'),
+  'pwa-icon.php': q => `/pwa-icon-${Number(q.s || q.size) > 192 ? 512 : 192}.png` + (clean(q.maskable) === '1' ? '?maskable=1' : ''),
   'verify.php': q => '/verify' + keep(q, ['partner', 'partner_id', 'code', 'mode']), // partner-desk QR codes keep the partner
   'application-tracker.php': q => '/track' + qs('id', clean(q.id || q.tracking_id).replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 96)),
   'tracker-id-card.php': () => '/track', // links were signed with the PHP secret — verify again from the tracker

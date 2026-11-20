@@ -545,3 +545,38 @@ test('B-11: platform sets the licence date in B.S. and per-tenant renewal amount
     tenants.clearCache();
   }
 });
+
+// ---------------------------------------------------------------- B-12 legacy admin URLs for CMS / settings pages
+test('B-12: old CMS admin URLs redirect to their Node pages', async () => {
+  const c = await adminClient();
+  for (const [from, to] of [['/admin/news.php', '/admin/r/news'], ['/admin/messages.php?view=4', '/admin/inbox/contact/4'], ['/admin/settings.php', '/admin/settings'],
+    ['/admin/team-karmachari.php', '/admin/r/team_members'], ['/admin/backup-restore.php', '/admin/backup'], ['/admin/ai-settings.php', '/admin/settings?tab=ai']]) {
+    const r = await c.get(from);
+    assert.equal(r.status, 301, from);
+    assert.equal(r.headers.location, to, from);
+  }
+  const { ADMIN } = require('../src/lib/legacy-admin-urls');
+  // every redirect target is a real admin page (signed-in admin gets 200, not 404)
+  for (const [k, fn] of Object.entries(ADMIN)) {
+    const to = fn({});
+    if (/print|\.csv|blocked|login/.test(to)) continue;
+    const r = await c.get(to);
+    assert.ok([200, 302].includes(r.status), `${k} → ${to}: ${r.status}`);
+  }
+});
+
+// ---------------------------------------------------------------- SM-16 / SM-17 legacy entry points and query params
+test('SM-16 / SM-17: unmapped PHP entry points and dropped query params', () => {
+  const { PUBLIC } = require('../src/lib/legacy-urls');
+  assert.equal(PUBLIC['backup-restore.php']({}), '/admin/backup');
+  assert.equal(PUBLIC['upload-file.php']({ d: 'kyc', f: 'a.jpg' }), '/assets/uploads/kyc/a.jpg');
+  assert.equal(PUBLIC['upload-file.php']({ d: 'kyc', f: '../x' }), '/');
+  assert.equal(PUBLIC['pwa-icon.php']({ s: '512', maskable: '1' }), '/pwa-icon-512.png?maskable=1');
+  assert.equal(PUBLIC['pwa-icon.php']({ s: '64' }), '/pwa-icon-192.png');
+  assert.equal(PUBLIC['program-attendance-verify.php']({ program_id: '9' }), '/admin/programs/9#desk');
+  assert.equal(PUBLIC['partner-facilities.php']({ type: 'hospital', view: 'table' }), '/partner-facilities?type=hospital&view=table');
+  assert.equal(PUBLIC['sahakari-patro.php']({ cal_year: '2082', cal_month: '4', sel_day: '3' }), '/calendar?y=2082&m=4');
+  assert.equal(PUBLIC['honor-apply.php']({ program_id: '3' }), '/apply/honor?program=3');
+  assert.equal(PUBLIC['news.php']({ page: '2' }), '/news?page=2');
+  assert.equal(PUBLIC['notices.php']({ page: '3' }), '/notices?page=3');
+});

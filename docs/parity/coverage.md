@@ -36,7 +36,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | attend.php | public.js:1074 → /member/attend?t= ; legacy-urls `attend.php` | COVERED | |
 | auction.php | /auctions, /auctions/:id · /apply/bid · hooks.bid · lib/auctions.js | COVERED | window, min price, 24 h dup, BID tracking, filter chips |
 | awards.php | /awards, /awards/:id | COVERED | |
-| backup-restore.php | /admin/backup, /admin/backup/restore (admin-system.js) | PARTIAL | Root `backup-restore.php` (redirect to admin) is not in legacy-urls PUBLIC map → 404 (SM-16, P3) |
+| backup-restore.php | /admin/backup, /admin/backup/restore (admin-system.js); root + admin `backup-restore.php` redirect | COVERED | SM-16 done. Was: Root `backup-restore.php` (redirect to admin) is not in legacy-urls PUBLIC map → 404 (SM-16, P3) |
 | career-detail.php | /careers/:id · /apply/job · hooks.job (allow_online_apply, deadline, dup email/phone) | COVERED | |
 | career.php | /careers (days-left, urgent, new, search, filters) | COVERED | |
 | ceo-message.php | /message/ceo | COVERED | |
@@ -54,7 +54,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | faqs.php | /faqs (FAQPage JSON-LD in seo.js) | COVERED | |
 | gallery.php | /gallery | COVERED | |
 | grievance.php | /apply/grievance · hooks.grievance; `?track=` → /track | COVERED | |
-| honor-apply.php | /apply/honor · renderHonorClosed · hooks.honor | PARTIAL | Legacy `honor-apply.php?program_id=` redirect drops the id (Node reads `?program=`) → SM-17 |
+| honor-apply.php | /apply/honor · renderHonorClosed · hooks.honor | COVERED | `?program_id=` kept (SM-17). Was: Legacy `honor-apply.php?program_id=` redirect drops the id (Node reads `?program=`) → SM-17 |
 | important-links.php | /important-links | COVERED | |
 | index.php | GET / · public.js:92 · home.ejs (public-cache 60 s) | COVERED | |
 | information-room-file.php | /member/information-room/:id (legacy map) | COVERED | |
@@ -77,15 +77,15 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | online-account.php | /apply/account | COVERED | |
 | online-kyc.php | /apply/kyc (+ verify-first gate, locked fields, capture), /apply/membership (`?path=new`) | COVERED | `?kyc_id=` profile-edit link → member KYM is loaded from the session anyway |
 | page.php | /page/:slug, /page/by-id/:id | COVERED | |
-| partner-facilities.php | /partner-facilities | PARTIAL | Page covered; legacy `?type=&view=` dropped (SM-17) |
+| partner-facilities.php | /partner-facilities | COVERED | `?type=&view=` kept (SM-17). Was: Page covered; legacy `?type=&view=` dropped (SM-17) |
 | password-reset-request.php | → /member/forgot | COVERED | |
-| program-attendance-verify.php | legacy-urls → /member/programs | PARTIAL | PHP sends staff to the admin registration desk (`program-attendance-verify.php:12-27`); Node sends them to the member portal (SM-16) |
-| pwa-icon.php | /pwa-icon-:size.png | PARTIAL | `pwa-icon.php?s=192&maskable=1` not redirected (SM-16) |
+| program-attendance-verify.php | legacy-urls → /admin/programs/<id>#desk | COVERED | SM-16 done. Was: PHP sends staff to the admin registration desk (`program-attendance-verify.php:12-27`); Node sends them to the member portal (SM-16) |
+| pwa-icon.php | /pwa-icon-:size.png + legacy `pwa-icon.php?s=&maskable=` | COVERED | SM-16 done. Was: `pwa-icon.php?s=192&maskable=1` not redirected (SM-16) |
 | report-file.php | /reports/:id/file (?dl=1, view_only, members-only token) | PARTIAL | social in-app/crawler bounce (`public-member-access.php:598-660`) missing; members-only files stay at their public /uploads path until first opened (SM-5, SM-13) |
 | reports.php | /reports (type/year/month filters, unlock) | COVERED | |
 | robots.php | /robots.txt | COVERED | |
 | router.php | Express routing + lib/legacy-urls.js (publicRedirects, extensionlessRedirects, memberRedirects); app.js `/assets/uploads/*` | COVERED | `/assets/uploads/**` redirect + gated-folder rule (SM-2, SM-3) |
-| sahakari-patro.php | /calendar | PARTIAL | Page covered (P1-11). Legacy `?cal_year=&cal_month=&sel_day=` dropped (SM-17). Rashifal/lagna/gunmilan tabs P3 "recommend not porting" (1-public) |
+| sahakari-patro.php | /calendar | COVERED | `?cal_year=&cal_month=` → `/calendar?y=&m=` (SM-17); rashifal tabs not ported (see note). Was: Page covered (P1-11). Legacy `?cal_year=&cal_month=&sel_day=` dropped (SM-17). Rashifal/lagna/gunmilan tabs P3 "recommend not porting" (1-public) |
 | service-centers.php | /service-centers | COVERED | |
 | services.php | /services, /services/:id | COVERED | |
 | share-og.php | /share-og.png, /share-og.svg | COVERED | |
@@ -93,7 +93,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | success-stories.php | /success-stories | COVERED | |
 | team.php | /team | COVERED | legacy `?cat=` not kept (P3, SM-17) |
 | tracker-id-card.php | /track/id-card (HMAC 15 min) | COVERED | old PHP-signed links → /track (by design) |
-| upload-file.php | uploads.js `_private` + /admin/files/* + member routes | PARTIAL | see upload-gate.php; `upload-file.php?d=&f=` not mapped (SM-3, SM-16) |
+| upload-file.php | uploads.js `_private` + /admin/files/* + member routes; `upload-file.php?d=&f=` → `/assets/uploads/…` | COVERED | SM-3/SM-16 done. Was: see upload-gate.php; `upload-file.php?d=&f=` not mapped (SM-3, SM-16) |
 | vendor-enlistment.php | /apply/vendor · promoteVendor on approval | COVERED | |
 | verify.php | GET/POST /verify, /verify/service, /verify/photo/:mid · public-members.js | COVERED | derived CVV (SM-1), card-number / un-hyphenated lookup (SM-6), `verify.php?partner=` QR params (SM-7) |
 | vision-mission.php | /vision-mission | COVERED | |
@@ -366,9 +366,9 @@ Node `admin-applications.js:271-275` finds the member by `memberCol` value OR ex
 
 **SM-15 · Public tracker: notify-channel chips and GET lookups.** Show email/SMS sent/failed/skipped chips (no reasons) per history row in `views/public/track.ejs` (PHP `application-tracker.php:1585-1620`); consider making ID+phone lookup a POST (PHP never loaded PII on GET; phone currently lands in access logs/Referer).
 
-**SM-16 · Unmapped legacy entry points.** Add to `legacy-urls.js`: `backup-restore.php` → `/admin/backup`; `upload-file.php` → 404 (or admin files when admin); `pwa-icon.php` → `/pwa-icon-<s>.png` (clamp 192/512, `maskable`); `program-attendance-verify.php` → `/admin/programs/<program_id>#desk` (currently `/member/programs`).
+**SM-16 · Unmapped legacy entry points.** — **COVERED** in `legacy-urls.js`: `backup-restore.php` → `/admin/backup`; `upload-file.php?d=&f=` → `/assets/uploads/<d>/<f>` (public folders redirect, gated folders staff-only / 404); `pwa-icon.php?s=&maskable=` → `/pwa-icon-<192|512>.png`; `program-attendance-verify.php?program_id=` → `/admin/programs/<id>#desk`. Test: `test/coverage-gaps.test.js`. Add to `legacy-urls.js`: `backup-restore.php` → `/admin/backup`; `upload-file.php` → 404 (or admin files when admin); `pwa-icon.php` → `/pwa-icon-<s>.png` (clamp 192/512, `maskable`); `program-attendance-verify.php` → `/admin/programs/<program_id>#desk` (currently `/member/programs`).
 
-**SM-17 · Legacy query params dropped.** `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=&sel_day=&tab=` (map to `/calendar?y=&m=&d=`), `institutional-profile.php?id=`, `honor-apply.php?program_id=` (→ `?program=`), `team.php?cat=`, `news.php?page=`/`notices.php?page=`.
+**SM-17 · Legacy query params dropped.** — **COVERED** for `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=` (→ `/calendar?y=&m=`), `honor-apply.php?program_id=` (→ `?program=`), `news.php?page=`, `notices.php?page=`. Not mapped (no Node equivalent to land on): `team.php?cat=` (Node uses `menu`/`item`), `institutional-profile.php?id=` (page has FY/month filters, no per-row anchor), `sel_day`/`tab` of the calendar. `partner-facilities.php?type=&view=`, `sahakari-patro.php?cal_year=&cal_month=&sel_day=&tab=` (map to `/calendar?y=&m=&d=`), `institutional-profile.php?id=`, `honor-apply.php?program_id=` (→ `?program=`), `team.php?cat=`, `news.php?page=`/`notices.php?page=`.
 
 **SM-18 · Record deliberate drops in docs/parity.** sw.js member-page offline cache + `member/offline.php` cached dashboard (privacy on shared phones), `api-public-chat.php` live chat (contact form), `scroll-accessibility.js`, `pull-to-refresh.js`, iframe `?embed=1` modes, `core/helpers.php` dead finance helpers. Also create `docs/parity/coverage.md` (CLAUDE.md §1 says it must exist; it does not).
 
@@ -652,7 +652,7 @@ Every other install.sql table is edited through `res.*`, `inbox:*` or a dedicate
 9. **COVERED** (`res.information_room_items` `restrict_copy` + `afterSave` created_by; viewer deterrence SM-19) — **Information room `restrict_copy`**: `B('restrict_copy', 'कपी रोक्ने', 'Block copy / print', { default: 1 })` on `res.information_room_items`; the member viewer adds `user-select:none`, blocks context menu/print CSS (`@media print { body { display:none } }`) when set; also stamp `created_by = req.admin.id` on create.
 10. **COVERED** (POST `/admin/notifications/clear-old`, button on the delivery log, audited) — **notification log clear** (notification-settings.php:117-121): POST `/admin/notifications/clear-old` (admin, audited) → `DELETE FROM notification_log WHERE created_at < now() - interval '30 days'`.
 11. **COVERED** (overrides stored as tenant settings `license_renewal_amount/esewa_id/khalti_id` — no schema change; `license.payInfo(settings)`; platform form accepts a B.S. date) — **Licence per tenant** (site-license.php save_renewal_settings / save_license_date): optional per-tenant overrides `renewal_amount`, `esewa_id`, `khalti_id` on `platform.tenants` falling back to env in `license.payInfo(tenant)`; accept a BS date in platform `/tenants/:id/license` (`nd.bsToAd` when year ≥ 2050).
-12. **Legacy admin redirects for CMS pages**: `src/lib/legacy-admin-urls.js` maps ~50 pages but not news/notices/pages/sliders/team/staff/team-karmachari/settings/messages/faqs/downloads/gallery/services/… (list in §1). Add `news.php → /admin/r/news`, `messages.php → /admin/inbox/contact`, `settings.php → /admin/settings`, `staff.php|team-karmachari.php|team.php → /admin/r/team_members`, etc.; root `backup-restore.php → /admin/backup`.
+12. **COVERED** (`legacy-admin-urls.js`: ~60 more CMS / settings / system pages; test checks every target answers) — **Legacy admin redirects for CMS pages**: `src/lib/legacy-admin-urls.js` maps ~50 pages but not news/notices/pages/sliders/team/staff/team-karmachari/settings/messages/faqs/downloads/gallery/services/… (list in §1). Add `news.php → /admin/r/news`, `messages.php → /admin/inbox/contact`, `settings.php → /admin/settings`, `staff.php|team-karmachari.php|team.php → /admin/r/team_members`, etc.; root `backup-restore.php → /admin/backup`.
 13. **help_topics import** into chatbot_faqs (§6.2).
 14. **COVERED** (`attendance.voidAttendance` writes `payload_json` + `ip_address`; member QR check-in stores `device_fingerprint` = sha256(UA) prefix) — **Attendance audit details**: write `program_audit_logs.payload_json` + `ip_address` on void; `member_program_attendance.device_fingerprint` on member QR check-ins.
 15. **pages.is_new / new_until**: show a "New" chip on dynamic-page menu items while `is_new=1 AND (new_until IS NULL OR new_until >= CURRENT_DATE)` and expose both fields on `res.pages`.
