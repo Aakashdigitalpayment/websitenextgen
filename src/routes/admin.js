@@ -49,7 +49,6 @@ router.post('/login', ah(async (req, res) => {
 }));
 
 // second factor (TOTP or backup code)
-const usedSteps = new Map(); // "<schema>:<adminId>" -> last accepted TOTP step (replay protection)
 function pending2fa(req) {
   const p = req.session.pending2fa;
   return p && p.tenantId === req.tenant.id && Date.now() - p.at < 5 * 60_000 ? p : null;
@@ -74,12 +73,11 @@ router.post('/login/2fa', ah(async (req, res) => {
   const setup = p.mode === 'setup';
   const user = await db.one("SELECT * FROM admin_users WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL AND COALESCE(status, 'active') = 'active'", [p.id]);
   if (!user || (!setup && !user.twofa_enabled) || (setup && user.twofa_enabled) || require('../lib/license').loginBlocked(req.tenant, user)) { delete req.session.pending2fa; return res.redirect('/admin/login'); }
-  const key = db.currentSchema() + ':' + user.id;
   if (await auth.tooManyAttempts('2fa:' + user.username, req.ip)) return render2fa(req, res, p, { status: 429, error: res.locals.t('धेरै गलत प्रयास। १५ मिनेटपछि प्रयास गर्नुहोस्।', 'Too many attempts. Try again in 15 minutes.') });
   const code = String(req.body.code || '').trim();
   let ok = false;
   const step = totp.verify(setup ? p.secret : user.twofa_secret, code);
-  if (step !== null && step > (usedSteps.get(key) || 0)) { usedSteps.set(key, step); ok = true; }
+  if (step !== null && await totp.claimStep('admin_users', user.id, step)) ok = true; // replay guard in the DB (all processes)
   if (!ok && !setup && code.replace(/[^A-Za-z0-9]/g, '').length >= 8) {
     const remaining = await totp.consumeBackupCode(code, user.twofa_backup_codes);
     if (remaining) { await db.query('UPDATE admin_users SET twofa_backup_codes = $1 WHERE id = $2', [JSON.stringify(remaining), user.id]); ok = true; }

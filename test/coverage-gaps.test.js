@@ -644,3 +644,20 @@ test('SM-20: a member opens the documents of their own application (comma lists 
   assert.equal((await m.get(`/member/requests/loan/${ids.other}/file/documents`)).status, 404, 'not their application');
   assert.equal((await m.get(`/member/requests/loan/${ids.mine}/file/full_name`)).status, 404, 'only file fields');
 });
+
+// ---------------------------------------------------------------- SM-21 TOTP replay guard in the database
+test('SM-21: a TOTP step is accepted once per account, across processes (stored in the DB)', async () => {
+  const totp = require('../src/lib/totp');
+  const { m } = await seedMember('TP-1100', '9841600013');
+  const step = totp.currentStep();
+  await inA(async () => {
+    assert.equal(await totp.claimStep('members', m.id, step), true);
+    assert.equal(await totp.claimStep('members', m.id, step), false, 'replay refused');
+    assert.equal(await totp.claimStep('members', m.id, step - 1), false, 'older step refused');
+    assert.equal(await totp.claimStep('members', m.id, step + 1), true);
+    const admin = await db.value("SELECT id FROM admin_users WHERE username = 'admin'");
+    assert.equal(await totp.claimStep('admin_users', admin, step), true);
+    assert.equal(await totp.claimStep('admin_users', admin, step), false);
+    assert.equal(await totp.claimStep('pg_user', 1, step), false, 'table whitelist');
+  });
+});
