@@ -407,6 +407,20 @@ router.post('/inbox/kyc/:id/profile', requireAdmin('admin'), ah(async (req, res,
   res.redirect(`/admin/inbox/kyc/${row.id}`);
 }));
 
+// KYM photo from the admin side: file or webcam (the camera fills the same file input), private like applicant uploads
+router.post('/inbox/kyc/:id/photo', requireAdmin('staff'), ...require('../lib/uploads').upload('kyc', [{ name: 'photo', kind: 'image' }], { private: true, maxMb: 5 }), ah(async (req, res, next) => {
+  const row = await loadRow(modules.kyc, req.params.id);
+  const stored = req.uploaded && req.uploaded.photo;
+  if (!row) { if (stored) require('../lib/uploads').remove(req, stored); return next(); }
+  const back = `/admin/inbox/kyc/${row.id}#photo`;
+  if (req.uploadError || !stored) { flash(req, 'error', res.locals.t('फोटो अपलोड भएन: ', 'Photo not saved: ') + (req.uploadError || res.locals.t('फाइल छान्नुहोस्', 'choose a file'))); return res.redirect(back); }
+  const r = await kym.setPhoto(row.id, stored);
+  if (r && r.old && r.old !== stored) require('../lib/uploads').remove(req, r.old);
+  await auth.audit(req, 'kyc_photo_update', 'kyc_applications', row.id, 'Admin replaced the KYM photo');
+  flash(req, 'success', res.locals.t('फोटो सुरक्षित भयो।', 'Photo saved.'));
+  res.redirect(back);
+}));
+
 // ---------------------------------------------------------------- membership: approve with a Member ID (membershipApproveWithMemberId)
 router.post('/inbox/membership/:id/approve', requireAdmin('staff'), ah(async (req, res, next) => {
   const app = await loadRow(modules.membership, req.params.id);

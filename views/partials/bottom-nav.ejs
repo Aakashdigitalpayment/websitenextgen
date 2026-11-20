@@ -1,0 +1,14 @@
+<% /* Phone-width bottom navigation (PHP footer.php mob-bottomnav). Hidden above 640px by CSS; setting mobile_bottom_nav = '0' turns it off. */
+   const okPlan = h => !locals.plan || plan.allows(h);
+   const bn = [
+     ['/', 'home', t('गृह', 'Home')],
+     ['/services', 'wallet', t('सेवा', 'Services')],
+     ['/apply', 'edit', t('आवेदन', 'Apply')],
+     ['/track', 'search', t('ट्र्याक', 'Track')],
+     locals.member ? ['/member', 'user', t('मेरो खाता', 'Account')] : ['/member/login', 'user', t('लगइन', 'Login')],
+   ].filter(l => okPlan(l[0])); %>
+<nav class="bottom-nav" aria-label="<%= t('छिटो नेभिगेसन', 'Quick navigation') %>">
+  <% bn.forEach(([href, ic, label]) => { const on = href === '/' ? path === '/' : path === href || path.startsWith(href + '/'); %>
+    <a href="<%= href %>" class="<%= on ? 'active' : '' %>"<%- on ? ' aria-current="page"' : '' %>><%- icon(ic) %><span><%= label %></span><% if (href === '/member' && locals.memberUnread) { %><span class="hdr-count"><%= num(Math.min(memberUnread, 9)) %></span><% } %></a>
+  <% }) %>
+</nav>

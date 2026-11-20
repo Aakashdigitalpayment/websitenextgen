@@ -26,6 +26,11 @@ router.use((req, res, next) => { res.locals.iconFor = require('../lib/icons').ic
 // floating widgets in the footer: satisfaction links (when enabled) + useful links flagged is_popup
 router.use((req, res, next) => {
   if (req.method !== 'GET') return next();
+  // WhatsApp (footer.php whatsapp-float): only a valid number; the float can be switched off
+  const st = res.locals.settings;
+  const wa = require('../lib/setting-defs').waNumber(st.whatsapp_number);
+  res.locals.waSocial = wa ? 'https://wa.me/' + wa : '';
+  res.locals.waFloat = wa && st.whatsapp_float !== '0' ? res.locals.waSocial + (st.whatsapp_message ? '?text=' + encodeURIComponent(String(st.whatsapp_message).slice(0, 200)) : '') : '';
   const sat = res.locals.settings.satisfaction_widget_enabled === '1';
   require('../lib/public-cache').cached('float-widgets:' + (sat ? 1 : 0), 30_000, () => Promise.all([
     sat ? db.many('SELECT title, title_en, url FROM satisfaction_links WHERE is_active = 1 ORDER BY display_order, id LIMIT 6') : [],

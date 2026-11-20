@@ -64,6 +64,7 @@
       <a class="side-link <%= cur.startsWith('/admin/system') || cur.startsWith('/admin/backup') ? 'active' : '' %>" href="/admin/system"><%- icon('chart') %><%= t('प्रणाली / ब्याकअप', 'System / backup') %></a><% } %>
       <a class="side-link <%= cur.startsWith('/admin/2fa') ? 'active' : '' %>" href="/admin/2fa"><%- icon('shield') %><%= t('दुई-चरण प्रमाणीकरण', '2-step login') %></a>
       <a class="side-link <%= cur.startsWith('/admin/password') && !cur.startsWith('/admin/password-') ? 'active' : '' %>" href="/admin/password"><%- icon('settings') %><%= t('पासवर्ड', 'Password') %></a>
+      <a class="side-link <%= cur.startsWith('/admin/help') ? 'active' : '' %>" href="/admin/help"><%- icon('info') %><%= t('सहायता पुस्तिका', 'Help guide') %></a>
     </div>
   </aside>
   <div class="main">
@@ -76,6 +77,7 @@
       <details class="bell"><summary class="btn btn-ghost btn-icon" aria-label="<%= t('सूचना', 'Notifications') %>"><%- icon('bell') %><% if (bellTotal) { %><span class="count"><%= num(bellTotal) %></span><% } %></summary>
         <div class="bell-menu"><% if (!bell.length) { %><div class="qsearch-empty"><%= t('बाँकी केही छैन।', 'Nothing waiting.') %></div><% } %><% bell.forEach(([href, label, n]) => { %><a href="<%= href %>"><span><%= label %></span><small><%= num(n) %></small></a><% }) %></div>
       </details>
+      <a class="btn btn-ghost btn-icon" href="/admin/help" aria-label="<%= t('सहायता पुस्तिका', 'Help guide') %>" title="<%= t('सहायता पुस्तिका', 'Help guide') %>"><%- icon('info') %></a>
       <%- include('../partials/theme-picker') %>
       <% if (!locals.languages || languages.length > 1) { %><span class="lang-switch"><a href="/lang/np?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'np' ? 'active' : '' %>">ने</a><a href="/lang/en?next=<%= encodeURIComponent(path) %>" class="<%= lang === 'en' ? 'active' : '' %>">EN</a></span><% } %>
       <a class="who" href="/admin/profile" title="<%= t('मेरो प्रोफाइल', 'My profile') %>"><b><%= admin.full_name || admin.username %></b><%= admin.role %></a>

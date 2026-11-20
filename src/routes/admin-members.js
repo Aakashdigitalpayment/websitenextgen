@@ -233,7 +233,7 @@ async function memberView(item) {
                      WHERE a.member_id = $1 AND a.attendance_status = 'VALID' AND p.is_active = 1 AND p.parent_program_id IS NULL) AS attended,
                    (SELECT count(*) FROM upcoming_programs WHERE is_active = 1 AND parent_program_id IS NULL AND (event_date IS NULL OR event_date <= CURRENT_DATE)) AS total`, [item.id]),
   ]);
-  return { cards, accounts, docs, timeline: timeline.slice(0, 15), timelineTotal: timeline.length, changes, resets, kycId: kyc ? kyc.id : null, partnerServices, rating };
+  return { cards, accounts, docs, timeline: timeline.slice(0, 15), timelineTotal: timeline.length, changes, resets, kycId: kyc ? kyc.id : null, kycPhoto: kyc ? kyc.photo || '' : '', partnerServices, rating };
 }
 const renderMemberForm = async (res, item, values, errors = {}, status = 200) => res.status(status).render('admin/member-form', {
   title: item ? item.name_np || item.name : res.locals.t('नयाँ सदस्य', 'New member'), item, values, errors,
@@ -245,6 +245,24 @@ router.get('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
   const item = await memberById(req.params.id);
   if (!item) return next();
   await renderMemberForm(res, item, item);
+}));
+
+// member photo (members.php webcam / upload): stored on the linked KYM (SSOT), a KYM stub is made when there is none
+router.post('/members/:id/photo', requireAdmin('staff'), ...require('../lib/uploads').upload('kyc', [{ name: 'photo', kind: 'image' }], { private: true, maxMb: 5 }), ah(async (req, res, next) => {
+  const up = require('../lib/uploads');
+  const item = await memberById(req.params.id);
+  const stored = req.uploaded && req.uploaded.photo;
+  if (!item) { if (stored) up.remove(req, stored); return next(); }
+  const t = res.locals.t, back = `/admin/members/${item.id}#photo`;
+  if (req.uploadError || !stored) { flash(req, 'error', t('फोटो अपलोड भएन: ', 'Photo not saved: ') + (req.uploadError || t('फाइल छान्नुहोस्', 'choose a file'))); return res.redirect(back); }
+  const kym = require('../lib/kym');
+  const stub = await kym.ensureStubFromMember(item.id);
+  if (!stub) { up.remove(req, stored); flash(req, 'error', t('फोटोका लागि पहिले सदस्यता नम्बर राख्नुहोस्।', 'Set a membership number first — the photo is kept on the member\'s KYM.')); return res.redirect(back); }
+  const r = await kym.setPhoto(stub.id, stored);
+  if (r && r.old && r.old !== stored) up.remove(req, r.old);
+  await auth.audit(req, 'member_photo_update', 'members', item.id, `Member photo replaced (KYM #${stub.id})`);
+  flash(req, 'success', t('फोटो सुरक्षित भयो।', 'Photo saved.'));
+  res.redirect(back);
 }));
 
 async function saveMember(req, res, item) {

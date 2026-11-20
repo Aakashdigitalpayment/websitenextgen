@@ -17,7 +17,7 @@ async function build() {
     // legacy header.php: the Elections item only while a published cycle is marked "show in navbar"
     db.value('SELECT 1 FROM election_cycles WHERE is_published = 1 AND show_in_navbar = 1 LIMIT 1').catch(() => null),
     require('./forms').optionSources.honorPrograms().then(r => r.length > 0).catch(() => false),
-    publicExtras().catch(() => ({ serviceGroups: [], openJobs: 0, s: {} })),
+    publicExtras().catch(() => ({ serviceGroups: [], openJobs: 0, newNotices: 0, openAuctions: 0, s: {} })),
   ]);
   const vt = (k, np, en) => [extra.s[k + '_title_np'] || np, extra.s[k + '_title_en'] || en];
   const pageLinks = pos => pages.filter(p => (p.menu_position || 'more') === pos)
@@ -64,13 +64,14 @@ async function build() {
       ...(honorOpen ? [{ href: '/apply/honor', label: ['सम्मान आवेदन', 'Honour application'] }] : []), // only while a programme is open
       { href: '/track', label: ['आवेदनको स्थिति', 'Track application'] },
     ] },
-    { label: ['सूचना', 'Updates'], href: '/notices', children: [
-      { href: '/notices', label: ['सूचना', 'Notices'] },
+    // count badges (includes/nav-menu-badges.php): notices of the last 7 days, open vacancies, auctions open for bids
+    { label: ['सूचना', 'Updates'], href: '/notices', badge: (extra.newNotices || 0) + (extra.openJobs || 0) + (extra.openAuctions || 0), children: [
+      { href: '/notices', label: ['सूचना', 'Notices'], badge: extra.newNotices || 0 },
       { href: '/news', label: ['समाचार', 'News'] },
       { href: '/downloads', label: ['डाउनलोड', 'Downloads'] },
       { href: '/gallery', label: ['ग्यालरी', 'Gallery'] },
       { href: '/careers', label: ['रोजगारी', 'Careers'], badge: extra.openJobs || 0 },
-      { href: '/auctions', label: ['लिलाम', 'Auctions'] },
+      { href: '/auctions', label: ['लिलाम', 'Auctions'], badge: extra.openAuctions || 0 },
       ...(electionNav ? [{ href: '/elections', label: ['निर्वाचन', 'Elections'] }] : []),
       { href: '/programs', label: ['कार्यक्रम', 'Programmes'] },
       { href: '/calendar', label: ['सहकारी पात्रो', 'Calendar'] },
@@ -89,21 +90,24 @@ async function build() {
   return data;
 }
 
-/** Services grouped by category (≤ 8 each), open-job count (BS deadlines counted as BS), section titles from settings. */
+/** Services grouped by category (≤ 8 each), open-job / new-notice / open-auction counts (BS deadlines counted as BS), section titles from settings. Cached with the menu (TTL). */
 async function publicExtras() {
   const nd = require('./nepali-date');
-  const [cats, services, jobs, s] = await Promise.all([
+  const [cats, services, jobs, s, newNotices, auctions] = await Promise.all([
     db.many('SELECT id, name, name_np, name_en FROM service_categories WHERE is_active = 1 ORDER BY display_order, id'),
     db.many('SELECT id, title, title_np, title_en, service_category_id FROM services WHERE is_active = 1 ORDER BY display_order, id'),
     db.many('SELECT deadline FROM careers WHERE is_active = 1 AND deleted_at IS NULL'),
     require('./settings').all(),
+    db.value("SELECT count(*) FROM notices WHERE is_active = 1 AND deleted_at IS NULL AND created_at >= now() - interval '7 days'").catch(() => 0),
+    db.many("SELECT is_active, status, auction_date, auction_time FROM auction_notices WHERE is_active = 1 AND status IN ('upcoming', 'ongoing')").catch(() => []),
   ]);
   const serviceGroups = cats.map(c => ({
     id: c.id, label: [c.name_np || c.name || c.name_en, c.name_en || c.name || c.name_np],
     items: services.filter(x => Number(x.service_category_id) === c.id).slice(0, 8).map(x => ({ href: '/services/' + x.id, label: [x.title_np || x.title, x.title_en || x.title] })),
   })).filter(g => g.items.length);
   const openJobs = jobs.filter(j => { const d = nd.daysUntil(j.deadline); return d === null || d >= 0; }).length;
-  return { serviceGroups: cats.length > 1 ? serviceGroups : [], openJobs, s };
+  const openAuctions = auctions.filter(a => require('./auctions').isOpen(a)).length;
+  return { serviceGroups: cats.length > 1 ? serviceGroups : [], openJobs, newNotices: Number(newNotices) || 0, openAuctions, s };
 }
 
 async function middleware(req, res, next) {

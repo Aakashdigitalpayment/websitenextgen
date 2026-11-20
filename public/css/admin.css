@@ -126,3 +126,24 @@ body.panel { background: var(--bg); }
 .bell-menu a { display: flex; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 8px; color: var(--text); font-size: .88rem; }
 .bell-menu a:hover { background: var(--surface-2); text-decoration: none; }
 .bell-menu a small { margin-left: auto; color: var(--warn); font-weight: 500; }
+
+/* help guide (/admin/help) */
+.help-search { padding: 14px; }
+.help-toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.help-section-title { font-size: 1.05rem; margin: 0 0 10px; }
+.help-article { padding: 0; margin-bottom: 10px; }
+.help-article > summary { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; cursor: pointer; list-style: none; }
+.help-article > summary::-webkit-details-marker { display: none; }
+.help-article > summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--radius); }
+.help-article > summary strong { display: block; font-weight: 600; }
+.help-summary { display: block; margin-top: 2px; }
+.help-icon { flex: none; display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 10px; background: var(--brand-soft); color: var(--brand); }
+.help-body { padding: 0 16px 16px 62px; }
+.help-steps { margin: 0 0 12px; padding-left: 20px; }
+.help-steps li { margin-bottom: 6px; }
+.help-tip { margin-bottom: 12px; }
+.help-tip p { margin: 0 0 4px; } .help-tip p:last-child { margin: 0; }
+@media (max-width: 640px) { .help-body { padding-left: 16px; } }
+.photo-current { display: block; width: 120px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); }
+.detail-layout { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 760px) { .detail-layout { grid-template-columns: 1fr; } }

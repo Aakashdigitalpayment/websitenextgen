@@ -1,0 +1,31 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('प्रशासन प्यानलका काम चरणबद्ध रूपमा — तपाईंले खोल्न पाउने पृष्ठहरूका लेख मात्र देखिन्छन्।', 'Admin tasks step by step — only articles for pages you can open are shown.') %></div></div></div>
+
+<form class="help-search card card-flat mb-3" method="get" action="/admin/help" role="search" data-help-search>
+  <label class="sr-only" for="help-q"><%= t('सहायता खोज्नुहोस्', 'Search help') %></label>
+  <div class="flex gap-1">
+    <input class="input grow" id="help-q" type="search" name="q" value="<%= q %>" maxlength="80" autocomplete="off" placeholder="<%= t('जस्तै: सूचना, पासवर्ड, नक्सा, CSV…', 'e.g. notice, password, map, CSV…') %>">
+    <button class="btn btn-primary"><%- icon('search') %><span class="btn-text"><%= t('खोज', 'Search') %></span></button>
+  </div>
+  <nav class="help-toc mt-2" aria-label="<%= t('विषयसूची', 'Contents') %>">
+    <% sections.forEach(([key, label]) => { if (!articles.some(a => a.section === key)) return; %><a class="tab" href="#help-<%= key %>"><%= t(...label) %></a><% }) %>
+  </nav>
+</form>
+
+<p class="muted small" data-help-count data-of="<%= t('लेख', 'articles') %>"><%= q ? t('"' + q + '" का लागि ' + num(articles.length) + ' लेख भेटियो।', articles.length + ' articles found for "' + q + '".') : num(articles.length) + ' ' + t('लेख', 'articles') %></p>
+<div class="empty" data-help-empty <%- articles.length ? 'hidden' : '' %>><%= t('केही भेटिएन। अर्को शब्दले खोज्नुहोस्।', 'Nothing found. Try another word.') %><% if (q) { %> <a href="/admin/help"><%= t('सबै लेख', 'All articles') %></a><% } %></div>
+
+<% sections.forEach(([key, label]) => { const list = articles.filter(a => a.section === key); if (!list.length) return; %>
+<section class="help-section mb-3" id="help-<%= key %>" data-help-section>
+  <h2 class="help-section-title"><%= t(...label) %></h2>
+  <% list.forEach(a => { %>
+  <details class="help-article card card-flat" id="help-<%= a.id %>" data-help-article data-help-text="<%= a.text.toLowerCase() %>"<%- q ? ' open' : '' %>>
+    <summary><span class="help-icon"><%- icon(a.icon) %></span><span><strong><%= t(...a.title) %></strong><span class="small muted help-summary"><%= t(...a.summary) %></span></span></summary>
+    <div class="help-body">
+      <ol class="help-steps"><% a.steps.forEach(st => { %><li><%= t(...st) %></li><% }) %></ol>
+      <% if (a.tips && a.tips.length) { %><div class="alert alert-info help-tip"><%- icon('info') %><div><% a.tips.forEach(tp => { %><p><%= t(...tp) %></p><% }) %></div></div><% } %>
+      <a class="btn btn-outline btn-sm" href="<%= a.href %>"><%= t('पृष्ठ खोल्नुहोस्', 'Open the page') %><%- icon('right') %></a>
+    </div>
+  </details>
+  <% }) %>
+</section>
+<% }) %>

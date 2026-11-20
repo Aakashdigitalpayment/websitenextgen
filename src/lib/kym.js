@@ -408,8 +408,19 @@ async function ensureStubFromMember(memberId, extra = {}) {
   return { id: k.id, created };
 }
 
+/**
+ * Replace the KYM photo (the member's photo lives on the KYM — SSOT; ID cards and the portal read it from there).
+ * Returns the previous stored path so the caller can delete the old file.
+ */
+async function setPhoto(kycId, stored) {
+  const k = await db.one('SELECT id, photo FROM kyc_applications WHERE id = $1 AND deleted_at IS NULL', [kycId]);
+  if (!k) return null;
+  await db.query('UPDATE kyc_applications SET photo = $1, photo_quality_score = NULL, updated_at = now() WHERE id = $2', [stored, k.id]);
+  return { id: k.id, old: k.photo || null };
+}
+
 module.exports = {
-  compareShared, ensureStubFromMember,
+  compareShared, ensureStubFromMember, setPhoto,
   normalizeId, normalizeMobile, phonesMatch, findMemberBySadasyata, findKycByMemberId, loadLinkedKyc, requireMemberIdAndMobile, verifyForForm, identityFrom,
   mergeFillEmpty, upsertMemberFromKyc, afterKycWrite, issueIdCard, autoIssueIdCard, applyStatus, refreshReviewCycle, markReviewed,
   submit, DOC_KEYS, REVIEW_YEARS,
