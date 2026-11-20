@@ -93,11 +93,11 @@ router.get('/about', ah(async (req, res) => {
 
 router.get('/vision-mission', (req, res) => {
   const s = res.locals.settings, t = res.locals.t;
-  const blocks = [
-    [t('दृष्टिकोण', 'Vision'), s.vision_content_np || s.vision_content],
-    [t('लक्ष्य', 'Mission'), s.mission_content_np || s.mission_content],
-    [t('मूल्य मान्यता', 'Values'), s.values_content_np || s.values_content],
-  ].filter(b => b[1]);
+  // NP/EN text and titles per section (legacy pages.php?tab=static); English falls back to Nepali
+  const en = req.lang === 'en';
+  const pick = (a, b) => (en ? s[b] || s[a] : s[a] || s[b]);
+  const blocks = [['vision_content', 'दृष्टिकोण', 'Vision'], ['mission_content', 'लक्ष्य', 'Mission'], ['values_content', 'मूल्य मान्यता', 'Values']]
+    .map(([k, np, enT]) => [pick(k + '_title_np', k + '_title_en') || t(np, enT), pick(k + '_np', k + '_en') || s[k]]).filter(b => b[1]);
   res.render('public/vision', { title: t('दृष्टिकोण र लक्ष्य', 'Vision & mission'), blocks });
 });
 

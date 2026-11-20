@@ -418,44 +418,70 @@ router.use('/', require('./admin-tools'));
 // ---------------------------------------------------------------- members, member portal queue, password requests
 router.use(require('./admin-members'));
 
-// ---------------------------------------------------------------- settings
-const SETTING_GROUPS = {
-  general: ['सामान्य', 'General'], contact: ['सम्पर्क', 'Contact'], about: ['परिचय', 'About'],
-  social: ['सामाजिक सञ्जाल', 'Social'], apps: ['एप/बैंकिङ', 'Apps'], seo: ['SEO', 'SEO'],
-  notify: ['SMS / इमेल', 'SMS / email'], ai: ['AI च्याट', 'AI chat'], oauth: ['Google / Facebook लगइन', 'Google / Facebook sign-in'],
-  security: ['स्प्याम सुरक्षा', 'Anti-spam'],
-};
-const SECRET_KEY = /password|api_key|token|secret|private/;
-router.get('/settings', requireAdmin('admin'), ah(async (req, res) => {
-  const rows = await settings.grouped();
-  res.render('admin/settings', { title: res.locals.t('सेटिङ', 'Settings'), rows, groups: SETTING_GROUPS, tab: req.query.tab || 'general', oauthRedirect: `${req.protocol}://${req.get('host')}/member/oauth/google/callback`, facebookRedirect: `${req.protocol}://${req.get('host')}/member/oauth/facebook/callback` });
-}));
+// ---------------------------------------------------------------- settings (driven by the registry in lib/setting-defs.js)
+const SD = require('../lib/setting-defs');
+async function settingsPage(req, res, { tab, errors = {}, posted = null, status = 200 } = {}) {
+  const isSuper = auth.roleLevel(req.admin.role) >= 4;
+  tab = Object.hasOwn(SD.TABS, tab) || (tab === 'other' && isSuper) ? tab : 'general';
+  const values = { ...(await settings.all()), ...(posted || {}) };
+  const other = isSuper ? (await settings.grouped()).filter(r => !SD.byKey[r.setting_key] && !SD.MANAGED_GROUPS.has(r.setting_group) && !SD.MANAGED_KEY.test(r.setting_key)) : [];
+  res.status(status).render('admin/settings', {
+    title: res.locals.t('सेटिङ', 'Settings'), tabs: SD.TABS, tab, defs: SD.DEFS.filter(d => d.group === tab), values, errors, other, isSuper, aiModels: SD.AI_MODELS,
+    eventToggles: tab === 'notify' ? Object.values(modules).map(m => ({ key: m.key, title: m.title })) : [],
+    oauthRedirect: `${req.protocol}://${req.get('host')}/member/oauth/google/callback`, facebookRedirect: `${req.protocol}://${req.get('host')}/member/oauth/facebook/callback`,
+  });
+}
+router.get('/settings', requireAdmin('admin'), ah((req, res) => settingsPage(req, res, { tab: String(req.query.tab || 'general') })));
 
 router.post('/settings', requireAdmin('admin'), (req, res, next) => {
   if (!req.is('multipart/form-data')) return next();
-  const [mw, csrf] = upload('settings', [{ name: 'file_logo', kind: 'image' }, { name: 'file_chairman_photo', kind: 'image' }, { name: 'file_ceo_photo', kind: 'image' }, { name: 'file_history_photo', kind: 'image' }, { name: 'file_seo_og_image', kind: 'image' }]);
+  const [mw, csrf] = upload('settings', SD.DEFS.filter(d => d.type === 'image').map(d => ({ name: 'file_' + d.key, kind: 'image' })));
   mw(req, res, err => (err ? next(err) : csrf(req, res, next)));
 }, ah(async (req, res) => {
-  const rows = await settings.grouped();
-  const known = new Map(rows.map(r => [r.setting_key, r]));
-  for (const [k, v] of Object.entries(req.body)) {
-    if (!k.startsWith('s_')) continue;
-    const key = k.slice(2);
-    if (!/^[a-z0-9_]{2,100}$/.test(key) || !known.has(key)) continue;
-    let val = String(v).slice(0, 20000);
-    if (SECRET_KEY.test(key) && val === '') continue; // blank = keep existing secret
-    if (key === 'primary_color' && !/^#[0-9a-f]{3,8}$/i.test(val)) continue;
-    // accept the whole <meta name="google-site-verification" content="…"> tag or just the code
-    if (key === 'google_site_verification') val = val.replace(/^[\s\S]*content=["']?([^"'\s>]+)[\s\S]*$/i, '$1').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 100);
-    if ((key === 'seo_title' || key === 'seo_title_en') && val.length > 70) val = val.slice(0, 70);
-    await settings.set(key, val, known.get(key));
+  const t = res.locals.t;
+  const tab = String(req.body._tab || 'general');
+  if (req.uploadError) {
+    for (const p of Object.values(req.uploaded || {})) remove(req, p);
+    flash(req, 'error', t('फाइल अपलोड भएन: ', 'Upload failed: ') + req.uploadError + t(' — केही सुरक्षित गरिएन।', ' — nothing was saved.'));
+    return res.redirect('/admin/settings?tab=' + encodeURIComponent(tab));
   }
-  for (const [field, path] of Object.entries(req.uploaded || {})) {
-    if (path) await settings.set(field.replace(/^file_/, ''), path, { type: 'image', group: field === 'file_logo' ? 'general' : 'about', label: field });
+  const defs = SD.DEFS.filter(d => d.group === tab);
+  const current = await settings.all();
+  const errors = {}, changes = [];
+  for (const def of defs) {
+    const meta = { type: SD.storeType(def.type), group: def.group, label: def.label[1], sync: true };
+    if (def.type === 'image') {
+      const up = req.uploaded && req.uploaded['file_' + def.key];
+      if (up) changes.push([def.key, up, meta, current[def.key]]);
+      else if (req.body['remove_' + def.key] === '1' && current[def.key]) changes.push([def.key, '', meta, current[def.key]]);
+      continue;
+    }
+    if (def.type === 'secret' && req.body['clear_' + def.key] === '1') { changes.push([def.key, '', meta]); continue; }
+    if (def.type !== 'bool' && req.body['s_' + def.key] === undefined) continue; // not on the form (e.g. a role cannot see it)
+    const raw = req.body['s_' + def.key];
+    const r = SD.clean(def, Array.isArray(raw) ? raw[raw.length - 1] : raw, util);
+    if (r.error) errors[def.key] = r.error;
+    else if (!r.skip && r.value !== (current[def.key] ?? '')) changes.push([def.key, r.value, meta]);
   }
-  await auth.audit(req, 'update', 'site_settings', null, 'Settings updated');
-  flash(req, 'success', res.locals.t('सेटिङ सुरक्षित भयो।', 'Settings saved.'));
-  res.redirect('/admin/settings?tab=' + encodeURIComponent(String(req.body._tab || 'general')));
+  if (Object.keys(errors).length) {
+    for (const p of Object.values(req.uploaded || {})) remove(req, p);
+    const posted = Object.fromEntries(defs.filter(d => d.type !== 'secret' && d.type !== 'image').map(d => [d.key, String(req.body['s_' + d.key] ?? '')]));
+    return settingsPage(req, res, { tab, errors, posted, status: 422 });
+  }
+  // per-module notification toggles (notify_email_<module> / notify_sms_<module>, '1' when absent)
+  if (tab === 'notify' && req.body._event_toggles === '1') {
+    for (const m of Object.values(modules)) for (const ch of ['email', 'sms']) {
+      const k = `notify_${ch}_${m.key}`, v = req.body[k] === '1' ? '1' : '0';
+      if ((current[k] ?? '1') !== v) changes.push([k, v, { type: 'text', group: 'notify', label: `${ch === 'email' ? 'Email' : 'SMS'} office on new ${m.title[1]}` }]);
+    }
+  }
+  for (const [key, val, meta, old] of changes) {
+    await settings.set(key, val, meta);
+    if (old && old !== val && SD.byKey[key]?.type === 'image') remove(req, old);
+  }
+  await auth.audit(req, 'update', 'site_settings', null, `Settings (${tab}): ${changes.map(c => c[0]).join(', ').slice(0, 400) || 'no changes'}`);
+  flash(req, 'success', t('सेटिङ सुरक्षित भयो।', 'Settings saved.'));
+  res.redirect('/admin/settings?tab=' + encodeURIComponent(tab));
 }));
 
 // ---------------------------------------------------------------- theme (admin + superadmin choose the default)

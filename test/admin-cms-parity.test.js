@@ -135,3 +135,97 @@ test('security page: superadmin only, password confirmed, audited', async () => 
   await ed.form('/admin/login', { username: 'admin2', password: PW }, '/admin/login');
   assert.equal((await ed.get('/admin/security')).status, 403);
 });
+
+// ---------------------------------------------------------------- P1-2 settings registry
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex');
+async function postSettings(c, tab, fields, files = {}) {
+  const tok = await c.token('/admin/settings?tab=' + tab);
+  let r = c.agent.post('/admin/settings?_csrf=' + encodeURIComponent(tok)).set('Host', HA).field('_csrf', tok).field('_tab', tab);
+  for (const [k, v] of Object.entries(fields)) r = r.field(k, v);
+  for (const [k, buf] of Object.entries(files)) r = r.attach(k, buf, 'x.png');
+  return r;
+}
+test('settings: registry-driven tabs, validation, unseeded keys, image remove, secret clear', async () => {
+  let r = await admin.get('/admin/settings?tab=sections');
+  assert.match(r.text, /name="s_values_content_en"/);
+  assert.match(r.text, /data-richtext/);
+  // invalid URL: nothing saved
+  r = await postSettings(admin, 'social', { s_facebook_url: 'javascript:alert(1)', s_twitter_url: 'https://x.com/coop' });
+  assert.equal(r.status, 422);
+  assert.equal(await inA(() => settings.get('twitter_url')), '');
+  r = await postSettings(admin, 'social', { s_facebook_url: 'https://facebook.com/coop', s_twitter_url: 'https://x.com/coop' });
+  assert.equal(r.status, 302);
+  await inA(() => settings.invalidate());
+  assert.equal(await inA(() => settings.get('twitter_url')), 'https://x.com/coop');
+  // rich text is sanitised; a key that was never seeded gets a row
+  await postSettings(admin, 'about', { s_history_content_en: '<p>Founded <script>x()</script><strong>2050</strong></p>', s_years_experience: '२५' });
+  await inA(() => settings.invalidate());
+  const s = await inA(() => settings.all());
+  assert.equal(s.history_content_en, '<p>Founded <strong>2050</strong></p>');
+  assert.equal(s.years_experience, '25');
+  // favicon (any image def) uploads; then remove
+  r = await postSettings(admin, 'general', { s_site_name: 'CMS A' }, { file_site_favicon: PNG });
+  assert.equal(r.status, 302);
+  await inA(() => settings.invalidate());
+  assert.match(await inA(() => settings.get('site_favicon')), /^settings\//);
+  await postSettings(admin, 'general', { s_site_name: 'CMS A', remove_site_favicon: '1' });
+  await inA(() => settings.invalidate());
+  assert.equal(await inA(() => settings.get('site_favicon')), '');
+  // map link → embed URL; secret kept when blank, cleared on request; per-module office alert toggles
+  await postSettings(admin, 'contact', { s_map_embed_url: 'https://www.google.com/maps/place/Kathmandu/@27.7,85.3,15z' });
+  await postSettings(admin, 'notify', { s_smtp_password: 'pw1', _event_toggles: '1', notify_email_loan: '1' });
+  await inA(() => settings.invalidate());
+  let s2 = await inA(() => settings.all());
+  assert.equal(s2.map_embed_url, 'https://www.google.com/maps?q=27.7%2C85.3&z=15&output=embed');
+  assert.equal(s2.smtp_password, 'pw1');
+  assert.equal(s2.notify_sms_loan, '0');
+  assert.equal(s2.notify_email_loan ?? '1', '1');
+  await postSettings(admin, 'notify', { s_smtp_password: '' });
+  await inA(() => settings.invalidate());
+  assert.equal(await inA(() => settings.get('smtp_password')), 'pw1');
+  await postSettings(admin, 'notify', { clear_smtp_password: '1' });
+  await inA(() => settings.invalidate());
+  s2 = await inA(() => settings.all());
+  assert.equal(s2.smtp_password, '');
+});
+
+// ---------------------------------------------------------------- P1-3 PHP setting names
+test('legacy PHP setting keys are read under the Node names, and mapLegacy stores them', async () => {
+  const crypto = require('crypto');
+  const iv = crypto.randomBytes(16);
+  const c = crypto.createCipheriv('aes-256-cbc', crypto.createHash('sha256').update('php-master-key-123').digest(), iv);
+  const enc = 'enc:v1:' + iv.toString('hex') + ':' + Buffer.concat([c.update('sk-test-123'), c.final()]).toString('base64');
+  const saved = process.env.CREDENTIALS_LEGACY_KEY;
+  delete process.env.CREDENTIALS_LEGACY_KEY;
+  await inA(async () => {
+    await db.query("DELETE FROM site_settings WHERE setting_key IN ('ai_enabled', 'notify_admin_emails', 'map_embed_url')");
+    for (const [k, v] of [['ai_chat_enabled', '1'], ['notify_email_recipients', 'a@x.np'], ['map_lat', '27.7'], ['map_lng', '85.3'], ['site_slogan', 'हाम्रो स्लोगन'], ['ai_api_key', enc], ['notify_email_grievance', '0'], ['ai_welcome', 'नमस्ते']]) await settings.set(k, v);
+    settings.invalidate();
+  });
+  let s = await inA(() => settings.all());
+  assert.equal(s.ai_enabled, '1');
+  assert.equal(s.notify_admin_emails, 'a@x.np');
+  assert.equal(s.map_embed_url, 'https://www.google.com/maps?q=27.7%2C85.3&z=17&output=embed');
+  assert.equal(s.site_tagline, 'हाम्रो स्लोगन');
+  assert.equal(s.notify_email_grievance, '0');
+  assert.equal(s.ai_api_key, ''); // encrypted and no legacy key configured → not used
+  const mapped = await inA(() => settings.mapLegacy('php-master-key-123'));
+  if (saved !== undefined) process.env.CREDENTIALS_LEGACY_KEY = saved;
+  assert.ok(mapped.includes('ai_api_key'));
+  s = await inA(async () => { settings.invalidate(); return settings.all(); });
+  assert.equal(s.ai_api_key, 'sk-test-123');
+  assert.equal(await inA(() => db.value("SELECT setting_value FROM site_settings WHERE setting_key = 'ai_enabled'")), '1');
+});
+
+// ---------------------------------------------------------------- P1-4 about sections
+test('vision / mission / values: English text and stored titles on the English page', async () => {
+  await setSetting('vision_content_np', 'नेपाली दृष्टि');
+  await setSetting('vision_content_en', 'English vision');
+  await setSetting('vision_content_title_en', 'Our Vision 2090');
+  const c = client();
+  await c.get('/lang/en');
+  const r = await c.get('/vision-mission');
+  assert.match(r.text, /English vision/);
+  assert.match(r.text, /Our Vision 2090/);
+  assert.doesNotMatch(r.text, /नेपाली दृष्टि/);
+});

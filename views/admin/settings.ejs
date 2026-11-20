@@ -1,22 +1,50 @@
-<div class="content-head"><h1><%= title %></h1><% if (tab === 'notify') { %><a class="btn btn-outline btn-sm" href="/admin/notifications"><%- icon('mail') %><%= t('परीक्षण र लग', 'Test & log') %></a><% } %></div>
-<div class="tabs"><% Object.entries(groups).forEach(([g, label]) => { %><a class="tab <%= tab === g ? 'active' : '' %>" href="?tab=<%= g %>"><%= t(...label) %></a><% }) %></div>
+<div class="content-head"><h1><%= title %></h1><% if (tab === 'notify') { %><a class="btn btn-outline btn-sm" href="/admin/notifications"><%- icon('mail') %><%= t('परीक्षण र लग', 'Test & log') %></a><% } %><% if (tab === 'security' && isSuper) { %><a class="btn btn-outline btn-sm" href="/admin/security"><%- icon('shield') %><%= t('लगइन सुरक्षा नीति', 'Sign-in security policy') %></a><% } %></div>
+<div class="tabs"><% Object.entries(tabs).forEach(([g, label]) => { %><a class="tab <%= tab === g ? 'active' : '' %>" href="?tab=<%= g %>"><%= t(...label) %></a><% }) %><% if (isSuper) { %><a class="tab <%= tab === 'other' ? 'active' : '' %>" href="?tab=other"><%= t('अन्य (आयातित)', 'Other (imported)') %></a><% } %></div>
 <% if (tab === 'oauth') { %><div class="alert alert-info"><%- icon('info') %><span><%= t('Google Cloud Console मा OAuth client (Web application) बनाउनुहोस् र Authorized redirect URI मा यो राख्नुहोस्:', 'In Google Cloud Console create an OAuth client (Web application) and add this Authorized redirect URI:') %> <code><%= oauthRedirect %></code></span></div>
 <div class="alert alert-info"><%- icon('facebook') %><span><%= t('Facebook Developers मा app बनाई Facebook Login → Valid OAuth Redirect URIs मा यो राख्नुहोस्:', 'In Facebook Developers create an app and add this under Facebook Login → Valid OAuth Redirect URIs:') %> <code><%= locals.facebookRedirect %></code></span></div><% } %>
+<% if (tab === 'other') { %>
+  <div class="alert alert-info"><%- icon('info') %><span><%= t('पुरानो साइटबाट आएका वा अन्य पृष्ठले चलाउने सेटिङ — यहाँ हेर्न मात्र मिल्छ।', 'Settings imported from the old site that no page edits here — read only.') %></span></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th><%= t('कुञ्जी', 'Key') %></th><th><%= t('समूह', 'Group') %></th><th><%= t('मान', 'Value') %></th></tr></thead><tbody>
+    <% other.forEach(r => { %><tr><td><code><%= r.setting_key %></code></td><td class="small"><%= r.setting_group %></td><td class="small"><%= /password|api_key|token|secret|private/.test(r.setting_key) ? (r.setting_value ? '••••••••' : '') : util.excerpt(r.setting_value, 120) %></td></tr><% }) %>
+    <% if (!other.length) { %><tr><td colspan="3" class="muted"><%= t('केही छैन।', 'Nothing here.') %></td></tr><% } %>
+  </tbody></table></div>
+<% } else { %>
+<% if (Object.keys(errors).length) { %><div class="alert alert-error"><%= t('केही मान मिलेनन् — केही सुरक्षित गरिएन।', 'Some values are not valid — nothing was saved.') %></div><% } %>
 <form class="form-card" method="post" action="/admin/settings?_csrf=<%= encodeURIComponent(csrfToken) %>" enctype="multipart/form-data">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="_tab" value="<%= tab %>">
   <div class="form-grid">
-    <% rows.filter(r => (r.setting_group || 'general') === tab).forEach(r => { const id = 's_' + r.setting_key; %>
-      <div class="field <%= r.setting_type === 'textarea' ? 'span-2' : '' %>">
-        <label for="<%= id %>"><%= r.setting_label || r.setting_key %></label>
-        <% if (r.setting_type === 'image') { %>
-          <% if (r.setting_value) { %><div class="file-current"><img class="thumb" src="<%= mediaUrl(r.setting_value) %>" alt=""></div><% } %>
-          <input class="input" type="file" name="file_<%= r.setting_key %>" accept="image/*">
-        <% } else if (r.setting_type === 'textarea') { %><textarea class="textarea" id="<%= id %>" name="<%= id %>" rows="5"><%= r.setting_value || '' %></textarea>
-        <% } else if (/password|api_key|token|secret|private/.test(r.setting_key)) { %><input class="input" id="<%= id %>" name="<%= id %>" type="password" value="" autocomplete="new-password" placeholder="<%= r.setting_value ? '•••••••• ' + t('(सुरक्षित — खाली छोड्दा परिवर्तन हुँदैन)', '(saved — leave blank to keep)') : '' %>">
-        <% } else { %><input class="input" id="<%= id %>" name="<%= id %>" type="<%= r.setting_type === 'color' ? 'color' : r.setting_type === 'url' ? 'url' : 'text' %>" value="<%= r.setting_value || '' %>"><% } %>
-        <div class="field-hint"><code><%= r.setting_key %></code></div>
+    <% defs.forEach(def => { const id = 's_' + def.key; const v = values[def.key] ?? ''; const err = errors[def.key]; const wide = ['textarea', 'richtext', 'map'].includes(def.type); %>
+      <div class="field <%= wide ? 'span-2' : '' %> <%= err ? 'has-error' : '' %>">
+        <% if (def.type === 'bool') { %>
+          <input type="hidden" name="<%= id %>" value="0"><label class="choice"><input type="checkbox" id="<%= id %>" name="<%= id %>" value="1" <%= v === '1' ? 'checked' : '' %>> <%= t(...def.label) %></label>
+        <% } else { %>
+        <label for="<%= id %>"><%= t(...def.label) %></label>
+        <% if (def.type === 'image') { %>
+          <% if (v) { %><div class="file-current"><img class="thumb" src="<%= mediaUrl(v) %>" alt=""><label class="choice"><input type="checkbox" name="remove_<%= def.key %>" value="1"> <%= t('हटाउने', 'Remove') %></label></div><% } %>
+          <input class="input" type="file" id="<%= id %>" name="file_<%= def.key %>" accept="image/jpeg,image/png,image/webp,image/gif">
+        <% } else if (def.type === 'textarea' || def.type === 'map') { %><textarea class="textarea" id="<%= id %>" name="<%= id %>" rows="<%= def.type === 'map' ? 3 : 4 %>"><%= v %></textarea>
+        <% } else if (def.type === 'richtext') { %><textarea class="textarea" id="<%= id %>" name="<%= id %>" rows="8" data-richtext><%= v %></textarea>
+        <% } else if (def.type === 'secret') { %><input class="input" id="<%= id %>" name="<%= id %>" type="password" value="" autocomplete="new-password" placeholder="<%= v ? '•••••••• ' + t('(सुरक्षित — खाली छोड्दा परिवर्तन हुँदैन)', '(saved — leave blank to keep)') : '' %>">
+          <% if (v) { %><label class="choice mt-1"><input type="checkbox" name="clear_<%= def.key %>" value="1"> <%= t('हटाउने', 'Clear') %></label><% } %>
+        <% } else if (def.type === 'select') { %><select class="select" id="<%= id %>" name="<%= id %>"><option value="">—</option><% def.options.forEach(o => { %><option value="<%= o[0] %>" <%= v === o[0] ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select>
+        <% } else { %><input class="input" id="<%= id %>" name="<%= id %>" value="<%= v %>" type="<%= def.type === 'color' ? 'color' : def.type === 'url' ? 'url' : def.type === 'email' ? 'email' : 'text' %>"<% if (def.type === 'number') { %> inputmode="decimal"<% } %><% if (def.max) { %> maxlength="<%= def.max %>"<% } %><% if (def.datalist) { %> list="dl_<%= def.datalist %>"<% } %>>
+          <% if (def.datalist === 'ai_models') { %><datalist id="dl_ai_models"><% Object.entries(aiModels).forEach(([p, list]) => list.forEach(mo => { %><option value="<%= mo %>"><%= p %></option><% })) %></datalist><% } %>
+        <% } %>
+        <% } %>
+        <% if (err) { %><div class="field-error"><%= err %></div><% } %>
+        <div class="field-hint"><% if (def.hint) { %><%= def.hint %> · <% } %><code><%= def.key %></code></div>
       </div>
     <% }) %>
   </div>
+  <% if (eventToggles.length) { %>
+    <h3 class="mt-2"><%= t('कुन आवेदनमा कार्यालयलाई सूचना', 'Office alerts per application type') %></h3>
+    <input type="hidden" name="_event_toggles" value="1">
+    <div class="table-wrap"><table class="table"><thead><tr><th><%= t('आवेदन', 'Application') %></th><th><%= t('इमेल', 'Email') %></th><th>SMS</th></tr></thead><tbody>
+      <% eventToggles.forEach(m => { %><tr><td><%= t(...m.title) %></td>
+        <td><input type="checkbox" name="notify_email_<%= m.key %>" value="1" aria-label="email <%= m.key %>" <%= (values['notify_email_' + m.key] ?? '1') !== '0' ? 'checked' : '' %>></td>
+        <td><input type="checkbox" name="notify_sms_<%= m.key %>" value="1" aria-label="sms <%= m.key %>" <%= (values['notify_sms_' + m.key] ?? '1') !== '0' ? 'checked' : '' %>></td></tr><% }) %>
+    </tbody></table></div>
+  <% } %>
   <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save settings') %></button></div>
 </form>
+<% } %>
