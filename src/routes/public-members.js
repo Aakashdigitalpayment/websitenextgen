@@ -157,7 +157,7 @@ const partnersFor = (card, member) => (card && member && card.status === 'active
   ? db.many("SELECT id, partner_name, partner_name_en, (pin_hash IS NOT NULL AND pin_hash <> '') AS has_pin FROM partner_facilities WHERE is_active = 1 ORDER BY display_order, partner_name") : []);
 
 router.get('/verify', ah(async (req, res) => {
-  const code = String(req.query.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20);
+  const code = String(req.query.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
   verifyView(res, { code, mode: code || req.query.mode === 'code' ? 'code' : 'name', partnerPref: await partnerPref(req.query.partner_id || req.query.partner) });
 }));
 router.post('/verify', verifyLimiter, ah(async (req, res) => {
@@ -173,10 +173,16 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
     const result = await verifiedResult(req, r.card, r.member, r.kyc);
     return verifyView(res, { mode: 'name', form: {}, partnerPref: pref, result, partners: result.valid ? await partnersFor(r.card || { status: 'active' }, r.member) : [] });
   }
-  const code = String(req.body.code || '').trim().toUpperCase().slice(0, 20);
+  const code = String(req.body.code || '').trim().toUpperCase().slice(0, 40);
   const cvv = portal.normalizeCvv(req.body.cvv);
-  const card = code.length >= 8 ? await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
-                                                FROM member_id_cards WHERE upper(verification_code) = $1 ORDER BY (status = 'active') DESC, id DESC LIMIT 1`, [code]) : null;
+  // normalizeCardLookupKey (card-verify-helpers.php): the code as printed, without dashes, or the card number without dashes
+  const key = code.replace(/[^A-Z0-9]/g, '');
+  const card = code.length >= 8 || key.length >= 8 ? await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
+                                                FROM member_id_cards
+                                                WHERE upper(verification_code) = $1
+                                                   OR regexp_replace(upper(verification_code), '[^A-Z0-9]', '', 'g') = $2
+                                                   OR regexp_replace(upper(card_no), '[^A-Z0-9]', '', 'g') = $2
+                                                ORDER BY (upper(verification_code) = $1) DESC, (status = 'active') DESC, id DESC LIMIT 1`, [code, key || '-']) : null;
   const log = ok => db.query('INSERT INTO card_verify_attempts (ip, code_tried, success, created_at) VALUES ($1, $2, $3, now())', [req.ip, code, ok ? 1 : 0]);
   if (!card) { await log(false); return verifyView(res, { mode: 'code', result: false, code }); }
   if (card.locked_at) {

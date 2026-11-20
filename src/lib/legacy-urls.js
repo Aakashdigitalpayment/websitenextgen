@@ -70,7 +70,7 @@ const PUBLIC = {
   // QR codes and links printed by the PHP app
   'attend.php': q => (token(q.token || q.qr_token || q.t) ? '/member/attend?t=' + token(q.token || q.qr_token || q.t) : '/member/programs'),
   'program-attendance-verify.php': () => '/member/programs',
-  'verify.php': () => '/verify',
+  'verify.php': q => '/verify' + keep(q, ['partner', 'partner_id', 'code', 'mode']), // partner-desk QR codes keep the partner
   'application-tracker.php': q => '/track' + qs('id', clean(q.id || q.tracking_id).replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 96)),
   'tracker-id-card.php': () => '/track', // links were signed with the PHP secret — verify again from the tracker
   'login.php': () => '/member/login',

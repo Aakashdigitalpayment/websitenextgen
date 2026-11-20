@@ -21,7 +21,7 @@
   <form class="form-card" method="post" action="/verify">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="partner_pref" value="<%= partnerPref %>">
     <div class="form-grid">
-      <div class="field"><label for="code"><%= t('प्रमाणीकरण कोड', 'Verification code') %></label><input class="input" id="code" name="code" value="<%= code %>" placeholder="AKS-9F7K-2X4M" required></div>
+      <div class="field"><label for="code"><%= t('प्रमाणीकरण कोड वा कार्ड नम्बर', 'Verification code or card number') %></label><input class="input" id="code" name="code" value="<%= code %>" placeholder="AKS-9F7K-2X4M" maxlength="40" autocapitalize="characters" spellcheck="false" required></div>
       <div class="field"><label for="cvv">CVV</label><input class="input" id="cvv" name="cvv" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" required></div>
     </div>
     <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button></div>

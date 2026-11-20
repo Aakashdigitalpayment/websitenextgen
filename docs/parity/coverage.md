@@ -95,7 +95,7 @@ Top gaps: SM-1 derived-CVV card verification, SM-2 `/assets/uploads` legacy URLs
 | tracker-id-card.php | /track/id-card (HMAC 15 min) | COVERED | old PHP-signed links → /track (by design) |
 | upload-file.php | uploads.js `_private` + /admin/files/* + member routes | PARTIAL | see upload-gate.php; `upload-file.php?d=&f=` not mapped (SM-3, SM-16) |
 | vendor-enlistment.php | /apply/vendor · promoteVendor on approval | COVERED | |
-| verify.php | GET/POST /verify, /verify/service, /verify/photo/:mid · public-members.js | PARTIAL | **Derived-CVV cards from PHP fail** (SM-1). Card-number / un-hyphenated code lookup missing (SM-6). Legacy `verify.php?partner=CODE` / `?partner_id=` desk-QR params dropped by legacy-urls (SM-7) |
+| verify.php | GET/POST /verify, /verify/service, /verify/photo/:mid · public-members.js | COVERED | derived CVV (SM-1), card-number / un-hyphenated lookup (SM-6), `verify.php?partner=` QR params (SM-7) |
 | vision-mission.php | /vision-mission | COVERED | |
 | why-choose.php | /about#why | COVERED | |
 | sw.js | public/sw.js (served by app.js:71) | PARTIAL | Offline fallback + push + notificationclick ported. PHP cached member pages (PAGES_CACHE) and showed `/member/offline.php` with cached name/unread; Node deliberately never caches member/admin HTML (privacy). Not recorded in docs/parity → record as deliberate (SM-18). |
@@ -341,10 +341,10 @@ Spec: in `site-migration.js` after "copy uploads": move each gated folder wholes
 **SM-5 · Members-only reports / institutional-profile files are public until first opened.** — **COVERED**: `res.reports` / `res.institutional_profile` have `privateFiles` (admin uploads go to `_private` from the start); migration step `site-migration.privatiseFileColumns` moves every migrated report / profile file to `_private` (also handles comma lists); the same runs for tenants already migrated via `scripts/privatise-uploads.js`; the lazy move in `/reports/:id/file` stays as a last resort. Test: `test/coverage-gaps.test.js`.
 `routes/public.js:441-452` moves a members-only report into `_private` lazily on first access; until then `/uploads/reports/<file>` serves it to anyone. Spec: privatise rows with `access_level='member'` during migration and in the resource save hook (resources.js `reports`, `institutional_profile` afterSave: move file to `_private` when level = member, back when public).
 
-**SM-6 · Card lookup by card number / un-hyphenated code.**
+**SM-6 · Card lookup by card number / un-hyphenated code.** — **COVERED**: `routes/public-members.js` POST /verify matches the code as typed, the code without dashes, or `card_no` without dashes (input up to 40 chars, label "code or card number"). Test: `test/coverage-gaps.test.js`.
 PHP `normalizeCardLookupKey` (`card-verify-helpers.php:296-306`) and lookup `:569-575` accept `verification_code`, the code without dashes, or `card_no` without dashes. Node (`public-members.js:178`) matches `upper(verification_code)` exactly and requires ≥8 chars. Spec: `WHERE upper(verification_code)=$1 OR regexp_replace(upper(verification_code),'[^A-Z0-9]','','g')=$2 OR regexp_replace(upper(card_no),'[^A-Z0-9]','','g')=$2`; widen the input sanitiser to keep the raw then normalise.
 
-**SM-7 · Partner-desk QR codes lose the partner.**
+**SM-7 · Partner-desk QR codes lose the partner.** — **COVERED**: `legacy-urls.js` `verify.php` keeps `partner`, `partner_id`, `code`, `mode`. Test: `test/coverage-gaps.test.js`.
 `legacy-urls.js` `'verify.php': () => '/verify'` drops `?partner=CODE` / `?partner_id=` (PHP `verify.php:337-338`), although Node `/verify` supports both. Spec: `'verify.php': q => '/verify' + keep(q, ['partner', 'partner_id', 'code'])`. Test.
 
 **SM-8 · Membership certificate lacks KYM details.**

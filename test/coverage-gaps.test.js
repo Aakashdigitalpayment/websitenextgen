@@ -180,3 +180,23 @@ test('SM-5: report / institutional-profile files are private; migrated members-o
   assert.equal((await client().get('/uploads/reports/agm.pdf')).status, 404);
   assert.equal((await client().get('/reports/' + id + '/file')).status, 403, 'members only');
 });
+
+// ---------------------------------------------------------------- SM-6 / SM-7 card lookup and partner QR
+test('SM-6: card lookup by code without dashes or by card number; SM-7: verify.php keeps the partner', async () => {
+  const { m } = await seedMember('CL-0300', '9841600003', { kycName: 'Hari Prasad' });
+  await inA(() => db.query(`INSERT INTO member_id_cards (member_id, card_no, verification_code, cvv, issued_date, expiry_date, status)
+                            VALUES ($1, 'BAN-2026-00031', 'BAN-AB12-CD34', '5555', CURRENT_DATE, CURRENT_DATE + 365, 'active')`, [String(m.id)]));
+  const c = client();
+  let r = await c.form('/verify', { mode: 'code', code: 'banab12cd34', cvv: '5555' });
+  assert.match(r.text, /badge-ok/, 'code without dashes');
+  r = await c.form('/verify', { mode: 'code', code: 'BAN202600031', cvv: 'HAR0300' });
+  assert.match(r.text, /badge-ok/, 'card number without dashes + derived CVV');
+  r = await c.form('/verify', { mode: 'code', code: 'BAN-2026-00031', cvv: '5555' });
+  assert.match(r.text, /badge-ok/, 'card number as printed');
+  const legacy = require('../src/lib/legacy-urls');
+  assert.equal(legacy.PUBLIC['verify.php']({ partner: 'HOSP1' }), '/verify?partner=HOSP1');
+  assert.equal(legacy.PUBLIC['verify.php']({ partner_id: '7', x: 'y' }), '/verify?partner_id=7');
+  r = await client().get('/verify.php?partner=HOSP1');
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.location, '/verify?partner=HOSP1');
+});
