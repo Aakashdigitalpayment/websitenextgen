@@ -223,3 +223,36 @@ test('SM-8: membership certificate shows the linked KYM details, citizenship mas
   assert.doesNotMatch(r.text, /11-22-3334567/, 'citizenship number is masked');
   assert.match(r.text, /src="\/member\/kyc-print\/file\/photo"/);
 });
+
+// ---------------------------------------------------------------- SM-9 / SM-14 / B-14 attendance void + requests + audit
+test('SM-9: staff void only their own check-ins; SM-14: a check-in closes the pending request; void audit payload + IP', async () => {
+  const att = require('../src/lib/attendance');
+  const { m } = await seedMember('AT-0500', '9841600005');
+  const { m: m2 } = await seedMember('AT-0501', '9841600006');
+  const ids = await inA(async () => {
+    await db.query("INSERT INTO admin_users (username, password, full_name, role, is_active, status) VALUES ('staffcg1', $1, 'Staff One', 'staff', 1, 'active'), ('staffcg2', $1, 'Staff Two', 'staff', 1, 'active')", [require('bcryptjs').hashSync(PW, 4)]);
+    const s1 = await db.value("SELECT id FROM admin_users WHERE username = 'staffcg1'");
+    const s2 = await db.value("SELECT id FROM admin_users WHERE username = 'staffcg2'");
+    const pid = await db.value("INSERT INTO upcoming_programs (title, is_active) VALUES ('AGM', 1) RETURNING id");
+    const program = await db.one('SELECT * FROM upcoming_programs WHERE id = $1', [pid]);
+    await db.query("INSERT INTO member_program_attendance_requests (member_id, program_id, program_title, status, requested_at) VALUES ($1, $2, 'AGM', 'pending', now())", [m.id, pid]);
+    const a1 = (await att.record({ member: m, program, method: 'ADMIN_MANUAL', source: 'admin_desk', staffAdminId: s2 })).row;
+    const a2 = (await att.record({ member: m2, program, method: 'ADMIN_MANUAL', source: 'admin_desk', staffAdminId: s1 })).row;
+    return { s1, s2, pid, a1: a1.id, a2: a2.id };
+  });
+  assert.equal(await inA(() => db.value('SELECT status FROM member_program_attendance_requests WHERE member_id = $1', [m.id])), 'approved', 'pending request closed');
+  assert.equal(att.canVoid({ id: 1, role: 'admin' }, { staff_admin_id: 99 }), true);
+  assert.equal(att.canVoid({ id: ids.s1, role: 'staff' }, { staff_admin_id: ids.s2 }), false);
+  const c = client();
+  assert.equal((await c.form('/admin/login', { username: 'staffcg1', password: PW })).status, 302);
+  const page = await c.get('/admin/programs/' + ids.pid);
+  assert.equal(page.status, 200);
+  assert.ok(page.text.includes(`/attendance/${ids.a2}/void`) && !page.text.includes(`/attendance/${ids.a1}/void`), 'void button only on own records');
+  await c.form(`/admin/programs/${ids.pid}/attendance/${ids.a1}/void`, { reason: 'x' }, '/admin/programs/' + ids.pid);
+  assert.equal(await inA(() => db.value('SELECT attendance_status FROM member_program_attendance WHERE id = $1', [ids.a1])), 'VALID', 'other staff record not voided');
+  await c.form(`/admin/programs/${ids.pid}/attendance/${ids.a2}/void`, { reason: 'mistake' }, '/admin/programs/' + ids.pid);
+  assert.equal(await inA(() => db.value('SELECT attendance_status FROM member_program_attendance WHERE id = $1', [ids.a2])), 'VOID');
+  const log = await inA(() => db.one("SELECT payload_json, ip_address FROM program_audit_logs WHERE attendance_id = $1 AND action_type = 'void'", [ids.a2]));
+  assert.equal(JSON.parse(log.payload_json).attendance_method, 'ADMIN_MANUAL');
+  assert.ok(log.ip_address);
+});
