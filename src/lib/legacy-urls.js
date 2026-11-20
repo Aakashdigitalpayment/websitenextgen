@@ -7,12 +7,19 @@ const clean = v => String(v ?? '').trim();
 const token = v => clean(v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 200);
 const id = v => (/^\d{1,10}$/.test(clean(v)) ? clean(v) : '');
 const qs = (k, v) => (v ? `?${k}=${encodeURIComponent(v)}` : '');
+/** Carry the listed query parameters across (plain values only, 120 chars max). */
+const keep = (q, keys) => {
+  const p = new URLSearchParams();
+  for (const k of keys) { const v = clean(typeof q[k] === 'string' ? q[k] : '').slice(0, 120); if (v) p.set(k, v); }
+  const s = p.toString();
+  return s ? '?' + s : '';
+};
 
 /** Public PHP entry points (site root). q = parsed query. */
 const PUBLIC = {
   'index.php': () => '/',
   'about.php': () => '/about',
-  'why-choose.php': () => '/about',
+  'why-choose.php': () => '/about#why',
   'vision-mission.php': () => '/vision-mission',
   'chairman-message.php': () => '/message/chairman',
   'ceo-message.php': () => '/message/ceo',
@@ -21,22 +28,24 @@ const PUBLIC = {
   'digital-services.php': () => '/digital-services',
   'service-centers.php': () => '/service-centers',
   'partner-facilities.php': () => '/partner-facilities',
-  'team.php': () => '/team',
-  'committees.php': q => (id(q.id) ? '/committees/' + id(q.id) : '/committees'),
-  'awards.php': () => '/awards',
+  'team.php': q => '/team' + keep(q, ['menu', 'item', 'cmt', 'tenure']),
+  'committees.php': q => (id(q.id || q.type) ? '/committees/' + id(q.id || q.type) + keep(q, ['tenure', 'past']) : '/committees'),
+  'awards.php': q => (id(q.id) ? '/awards/' + id(q.id) : '/awards'),
   'success-stories.php': () => '/success-stories',
   'news.php': () => '/news',
   'news-detail.php': q => (id(q.id) ? '/news/' + id(q.id) : '/news'),
   'notices.php': q => (id(q.id) ? '/notices/' + id(q.id) : '/notices'),
-  'gallery.php': q => '/gallery' + (id(q.album) ? '?album=' + id(q.album) : ''),
+  'gallery.php': q => '/gallery' + keep(q, ['type', 'album', 'category', 'page']),
   'downloads.php': () => '/downloads',
-  'reports.php': () => '/reports',
-  'report-file.php': () => '/reports',
+  'reports.php': q => '/reports' + keep(q, ['type', 'year', 'month', 'id']),
+  'report-file.php': q => (id(q.id) ? '/reports/' + id(q.id) + '/file' + (clean(q.dl) === '1' ? '?dl=1' : '') : '/reports'),
   'institutional-profile.php': () => '/institutional-profile',
-  'institutional-profile-file.php': () => '/institutional-profile',
+  'institutional-profile-file.php': q => (id(q.id) ? '/institutional-profile/' + id(q.id) + '/file' : '/institutional-profile'),
+  'information-room-file.php': q => (id(q.id) ? '/member/information-room/' + id(q.id) : '/member/information-room'),
   'important-links.php': () => '/important-links',
   'faqs.php': () => '/faqs',
-  'page.php': q => (clean(q.slug) ? '/page/' + encodeURIComponent(clean(q.slug).slice(0, 120)) : '/'),
+  'page.php': q => (clean(q.slug) ? '/page/' + encodeURIComponent(clean(q.slug).slice(0, 120)) : id(q.id) ? '/page/by-id/' + id(q.id) : '/'),
+  'search.php': q => '/search' + qs('q', clean(q.q).slice(0, 80)),
   'career.php': () => '/careers',
   'career-detail.php': q => (id(q.id) ? '/careers/' + id(q.id) : '/careers'),
   'auction.php': () => '/auctions',
@@ -71,6 +80,7 @@ const PUBLIC = {
   'sitemap.php': () => '/sitemap.xml',
   'robots.php': () => '/robots.txt',
   'manifest.php': () => '/manifest.webmanifest',
+  'manifest.json': () => '/manifest.webmanifest',
 };
 
 /** member/*.php entry points. */
@@ -109,13 +119,25 @@ const MEMBER = {
 
 function target(map, req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return null;
-  const m = /^\/([a-z0-9_-]+\.php)$/i.exec(req.path);
+  const m = /^\/([a-z0-9_-]+\.php|manifest\.json)$/i.exec(req.path);
   const fn = m && Object.hasOwn(map, m[1].toLowerCase()) ? map[m[1].toLowerCase()] : null;
   return fn ? fn(req.query || {}) : null;
 }
 
 /** Middleware for the site root (mounted on '/') and for the member portal (mounted on '/member'). */
 const publicRedirects = (req, res, next) => { const to = target(PUBLIC, req); return to ? res.redirect(301, to) : next(); };
+/**
+ * PHP's .htaccess also served every page without ".php" (/news-detail?id=5, /career, /sahakari-patro …).
+ * Mounted at the END of the public router, so it only sees paths no Node route answered.
+ */
+const extensionlessRedirects = (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const m = /^\/([a-z0-9_-]+)\/?$/i.exec(req.path);
+  const key = m && m[1].toLowerCase() + '.php';
+  if (!key || !Object.hasOwn(PUBLIC, key)) return next();
+  const to = PUBLIC[key](req.query || {});
+  return to && to.split(/[?#]/)[0] !== req.path ? res.redirect(301, to) : next();
+};
 const memberRedirects = (req, res, next) => { const to = target(MEMBER, req); return to ? res.redirect(301, to) : next(); };
 
-module.exports = { publicRedirects, memberRedirects, PUBLIC, MEMBER };
+module.exports = { publicRedirects, memberRedirects, extensionlessRedirects, PUBLIC, MEMBER };

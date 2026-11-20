@@ -322,6 +322,12 @@ router.get('/faqs', ah(async (req, res) => {
   res.render('public/faqs', { title: res.locals.t('बारम्बार सोधिने प्रश्नहरू', 'Frequently asked questions'), faqs });
 }));
 
+// legacy page.php?id= links
+router.get('/page/by-id/:id', ah(async (req, res, next) => {
+  const slug = await db.value(`SELECT slug FROM pages WHERE id = $1 AND ${ACTIVE}`, [util.int(req.params.id)]);
+  return slug ? res.redirect(301, '/page/' + encodeURIComponent(slug)) : next();
+}));
+
 router.get('/page/:slug', ah(async (req, res, next) => {
   const page = await db.one(`SELECT * FROM pages WHERE slug = $1 AND ${ACTIVE}`, [req.params.slug]);
   if (!page) return next();
@@ -811,5 +817,8 @@ router.get('/sitemap.xml', ah(async (req, res) => {
   const urls = [...staticPaths, ...news.map(n => '/news/' + n.id), ...notices.map(n => '/notices/' + n.id), ...pages.map(p => '/page/' + encodeURIComponent(p.slug))];
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(u => `<url><loc>${util.escapeHtml(base + u)}</loc></url>`).join('')}</urlset>`);
 }));
+
+// PHP pages served without ".php" (/career, /news-detail?id=5 …) — only for paths no route above answered
+router.use(require('../lib/legacy-urls').extensionlessRedirects);
 
 module.exports = router;

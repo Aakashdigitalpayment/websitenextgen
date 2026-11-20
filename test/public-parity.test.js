@@ -76,3 +76,33 @@ test('BS dates typed into DATE columns: display as BS, compare as AD, normalise'
   const ad = await inA(() => db.value("SELECT deadline FROM careers WHERE title = 'Soon BS job'"));
   assert.equal(ad, nd.bsToAd(futureBs));
 });
+
+// ---------------------------------------------------------------- P1-7 legacy URLs
+test('legacy PHP URLs keep their ids and filters; extensionless PHP paths redirect', async () => {
+  const pageId = await inA(() => db.value("INSERT INTO pages (slug, title, content, is_active) VALUES ('old-page', 'Old page', 'x', 1) RETURNING id"));
+  const cases = [
+    ['/report-file.php?id=7&dl=1', '/reports/7/file?dl=1'],
+    ['/institutional-profile-file.php?id=3', '/institutional-profile/3/file'],
+    ['/information-room-file.php?id=4', '/member/information-room/4'],
+    ['/page.php?id=' + pageId, '/page/by-id/' + pageId],
+    ['/reports.php?type=monthly&year=2081/82&id=5', '/reports?type=monthly&year=2081%2F82&id=5'],
+    ['/awards.php?id=2', '/awards/2'],
+    ['/committees.php?type=3&tenure=9', '/committees/3?tenure=9'],
+    ['/gallery.php?type=video&page=2', '/gallery?type=video&page=2'],
+    ['/why-choose.php', '/about#why'],
+    ['/manifest.json', '/manifest.webmanifest'],
+    ['/news-detail?id=5', '/news/5'],
+    ['/career', '/careers'],
+    ['/sahakari-patro', '/calendar'],
+    ['/election-information', '/elections'],
+  ];
+  for (const [from, to] of cases) {
+    const r = await get(from);
+    assert.equal(r.status, 301, from);
+    assert.equal(r.headers.location, to, from);
+  }
+  let r = await get('/page/by-id/' + pageId);
+  assert.equal(r.headers.location, '/page/old-page');
+  r = await get('/contact');
+  assert.equal(r.status, 200, 'existing Node routes are not redirected');
+});
