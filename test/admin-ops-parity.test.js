@@ -232,3 +232,47 @@ test('inbox: status cards, module filters (whitelisted), job buckets and appoint
   assert.equal(csv.status, 200);
   assert.doesNotMatch(csv.text, /Org Visit/);
 });
+
+// ---------------------------------------------------------------- b-4 notify outcome / b-5 welfare paid stage
+async function waitFor(fn, ms = 4000) {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = await fn();
+    if (v || Date.now() > end) return v;
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
+
+test('status history records the per-channel notification outcome; quick status notifies when the setting is on', async () => {
+  const id = await inA(() => db.value(`INSERT INTO member_welfare_claims (tracking_id, member_name, phone, email, claim_type, claim_amount, status)
+                                       VALUES ('WF-1', 'Ram', '9841000001', 'ram@example.com', 'death', 5000, 'pending') RETURNING id`));
+  let r = await admin.form(`/admin/inbox/welfare/${id}/status`, { status: 'under_review', comment: 'checking', notify: '1' }, `/admin/inbox/welfare/${id}`);
+  assert.equal(r.status, 302);
+  const h = await waitFor(() => inA(() => db.one("SELECT * FROM request_status_history WHERE module = 'welfare' AND request_id = $1 AND new_status = 'under_review' AND notify_sms_status <> 'not_attempted'", [id])));
+  assert.ok(h, 'outcome written');
+  assert.equal(Number(h.admin_chose_to_notify), 1);
+  assert.equal(h.notify_sms_status, 'skipped'); // SMS is switched off in a new tenant
+  assert.equal(h.notify_sms_reason, 'sms disabled');
+  assert.equal(h.notify_email_status, 'skipped');
+  assert.equal(Number(h.notify_sent), 0);
+  const page = await admin.get(`/admin/inbox/welfare/${id}`);
+  assert.match(page.text, /title="9841000001 — sms disabled"/);
+
+  // paid stage stamps paid_at once
+  r = await admin.form(`/admin/inbox/welfare/${id}/status`, { status: 'paid', approved_amount: '4500' }, `/admin/inbox/welfare/${id}`);
+  assert.equal(r.status, 302);
+  const claim = await inA(() => db.one('SELECT * FROM member_welfare_claims WHERE id = $1', [id]));
+  assert.equal(claim.status, 'paid');
+  assert.ok(claim.paid_at);
+  assert.equal(claim.approved_amount, 4500);
+
+  // quick status from the list: no notification unless inbox_quick_status_notify = 1
+  await admin.form(`/admin/inbox/welfare/${id}/status`, { status: 'completed', quick: '1' }, '/admin/inbox/welfare');
+  assert.equal(await inA(() => db.value("SELECT admin_chose_to_notify FROM request_status_history WHERE module = 'welfare' AND request_id = $1 AND new_status = 'completed'", [id])), 0);
+  await inA(() => db.query("UPDATE site_settings SET setting_value = '1' WHERE setting_key = 'inbox_quick_status_notify'"));
+  await inA(async () => require('../src/lib/settings').invalidate());
+  await admin.form(`/admin/inbox/welfare/${id}/status`, { status: 'approved', quick: '1' }, '/admin/inbox/welfare');
+  assert.equal(await inA(() => db.value("SELECT admin_chose_to_notify FROM request_status_history WHERE module = 'welfare' AND request_id = $1 AND new_status = 'approved'", [id])), 1);
+  await inA(() => db.query("UPDATE site_settings SET setting_value = '0' WHERE setting_key = 'inbox_quick_status_notify'"));
+  await inA(async () => require('../src/lib/settings').invalidate());
+});

@@ -57,7 +57,7 @@
       <% if (statuses.length && !canMutate) { %><td><span class="badge <%= row.status === 'pending' ? 'badge-warn' : /accepted/.test(row.status) ? 'badge-ok' : /rejected/.test(row.status) ? 'badge-bad' : 'badge-info' %>"><%= statusLabel(row.status) %></span></td><% } else if (statuses.length) { %><td>
         <form method="post" action="/admin/inbox/<%= m.key %>/<%= row.id %>/status" class="quick-status">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="quick" value="1"><input type="hidden" name="_back" value="<%= here %>">
-          <select class="select select-sm badge-select <%= row.status === 'pending' ? 'badge-warn' : /approved|completed|resolved|selected|confirmed|disbursed|accepted/.test(row.status) ? 'badge-ok' : /rejected|cancelled/.test(row.status) ? 'badge-bad' : 'badge-info' %>" name="status" data-autosubmit aria-label="<%= t('स्थिति', 'Status') %>">
+          <select class="select select-sm badge-select <%= row.status === 'pending' ? 'badge-warn' : /approved|completed|resolved|selected|confirmed|disbursed|accepted|paid/.test(row.status) ? 'badge-ok' : /rejected|cancelled/.test(row.status) ? 'badge-bad' : 'badge-info' %>" name="status" data-autosubmit aria-label="<%= t('स्थिति', 'Status') %>">
             <% statuses.forEach(s => { if (m.key === 'membership' && s === 'approved' && row.status !== 'approved') return; %><option value="<%= s %>" <%= row.status === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %>
           </select>
           <noscript><button class="btn btn-ghost btn-sm">✓</button></noscript>

@@ -35,6 +35,8 @@ function getModule(req, res, next) {
   req.mod = m;
   next();
 }
+/** Setting inbox_quick_status_notify: quick/bulk status changes also SMS/email the applicant (legacy loan-applications.php). */
+const quickNotify = async () => (await settings.all()).inbox_quick_status_notify === '1';
 const canMutate = (req, m) => !m.mutateRole || auth.roleLevel(req.admin.role) >= auth.roleLevel(m.mutateRole);
 
 /** KYM <-> member link state for the rows on a page (legacy memberSsotLinkStatusLabel). */
@@ -161,7 +163,7 @@ router.post('/inbox/:module/bulk', getModule, ah(async (req, res) => {
     for (const id of ids) {
       const row = await db.one(`SELECT * FROM ${m.table} WHERE id = $1`, [id]);
       if (!row || row.status === status) continue;
-      const r = await changeStatus(req, m, row, { status, comment: '', notifyApplicant: false });
+      const r = await changeStatus(req, m, row, { status, comment: '', notifyApplicant: await quickNotify() });
       if (!r.error) done++;
     }
   } else return res.redirect(to);
@@ -232,7 +234,7 @@ async function bidSideEffects(req, row, status) {
   }
 }
 
-async function changeStatus(req, m, row, { status, comment = '', note, attachment, notifyApplicant = false, risk, memberId, approvedAmount } = {}) {
+async function changeStatus(req, m, row, { status, comment = '', note, attachment, notifyApplicant = false, risk, memberId, approvedAmount, awaitNotify = false } = {}) {
   const statuses = await forms.statusesFor(m.table);
   const cols = await db.columns(m.table);
   const data = {};
@@ -245,6 +247,7 @@ async function changeStatus(req, m, row, { status, comment = '', note, attachmen
   if (cols.has('updated_at')) data.updated_at = new Date();
   if (m.key === 'grievance' && status === 'resolved') data.resolved_at = new Date();
   if (m.key === 'welfare' && approvedAmount) data.approved_amount = Number(nd.toLatinDigits(approvedAmount).replace(/,/g, '')) || null;
+  if (m.key === 'welfare' && data.status === 'paid' && row.status !== 'paid' && cols.has('paid_at')) data.paid_at = new Date(); // welfare-claims.php payment stamp
   if (m.key === 'membership' && data.status === 'approved' && row.status !== 'approved') delete data.status; // needs a Member ID: approve form
   if (m.key === 'kyc') {
     if (memberId !== undefined) {
@@ -257,16 +260,17 @@ async function changeStatus(req, m, row, { status, comment = '', note, attachmen
     }
     if (kym.REVIEW_YEARS[risk]) data.risk_category = risk;
   }
-  await db.transaction(async () => {
+  const historyId = await db.transaction(async () => {
     await db.update(m.table, row.id, await db.pick(m.table, data));
-    await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, now(), 0, 0)`, [m.key, row.id, row.status || null, data.status || row.status || null, comment || null, req.admin.id, req.admin.full_name || req.admin.username]);
+    const hid = await db.value(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, now(), 0, 0) RETURNING id`, [m.key, row.id, row.status || null, data.status || row.status || null, comment || null, req.admin.id, req.admin.full_name || req.admin.username]);
     if (m.key === 'bid') await bidSideEffects(req, row, data.status);
     const memberKey = (m.memberCol && row[m.memberCol]) || row[m.phoneCol];
     if (memberKey) {
       const member = await db.one('SELECT id FROM members WHERE deleted_at IS NULL AND (sadasyata_number = $1 OR member_card_no = $1 OR phone = $1) LIMIT 1', [String(memberKey)]);
       if (member) await notify.notifyMember(member.id, m.title[0] + ': ' + forms.statusLabel(data.status || row.status), comment || null, row.tracking_id ? '/track?id=' + encodeURIComponent(row.tracking_id) : null, 'status');
     }
+    return hid;
   });
   const out = {};
   if (m.key === 'kyc') {
@@ -279,8 +283,11 @@ async function changeStatus(req, m, row, { status, comment = '', note, attachmen
     notify.later(() => require('../lib/webhooks').emit('application.status_changed', { type: m.key, id: row.id, tracking_id: row.tracking_id || null, status: data.status, previous_status: row.status || null, remarks: comment || null, changed_by: req.admin.username }));
   }
   if (notifyApplicant && data.status && data.status !== row.status && row.tracking_id) {
-    notify.later(() => notify.applicationEvent('status_changed', { name: row[m.nameCol], tracking_id: row.tracking_id, module: m.title[0], status: forms.statusLabel(data.status), remarks: comment }, { phone: row[m.phoneCol], email: row.email }, m));
-    await db.query('UPDATE request_status_history SET admin_chose_to_notify = 1, notify_sent = 1 WHERE id = (SELECT max(id) FROM request_status_history WHERE module = $1 AND request_id = $2)', [m.key, row.id]);
+    // per-channel outcome (sent / failed / skipped) is written back to this history row once the messages went out
+    await db.query('UPDATE request_status_history SET admin_chose_to_notify = 1 WHERE id = $1', [historyId]);
+    const event = () => notify.applicationEvent('status_changed', { name: row[m.nameCol], tracking_id: row.tracking_id, module: m.title[0], status: forms.statusLabel(data.status), remarks: comment }, { phone: row[m.phoneCol], email: row.email || row.bidder_email }, m);
+    if (awaitNotify) await notify.recordOutcome(historyId, await event());
+    else notify.later(async () => notify.recordOutcome(historyId, await event()));
   }
   // an approved vendor is also listed as a partner facility (legacy vendor-enlistment.php) — single and bulk approvals
   if (m.key === 'vendor' && data.status === 'approved' && row.status !== 'approved') {
@@ -311,7 +318,7 @@ router.post('/inbox/:module/:id/status', getModule, statusUpload, ah(async (req,
     comment: quick ? '' : comment,
     note: quick || req.body.admin_note === undefined ? undefined : String(req.body.admin_note).trim().slice(0, 5000),
     attachment: req.uploaded?.admin_attachment,
-    notifyApplicant: req.body.notify === '1',
+    notifyApplicant: req.body.notify === '1' || (quick && await quickNotify()),
     risk: req.body.risk_category,
     memberId: m.key === 'kyc' && !quick && req.body.member_id !== undefined ? req.body.member_id : undefined,
     approvedAmount: req.body.approved_amount,
@@ -409,7 +416,7 @@ router.post('/inbox/membership/:id/approve', requireAdmin('staff'), ah(async (re
   if (await kym.findMemberBySadasyata(sid)) { flash(req, 'error', res.locals.t('यो Member ID पहिले नै सदस्य सूचीमा छ। अर्को नम्बर हाल्नुहोस्।', 'That Member ID is already on the members list. Use another number.')); return res.redirect(to); }
   const email = app.email && util.isEmail(app.email) ? app.email.toLowerCase() : null;
   const cardNo = `M-${new Date().getFullYear()}-${String(require('crypto').randomInt(1, 100000)).padStart(5, '0')}`;
-  let memberPk;
+  let memberPk, historyId;
   try {
     memberPk = await db.transaction(async () => {
       const mem = await db.one(`INSERT INTO members (name, email, phone, sadasyata_number, password_hash, member_card_no, address, approval_status, is_active, created_at, updated_at, created_by)
@@ -417,8 +424,8 @@ router.post('/inbox/membership/:id/approve', requireAdmin('staff'), ah(async (re
         [app.full_name || 'Member ' + sid, email, kym.normalizeMobile(app.mobile) || null, sid, cardNo, app.address || null, req.admin.id]);
       await db.query(`UPDATE membership_applications SET status = 'approved', assigned_sadasyata = $1, member_pk = $2, admin_remarks = COALESCE($3, admin_remarks), reviewed_by = $4, reviewed_at = now(), updated_at = now() WHERE id = $5`,
         [sid, mem.id, remarks || null, req.admin.id, app.id]);
-      await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
-                      VALUES ('membership', $1, $2, 'approved', $3, $4, $5, now(), 0, 0)`, [app.id, app.status, `Member ID ${sid}` + (remarks ? ' — ' + remarks : ''), req.admin.id, req.admin.full_name || req.admin.username]);
+      historyId = await db.value(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, actor_admin_id, actor_name, created_at, notify_sent, admin_chose_to_notify)
+                      VALUES ('membership', $1, $2, 'approved', $3, $4, $5, now(), 0, 0) RETURNING id`, [app.id, app.status, `Member ID ${sid}` + (remarks ? ' — ' + remarks : ''), req.admin.id, req.admin.full_name || req.admin.username]);
       return mem.id;
     });
   } catch (e) {
@@ -428,7 +435,8 @@ router.post('/inbox/membership/:id/approve', requireAdmin('staff'), ah(async (re
   }
   await auth.audit(req, 'approve', 'membership_applications', app.id, `Approved with Member ID ${sid} → member #${memberPk}`);
   if (req.body.notify === '1' && app.tracking_id) {
-    notify.later(() => notify.applicationEvent('status_changed', { name: app.full_name, tracking_id: app.tracking_id, module: modules.membership.title[0], status: forms.statusLabel('approved') + ' — Member ID ' + sid, remarks }, { phone: app.mobile, email: app.email }, modules.membership));
+    await db.query('UPDATE request_status_history SET admin_chose_to_notify = 1 WHERE id = $1', [historyId]);
+    notify.later(async () => notify.recordOutcome(historyId, await notify.applicationEvent('status_changed', { name: app.full_name, tracking_id: app.tracking_id, module: modules.membership.title[0], status: forms.statusLabel('approved') + ' — Member ID ' + sid, remarks }, { phone: app.mobile, email: app.email }, modules.membership)));
   }
   flash(req, 'success', res.locals.t(`स्वीकृत। Member ID ${sid} — सदस्य stub बन्यो। अब अनलाइन केवाइएम भर्न सकिन्छ।`, `Approved. Member ID ${sid} — member stub created; the applicant can now fill in the online KYM.`));
   res.redirect(to);

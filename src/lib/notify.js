@@ -222,22 +222,43 @@ async function adminEvent(mod, vars, generic = 'submitted') {
   } catch (e) { console.error('notify admin:', e.message); }
 }
 
+/** sendSms/sendEmail result → per-channel outcome for request_status_history (legacy logRequestStatusHistory). */
+const outcome = (r, to) => (!r ? { status: 'not_attempted', reason: null, to: to || null }
+  : r.ok ? { status: 'sent', reason: null, to: to || null }
+    : r.skipped ? { status: 'skipped', reason: String(r.skipped).slice(0, 180), to: to || null }
+      : { status: 'failed', reason: String(r.error || 'failed').slice(0, 180), to: to || null });
+
 /**
  * Fire an application event. vars: name, tracking_id, module, status, remarks, amount, date, details.
  * contact: { phone, email }. mod: the application module (per-module templates). Runs detached (call without await).
+ * Returns { sms: {status, reason, to}, email: {…} } — status sent / failed / skipped / not_attempted.
  */
 async function applicationEvent(event, vars, contact = {}, mod = null) {
+  const out = { sms: outcome(null), email: outcome(null) };
   try {
     const s = await settings.all();
     const v = templateVars(s, vars);
     const own = event === 'status_changed' ? mod?.memberEvent : null;
     const memberAllowed = ch => event !== 'status_changed' || s['notify_member_' + ch] !== '0';
     const sms = memberAllowed('sms') && contact.phone ? await moduleTemplate(own, event, 'member', 'sms') : null;
-    if (sms) await sendSms(event, contact.phone, render(sms.body, v));
+    if (sms) out.sms = outcome(await sendSms(event, contact.phone, render(sms.body, v)), normalizePhone(contact.phone));
+    else if (contact.phone) out.sms.reason = memberAllowed('sms') ? 'no template' : 'turned off';
     const mail = memberAllowed('email') && contact.email ? await moduleTemplate(own, event, 'member', 'email') : null;
-    if (mail) await sendEmail(event, contact.email, render(mail.subject, v), render(mail.body, v));
+    if (mail) out.email = outcome(await sendEmail(event, contact.email, render(mail.subject, v), render(mail.body, v)), String(contact.email).slice(0, 180));
+    else if (contact.email) out.email.reason = memberAllowed('email') ? 'no template' : 'turned off';
+    if (!contact.phone) out.sms.reason = 'no phone';
+    if (!contact.email) out.email.reason = 'no email';
     if (event === 'submitted') await adminEvent(mod || {}, vars, 'submitted');
   } catch (e) { console.error('notify:', e.message); }
+  return out;
+}
+
+/** Store a status-change notification outcome on its request_status_history row. */
+async function recordOutcome(historyId, out) {
+  if (!historyId || !out) return;
+  await db.query(`UPDATE request_status_history SET admin_chose_to_notify = 1, notify_sent = $2,
+                    notify_email_status = $3, notify_email_reason = $4, notify_email_to = $5, notify_sms_status = $6, notify_sms_reason = $7, notify_sms_to = $8 WHERE id = $1`,
+  [historyId, out.sms.status === 'sent' || out.email.status === 'sent' ? 1 : 0, out.email.status, out.email.reason, out.email.to, out.sms.status, out.sms.reason, out.sms.to && String(out.sms.to).slice(0, 40)]);
 }
 
 /** Run fn after the response without losing the tenant schema context. */
@@ -247,4 +268,4 @@ function later(fn) {
   setImmediate(() => db.withSchema(schema, () => Promise.resolve().then(fn).catch(e => console.error('later:', e.message))));
 }
 
-module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, adminEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };
+module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, recordOutcome, adminEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };
