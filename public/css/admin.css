@@ -117,3 +117,12 @@ body.panel { background: var(--bg); }
 .list-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .toolbar .select { width: auto; }
 .cred-logo { vertical-align: -2px; border-radius: 3px; }
+/* ---- header bell (pending items) ---- */
+.bell { position: relative; }
+.bell > summary { list-style: none; position: relative; }
+.bell > summary::-webkit-details-marker { display: none; }
+.bell .count { position: absolute; top: -2px; right: -4px; background: var(--warn); color: #fff; font-size: .66rem; line-height: 1; padding: 3px 5px; border-radius: 999px; font-weight: 500; }
+.bell-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 260px; max-height: 70vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px; z-index: 60; }
+.bell-menu a { display: flex; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 8px; color: var(--text); font-size: .88rem; }
+.bell-menu a:hover { background: var(--surface-2); text-decoration: none; }
+.bell-menu a small { margin-left: auto; color: var(--warn); font-weight: 500; }
