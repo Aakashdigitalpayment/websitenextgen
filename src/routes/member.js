@@ -10,8 +10,11 @@ const push = require('../lib/push');
 const att = require('../lib/attendance');
 const google = require('../lib/google-oauth');
 const QRCode = require('qrcode');
+const portal = require('../lib/member-portal');
 
 const router = express.Router();
+const PENDING = ['pending', 'under_review', 'processing', 'in_progress', 'reviewed', 'shortlisted', 'interviewed'];
+const DONE = ['approved', 'completed', 'resolved', 'accepted', 'selected', 'confirmed', 'disbursed', 'paid', 'closed'];
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 router.use(require('../lib/legacy-urls').memberRedirects); // old member/*.php links and QR codes
@@ -61,6 +64,7 @@ router.get('/oauth/google/callback', ah(async (req, res) => {
     const taken = await db.value('SELECT 1 FROM members WHERE google_id = $1 AND id <> $2', [info.sub, req.member.id]);
     if (taken) return fail(res.locals.t('यो Google खाता अर्को सदस्यसँग जोडिएको छ।', 'This Google account is linked to another member.'));
     await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, req.member.id]);
+    if (/^https:\/\/[^\s"<>]{8,500}$/.test(info.picture || '')) await db.query("UPDATE members SET avatar_url = $1 WHERE id = $2 AND COALESCE(avatar_url, '') = ''", [info.picture, req.member.id]); // OAuth picture when there is no avatar yet
     await auth.audit(req, 'google_link', 'members', req.member.id, 'Google account linked');
     flash(req, 'success', res.locals.t('Google खाता जोडियो।', 'Google account linked.'));
     return res.redirect('/member/profile');
@@ -75,6 +79,7 @@ router.get('/oauth/google/callback', ah(async (req, res) => {
     if (byEmail.length === 1 && Number(byEmail[0].twofa_enabled)) { m = byEmail[0]; linkNow = true; }
   }
   if (!m) return fail(res.locals.t('यो Google खातासँग कुनै सदस्य जोडिएको छैन। मोबाइल/पासवर्डले लगइन गरेर प्रोफाइलबाट जोड्नुहोस्।', 'No member is linked to this Google account. Sign in with your mobile and password, then link it from your profile.'));
+  await require('../lib/member-portal').checkCardExpiry(m);
   const gate = require('../lib/member-portal').eligibilityError(m, res.locals.t);
   if (gate) return fail(gate);
   if (linkNow) await db.query('UPDATE members SET google_id = $1 WHERE id = $2', [info.sub, m.id]);
@@ -101,19 +106,22 @@ router.use(require('./member-self')); // profile details / KYC documents / 2FA /
 
 /** All submissions that belong to this member (matched by member number or phone). */
 async function myRequests(member) {
-  const keys = [member.sadasyata_number, member.member_card_no].filter(Boolean);
+  const keys = [member.sadasyata_number, member.member_card_no].filter(Boolean).flatMap(portal.idVariants);
   const out = [];
   for (const m of Object.values(modules)) {
     if (m.key === 'contact') continue;
     const cols = await db.columns(m.table);
     const conds = [], params = [];
-    if (member.phone && cols.has(m.phoneCol)) { params.push(member.phone); conds.push(`${m.phoneCol} = $${params.length}`); }
+    const phone = portal.normalizeMobile(member.phone);
+    const phoneOk = phone.length >= 10 && cols.has(m.phoneCol);
+    if (phoneOk) { params.push(phone.slice(-10)); conds.push(`${portal.phoneDigitsSql(m.phoneCol)} = $${params.length}`); }
     // member numbers typed into public forms are not verified — only match them together with the member's phone
-    if (m.memberCol && cols.has(m.memberCol) && keys.length && member.phone && cols.has(m.phoneCol)) {
-      params.push(keys); params.push(member.phone);
-      conds.push(`(${m.memberCol} = ANY($${params.length - 1}) AND ${m.phoneCol} = $${params.length})`);
+    if (m.memberCol && cols.has(m.memberCol) && keys.length && phoneOk) {
+      params.push(keys); params.push(phone.slice(-10));
+      conds.push(`(upper(trim(${m.memberCol})) = ANY($${params.length - 1}) AND ${portal.phoneDigitsSql(m.phoneCol)} = $${params.length})`);
     }
-    if (m.key === 'honor') { params.push(member.id); conds.push(`member_portal_id = $${params.length}`); }
+    // filed while signed in: stays linked when the phone changes later
+    if (cols.has('member_portal_id')) { params.push(member.id); conds.push(`member_portal_id = $${params.length}`); }
     if (!conds.length) continue;
     const rows = await db.many(`SELECT * FROM ${m.table} WHERE (${conds.join(' OR ')}) ${cols.has('deleted_at') ? 'AND deleted_at IS NULL' : ''} ORDER BY created_at DESC LIMIT 20`, params);
     rows.forEach(row => out.push({ mod: m, row }));
@@ -151,11 +159,59 @@ router.get('/', ah(async (req, res) => {
     summary.set(key, s);
   }
   const partnerSummary = [...summary.values()].sort((a, b) => b.total - a.total);
-  res.render('member/dashboard', { title: res.locals.t('मेरो खाता', 'My account'), requests: requests.slice(0, 10), notes, card, elections, partnerHistory, partnerSummary });
+  // member/index.php: counters, quick-apply grid (honour only while open), digital services strip
+  const counts = { pending: requests.filter(r => PENDING.includes(String(r.row.status || 'pending'))).length, approved: requests.filter(r => DONE.includes(String(r.row.status))).length };
+  const honorOpen = (await require('../lib/forms').optionSources.honorPrograms()).length > 0;
+  const quick = [...['appointment', 'kyc', 'loan', 'account', 'digital', 'grievance', 'welfare'].map(k => modules[k]).filter(Boolean), ...(honorOpen ? [modules.honor] : [])]
+    .map(m => ({ href: '/apply/' + m.key, icon: m.icon, label: m.title }));
+  quick.push({ href: '/member/service-request', icon: 'message', label: ['सेवा अनुरोध', 'Service request'] }, { href: '/member/marketplace', icon: 'store', label: ['सदस्य बजार', 'Marketplace'] },
+    { href: '/careers', icon: 'briefcase', label: ['रोजगारी', 'Careers'] }, { href: '/emi-calculator', icon: 'calculator', label: ['EMI क्याल्कुलेटर', 'EMI calculator'] });
+  const s = res.locals.settings || {};
+  const okUrl = u => /^https:\/\/[^\s<>"]+$/i.test(String(u || '').trim());
+  const digital = [['internet_banking_url', ['इन्टरनेट बैंकिङ', 'Internet banking'], 'globe'], ['web_login_url', ['वेब लगइन', 'Web login'], 'link'], ['app_store_url', ['iOS एप', 'iOS app'], 'phone'], ['play_store_url', ['एन्ड्रोइड एप', 'Android app'], 'phone']]
+    .filter(([k]) => okUrl(s[k])).map(([k, label, icon]) => ({ href: String(s[k]).trim(), label, icon }));
+  res.render('member/dashboard', { title: res.locals.t('मेरो खाता', 'My account'), requests: requests.slice(0, 10), notes, card, elections, partnerHistory, partnerSummary, counts, quick, digital });
 }));
 
+/** member/tracker.php filters: type, status group, free text over service / tracking number / status. */
+function filterRequests(list, q, lang) {
+  const type = Object.hasOwn(modules, String(q.type || '')) ? String(q.type) : '';
+  const status = ['pending', 'approved', 'rejected'].includes(q.status) ? q.status : '';
+  const text = String(q.q || '').trim().toLowerCase().slice(0, 80);
+  return list.filter(({ mod, row }) => {
+    if (type && mod.key !== type) return false;
+    const s = String(row.status || 'pending');
+    if (status === 'pending' && !PENDING.includes(s)) return false;
+    if (status === 'approved' && !DONE.includes(s)) return false;
+    if (status === 'rejected' && !['rejected', 'cancelled'].includes(s)) return false;
+    if (text) {
+      const hay = [mod.title[0], mod.title[1], row.tracking_id, s, require('../lib/forms').statusLabel(s, lang), row[mod.nameCol]].join(' ').toLowerCase();
+      if (!hay.includes(text)) return false;
+    }
+    return true;
+  });
+}
+
 router.get('/requests', ah(async (req, res) => {
-  res.render('member/requests', { title: res.locals.t('मेरा आवेदन', 'My applications'), requests: await myRequests(req.member) });
+  const all = await myRequests(req.member);
+  const types = [...new Map(all.map(r => [r.mod.key, r.mod])).values()];
+  res.render('member/requests', { title: res.locals.t('मेरा आवेदन', 'My applications'), requests: filterRequests(all, req.query, req.lang), total: all.length, types, filter: { type: String(req.query.type || ''), status: String(req.query.status || ''), q: String(req.query.q || '').slice(0, 80) } });
+}));
+
+/** One application in full (member/tracker.php detail): every non-internal field, stages, status history, office reply. */
+router.get('/requests/:module/:id', ah(async (req, res, next) => {
+  const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
+  if (!m) return next();
+  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  if (!mine) return next();
+  const forms = require('../lib/forms'), submissions = require('../lib/submissions');
+  const options = await forms.resolveOptions(m);
+  const history = await db.many('SELECT * FROM request_status_history WHERE module = $1 AND request_id = $2 ORDER BY created_at', [m.key, mine.row.id]);
+  res.render('member/request-detail', {
+    title: res.locals.t(...m.title), mod: m, row: mine.row, options, history, display: forms.displayData(m, mine.row),
+    steps: m.noStatus ? [] : submissions.stages(m, mine.row.status), details: await submissions.publicDetails(m, mine.row, options, req.lang),
+    label: (f, v) => submissions.optionLabel(f, options, v, req.lang),
+  });
 }));
 
 /** Office reply attachment on one of the member's own applications. */
@@ -167,10 +223,72 @@ router.get('/requests/:module/:id/attachment', ah(async (req, res, next) => {
   require('../lib/uploads').sendStored(req, res, next, mine.row[m.attachCol]);
 }));
 
+// ---------------------------------------------------------------- service request (member/service-request.php): one form → appointment or grievance
+const SERVICE_TYPES = {
+  appointment: { label: ['भेटघाट — सेवा कार्यालय भ्रमण / भेट माग्ने', 'Appointment — visit the service office'], purpose: 'other' },
+  loan_inquiry: { label: ['ऋण जानकारी — कर्जा सम्बन्धी सोधपुछ', 'Loan inquiry — ask about loans'], purpose: 'loan_inquiry' },
+  account_info: { label: ['खाता जानकारी — बचत खाता सम्बन्धी', 'Account info — savings account'], purpose: 'account_inquiry' },
+  welfare_inquiry: { label: ['कल्याण सोधपुछ — सुविधा जानकारी', 'Welfare inquiry — benefit information'], purpose: 'other' },
+  document_request: { label: ['कागजात माग — NOC, Statement आदि', 'Document request — NOC, statement etc.'], purpose: 'other' },
+  grievance: { label: ['गुनासो — समस्या दर्ता गर्ने', 'Grievance — register a problem'], grievance: true },
+  general: { label: ['सामान्य सोधपुछ', 'General inquiry'], purpose: 'other' },
+};
+async function renderServiceRequest(req, res, values = {}, error = null, status = 200) {
+  const forms = require('../lib/forms');
+  const [times, branches] = await Promise.all([forms.optionSources.officeTimes(), forms.optionSources.branches()]);
+  res.status(status).render('member/service-request', { title: res.locals.t('सेवा अनुरोध', 'Service request'), types: SERVICE_TYPES, times, branches, values, error });
+}
+router.get('/service-request', ah((req, res) => renderServiceRequest(req, res, { service_type: String(req.query.type || '') })));
+router.post('/service-request', ah(async (req, res) => {
+  const t = res.locals.t, b = req.body, forms = require('../lib/forms'), kym = require('../lib/kym');
+  const values = { service_type: String(b.service_type || ''), message: String(b.message || '').slice(0, 2000), preferred_date: String(b.preferred_date || ''), preferred_time: String(b.preferred_time || ''), branch: String(b.branch || '') };
+  const svc = Object.hasOwn(SERVICE_TYPES, values.service_type) ? SERVICE_TYPES[values.service_type] : null;
+  if (!svc) return renderServiceRequest(req, res, values, t('सेवा प्रकार छान्नुहोस्।', 'Please select the service type.'), 422);
+  if (!values.message.trim()) return renderServiceRequest(req, res, values, t('सन्देश / विवरण अनिवार्य छ।', 'The message is required.'), 422);
+  const recent = await db.value(`SELECT (SELECT count(*) FROM appointments WHERE member_portal_id = $1 AND created_at > now() - interval '1 hour')
+                                      + (SELECT count(*) FROM grievances WHERE member_portal_id = $1 AND created_at > now() - interval '1 hour')`, [req.member.id]);
+  if (Number(recent) >= 10) return renderServiceRequest(req, res, values, t('धेरै अनुरोध भए। १ घण्टापछि पुनः प्रयास गर्नुहोस्।', 'Too many requests. Please try again after 1 hour.'), 429);
+  const idn = kym.identityFrom(await kym.loadLinkedKyc(req.member), req.member);
+  const label = svc.label[0];
+  const detail = label + '\n\n' + values.message.trim();
+  let mod, data;
+  if (svc.grievance) {
+    mod = modules.grievance;
+    data = { name: idn.name, member_id: idn.member_id || null, phone: idn.phone, email: idn.email || null, category: 'service', subject: label.slice(0, 200), description: detail };
+  } else {
+    const date = forms.normalizeAdDate(values.preferred_date);
+    const times = (await forms.optionSources.officeTimes()).map(o => o[0]);
+    if (!date || date < new Date().toISOString().slice(0, 10) || !times.includes(values.preferred_time)) {
+      return renderServiceRequest(req, res, values, t('भेट/सेवाको लागि मनपर्ने मिति र समय दुवै छान्नुहोस्।', 'Please choose both the preferred date and time.'), 422);
+    }
+    const branches = (await forms.optionSources.branches()).map(o => o[0]);
+    mod = modules.appointment;
+    data = { visit_kind: 'member', name: idn.name, member_id: idn.member_id || null, phone: idn.phone, email: idn.email || null, purpose: svc.purpose, purpose_detail: detail,
+      preferred_date: date, preferred_time: values.preferred_time, branch: branches.includes(values.branch) ? values.branch : null };
+  }
+  if (!data.phone) return renderServiceRequest(req, res, values, t('तपाईंको सदस्य विवरणमा मोबाइल नम्बर छैन। कार्यालयमा सम्पर्क गर्नुहोस्।', 'Your member record has no mobile number. Please contact the office.'), 422);
+  const row = await forms.insertSubmission(mod, data, { member_portal_id: req.member.id });
+  const notify = require('../lib/notify');
+  await notify.notifyMember(req.member.id, t('सेवा अनुरोध', 'Service request'), t('तपाईंको अनुरोध प्राप्त भयो। ट्र्याकिङ नं: ', 'Request received. Tracking no: ') + row.tracking_id, `/member/requests/${mod.key}/${row.id}`);
+  notify.later(() => notify.applicationEvent('submitted', { name: row[mod.nameCol], tracking_id: row.tracking_id, module: mod.title[0], amount: '', date: row.preferred_date || '',
+    details: require('../lib/submissions').details(mod, row) }, { phone: row[mod.phoneCol], email: row.email }, mod));
+  flash(req, 'success', t('अनुरोध दर्ता भयो! Tracking ID: ', 'Request submitted! Tracking ID: ') + row.tracking_id);
+  res.redirect(`/member/requests/${mod.key}/${row.id}`);
+}));
+
 router.get('/notifications', ah(async (req, res) => {
   const rows = await db.many('SELECT * FROM member_notifications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 100', [req.member.id]);
-  await db.query('UPDATE member_notifications SET is_read = 1 WHERE member_id = $1 AND is_read = 0', [req.member.id]);
   res.render('member/notifications', { title: res.locals.t('सूचनाहरू', 'Notifications'), rows });
+}));
+// one notification read (opening its link marks it), or all with the button
+router.post('/notifications/read-all', ah(async (req, res) => {
+  await db.query('UPDATE member_notifications SET is_read = 1 WHERE member_id = $1 AND is_read = 0', [req.member.id]);
+  res.redirect('/member/notifications');
+}));
+router.post('/notifications/:id/read', ah(async (req, res) => {
+  const n = await db.one('UPDATE member_notifications SET is_read = 1 WHERE id = $1 AND member_id = $2 RETURNING link', [util.int(req.params.id), req.member.id]);
+  const link = n && /^\/(?!\/)/.test(n.link || '') ? n.link : '/member/notifications';
+  res.redirect(req.body.go === '1' ? link : '/member/notifications');
 }));
 
 // profile: see ./member-self.js
@@ -238,14 +356,46 @@ router.get('/documents/:id', ah(async (req, res, next) => {
 
 router.get('/id-card', ah(async (req, res) => {
   const card = await db.one("SELECT * FROM member_id_cards WHERE member_id = $1 AND status = 'active' ORDER BY id DESC LIMIT 1", [String(req.member.id)]);
-  res.render('member/id-card', { title: res.locals.t('सदस्य परिचयपत्र', 'Member ID card'), card });
+  const kyc = await portal.linkedKyc(req.member, true);
+  // member/id-card.php: expired → renewal notice; 60 days or less → warning
+  const expiry = card?.expiry_date || req.member.card_expires_at;
+  const daysLeft = expiry ? Math.ceil((new Date(String(expiry).slice(0, 10) + 'T23:59:59+05:45') - Date.now()) / 86400_000) : null;
+  const stars = await programStars(req.member);
+  res.render('member/id-card', { title: res.locals.t('सदस्य परिचयपत्र', 'Member ID card'), card, kycPhoto: !!kyc?.photo, daysLeft, stars,
+    verifyUrl: `${req.protocol}://${req.get('host')}/verify` });
 }));
+
+/** Programme attendance rating on the card (member/id-card.php): attended / programmes held since joining, as 0-5 stars. */
+async function programStars(member) {
+  try {
+    const since = member.approved_at || member.created_at || '1970-01-01';
+    const [held, attended] = await Promise.all([
+      db.value("SELECT count(*) FROM upcoming_programs WHERE is_active = 1 AND parent_program_id IS NULL AND event_date <= CURRENT_DATE AND event_date >= $1::date", [since]),
+      db.value("SELECT count(DISTINCT program_id) FROM member_program_attendance WHERE member_id = $1 AND attendance_status = 'VALID'", [member.id]),
+    ]);
+    if (!Number(held)) return null;
+    return { held: Number(held), attended: Math.min(Number(attended), Number(held)), stars: Math.round((Math.min(Number(attended), Number(held)) / Number(held)) * 5) };
+  } catch { return null; }
+}
 
 // ---------------------------------------------------------------- information room (members with access)
 router.get('/information-room', ah(async (req, res) => {
   if (!req.member.information_room_enabled) return res.status(403).render('public/error', { layout: 'member', title: res.locals.t('सूचना कक्ष', 'Information room'), code: 403, message: res.locals.t('तपाईंलाई सूचना कक्षको पहुँच छैन।', 'You do not have access to the information room.') });
   const items = await db.many('SELECT * FROM information_room_items WHERE is_active = 1 ORDER BY display_order, meeting_date DESC NULLS LAST, id DESC');
-  res.render('member/information-room', { title: res.locals.t('सूचना कक्ष', 'Information room'), items });
+  res.render('member/information-room', { title: res.locals.t('सूचना कक्ष', 'Information room'), items, categories: IR_CATEGORIES });
+}));
+
+const IR_CATEGORIES = { board_decision: ['बोर्ड निर्णय', 'Board decision'], policy: ['नीति', 'Policy'], karyabidhi: ['कार्यविधि', 'Procedure'], biniyam: ['बिनियम', 'Bylaws'],
+  meeting_minutes: ['बैठक माइन्युट', 'Meeting minutes'], circular: ['परिपत्र', 'Circular'], other: ['अन्य', 'Other'] };
+/** In-page viewer with a watermark (member name + time) for view-only documents (information-room-view.php). */
+router.get('/information-room/:id/view', ah(async (req, res, next) => {
+  if (!req.member.information_room_enabled) return res.redirect('/member/information-room');
+  const item = await db.one('SELECT * FROM information_room_items WHERE id = $1 AND is_active = 1', [util.int(req.params.id)]);
+  if (!item || !item.file_path) return next();
+  const ext = String(item.file_path).toLowerCase().split('.').pop();
+  res.set('Cache-Control', 'private, no-store');
+  res.render('member/information-room-view', { title: res.locals.f(item, 'title'), item, kind: ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? 'image' : ext === 'pdf' ? 'pdf' : 'other',
+    category: IR_CATEGORIES[item.category] || null, stamp: `${req.member.name_np || req.member.name} · ${req.member.sadasyata_number || ''} · ${nd.formatBs(nd.todayBs(), req.lang)} ${new Date(Date.now() + 345 * 60_000).toISOString().slice(11, 16)}` });
 }));
 
 router.get('/information-room/:id', ah(async (req, res, next) => {
@@ -259,7 +409,7 @@ router.get('/information-room/:id', ah(async (req, res, next) => {
   const file = path.resolve(base, String(item.file_path).replace(/^\/+/, '').replace(/^assets\/uploads\//, ''));
   if (!file.startsWith(base + path.sep)) return next(); // never outside this tenant's folder
   res.set('Cache-Control', 'private, no-store');
-  if (item.allow_download) return res.download(file, path.basename(file), err => err && next());
+  if (item.allow_download && !req.query.inline) return res.download(file, path.basename(file), err => err && next());
   res.set('Content-Disposition', 'inline');
   res.sendFile(file, err => err && next());
 }));

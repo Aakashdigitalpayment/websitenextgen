@@ -44,7 +44,7 @@ function contentLooksRight(file, ext) {
  *   upload('news', [{ name: 'image', kind: 'image' }])
  * After it runs, req.uploaded[field] = "news/<file>" for each accepted file.
  */
-function upload(folder, fields, { maxMb, private: isPrivate = false } = {}) {
+function upload(folder, fields, { maxMb, private: isPrivate = false, fieldSizeMb = 0 } = {}) {
   // documents keep the normal limit; image fields may be up to MAX_IMAGE_MB so full 8K UHD photos are accepted
   const docMb = maxMb || config.maxUploadMb;
   const imgMb = maxMb || Math.max(config.maxImageMb, config.maxUploadMb);
@@ -66,7 +66,7 @@ function upload(folder, fields, { maxMb, private: isPrivate = false } = {}) {
   });
   const mw = multer({
     storage,
-    limits: { fileSize: maxMb * 1024 * 1024, files: fields.reduce((a, f) => a + (f.maxCount || 1), 0) },
+    limits: { fileSize: maxMb * 1024 * 1024, files: fields.reduce((a, f) => a + (f.maxCount || 1), 0), ...(fieldSizeMb ? { fieldSize: fieldSizeMb * 1024 * 1024, fields: 400 } : {}) },
     fileFilter(req, file, cb) {
       const ext = path.extname(file.originalname).toLowerCase();
       const kind = kinds[file.fieldname];
@@ -99,6 +99,27 @@ function upload(folder, fields, { maxMb, private: isPrivate = false } = {}) {
     }),
     verifyCsrf,
   ];
+}
+
+/**
+ * Camera / signature-pad image posted as a data: URL (includes/kyc-capture-helpers.php saveBase64Image): JPEG / PNG / WebP only,
+ * size-limited, the same magic-byte check as uploaded files, random name. Returns the stored path or { error }.
+ */
+function saveDataUrl(req, folder, dataUrl, { private: isPrivate = true, maxMb = 5 } = {}) {
+  if (!FOLDER_RE.test(folder)) throw new Error('bad upload folder');
+  const m = /^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/.exec(String(dataUrl || '').slice(0, Math.ceil(maxMb * 1024 * 1024 * 1.4) + 64));
+  if (!m) return { error: 'चित्रको ढाँचा मिलेन (JPG/PNG/WEBP मात्र)' };
+  const buf = Buffer.from(m[2].replace(/\s+/g, ''), 'base64');
+  if (!buf.length || buf.length > maxMb * 1024 * 1024) return { error: `फोटो ${maxMb}MB भन्दा ठूलो भयो` };
+  const ext = m[1] === 'jpg' ? '.jpeg' : '.' + m[1];
+  const ok = { '.jpeg': 'ffd8ff', '.png': '89504e47', '.webp': '52494646' }[ext];
+  if (!buf.subarray(0, 4).toString('hex').startsWith(ok)) return { error: 'फाइलको सामग्री मिलेन' };
+  const base = isPrivate ? '_private/' + folder : folder;
+  const dir = path.join(tenantDir(req), base);
+  fs.mkdirSync(dir, { recursive: true });
+  const name = crypto.randomBytes(16).toString('hex') + (ext === '.jpeg' ? '.jpg' : ext);
+  fs.writeFileSync(path.join(dir, name), buf, { mode: 0o640 });
+  return `${base}/${name}`;
 }
 
 /** Public URL for a stored path (handles legacy PHP paths and absolute URLs). */
@@ -158,4 +179,4 @@ function srcsetAttr(req, stored, sizes = '100vw') {
   return set ? ` srcset="${esc(set)}" sizes="${esc(sizes)}"` : '';
 }
 
-module.exports = { upload, mediaUrl, remove, tenantDir, resolveStored, sendStored, srcsetAttr };
+module.exports = { upload, saveDataUrl, mediaUrl, remove, tenantDir, resolveStored, sendStored, srcsetAttr };

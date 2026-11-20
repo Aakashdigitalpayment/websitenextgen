@@ -56,6 +56,7 @@ async function adminUser(username, role, customRoleId = null) {
 before(async () => {
   await tenants.applyPlatformSchema();
   await tenants.createTenant({ slug: SLUG, name: 'Tools Tenant', domains: [HOST], adminPassword: PW });
+  await inTenant(() => require('../src/lib/settings').set('spam_math_captcha', '0')); // forms are posted without solving the math check
   app = require('http').createServer(createApp());
   await new Promise(r => app.listen(0, '127.0.0.1', r));
 });

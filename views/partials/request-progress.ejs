@@ -1,0 +1,8 @@
+<% if (locals.steps && steps.length) { %>
+<ol class="stepper" aria-label="<%= t('आवेदनको चरण', 'Application stages') %>">
+  <% steps.forEach(s => { %><li class="step is-<%= s.state %>" <%- s.state === 'current' ? 'aria-current="step"' : '' %>><span class="dot"><%- s.state === 'done' ? icon('check') : s.state === 'failed' ? icon('close') : '' %></span><span class="lbl"><%= statusLabel(s.key) %></span></li><% }) %>
+</ol>
+<% } %>
+<% if (locals.details && details.length) { %>
+<div class="kv mt-2 request-details"><% details.forEach(([k, v]) => { %><div><%= k %></div><div><%= v %></div><% }) %></div>
+<% } %>

@@ -337,7 +337,7 @@ router.get('/careers', ah(async (req, res) => {
 router.get('/careers/:id', ah(async (req, res, next) => {
   const job = await db.one(`SELECT * FROM careers WHERE id = $1 AND ${ACTIVE} AND ${NOT_DELETED}`, [util.int(req.params.id)]);
   if (!job) return next();
-  const open = !job.deadline || job.deadline >= new Date().toISOString().slice(0, 10);
+  const open = (!job.deadline || job.deadline >= new Date().toISOString().slice(0, 10)) && Number(job.allow_online_apply ?? 1) === 1;
   res.render('public/career-detail', { title: res.locals.f(job, 'title'), job, open });
 }));
 
@@ -350,7 +350,7 @@ router.get('/auctions/:id', ah(async (req, res, next) => {
   const item = await db.one(`SELECT * FROM auction_notices WHERE id = $1 AND ${ACTIVE}`, [util.int(req.params.id)]);
   if (!item) return next();
   const bids = await db.value('SELECT count(*) FROM auction_bids WHERE auction_id = $1', [item.id]);
-  res.render('public/auction-detail', { title: res.locals.f(item, 'title'), item, bids, images: String(item.images || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean) });
+  res.render('public/auction-detail', { title: res.locals.f(item, 'title'), item, bids, open: require('../lib/auctions').isOpen(item), images: String(item.images || '').split(/[\n,]/).map(s => s.trim()).filter(Boolean) });
 }));
 
 router.get('/elections', ah(async (req, res) => {
@@ -410,18 +410,20 @@ router.get('/exchange-rate', ah(async (req, res) => {
 // ---------------------------------------------------------------- contact
 router.get('/contact', ah(async (req, res) => {
   const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
+  antispam.mathPrompt(req, res, 'contact');
   res.render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: {}, errors: {} });
 }));
 
 router.post('/contact', submitLimiter, ah(async (req, res) => {
   const mod = modules.contact;
   if (isBot(req)) { flash(req, 'success', res.locals.t('सन्देश पठाइयो।', 'Message sent.')); return res.redirect('/contact'); }
-  const block = await antispam.check(req, res.locals.settings, [req.body.subject, req.body.message, req.body.name]);
+  const block = await antispam.check(req, res.locals.settings, [req.body.subject, req.body.message, req.body.name], 'contact');
   if (block && block.silent) { flash(req, 'success', res.locals.t('सन्देश पठाइयो।', 'Message sent.')); return res.redirect('/contact'); }
   const { data, errors } = forms.validate(mod, req.body, {}, {}, req.lang);
   if (block) errors._form = res.locals.t(...block.message);
   if (Object.keys(errors).length) {
     const centers = await db.many(`SELECT * FROM service_centers WHERE ${ACTIVE} ORDER BY is_main_branch DESC, display_order LIMIT 6`);
+    antispam.mathPrompt(req, res, 'contact');
     return res.status(422).render('public/contact', { title: res.locals.t('सम्पर्क', 'Contact us'), centers, values: req.body, errors });
   }
   const row = await forms.insertSubmission(mod, data, { is_read: 0 });
@@ -431,10 +433,17 @@ router.post('/contact', submitLimiter, ah(async (req, res) => {
 }));
 
 // ---------------------------------------------------------------- applications (generic form engine)
-router.get('/apply', (req, res) => {
-  const list = Object.values(modules).filter(m => !m.hidden);
+router.get('/apply', ah(async (req, res) => {
+  const honorOpen = (await forms.optionSources.honorPrograms()).length > 0;
+  const list = Object.values(modules).filter(m => !m.hidden || (m.key === 'honor' && honorOpen));
   res.render('public/apply-index', { title: res.locals.t('अनलाइन सेवा', 'Online services'), list });
-});
+}));
+
+/** honor-apply.php: no open programme → "applications closed" with the upcoming ones (opens / closes in B.S.). */
+async function renderHonorClosed(req, res, status = 200) {
+  const upcoming = await db.many('SELECT * FROM honor_programs WHERE is_active = 1 AND opens_at > now() ORDER BY opens_at LIMIT 10');
+  res.status(status).render('public/honor-closed', { title: res.locals.t(...modules.honor.title), mod: modules.honor, upcoming });
+}
 
 const prefillFromMember = (member, mod) => {
   if (!member) return {};
@@ -447,9 +456,81 @@ const prefillFromMember = (member, mod) => {
   return v;
 };
 
+// ---------------------------------------------------------------- public KYM: verify first (online-kyc.php public_kym_verify)
+const KYM_GATE_TTL = 2 * 3600_000;
+const KYM_LOCKABLE = new Set([undefined, 'text', 'email', 'tel', 'select', 'radio', 'bsdate', 'date', 'textarea', 'geo', 'number', 'url', 'address']);
+/** Member ID + mobile verified in this session (2 h, this tenant only). */
+function kymGate(req) {
+  const g = req.session.kymGate;
+  return g && g.tenantId === req.tenant.id && Date.now() - g.at <= KYM_GATE_TTL ? g : null;
+}
+/** Stored KYM values of the verified Member ID; non-empty ones are locked on the public form (memberSsotPrefillEmptyOnlyFromKyc). */
+async function kymLocked(gate) {
+  const own = await kym.findKycByMemberId(gate.memberId, true);
+  const stored = own ? forms.rowToValues(modules.kyc, own) : {};
+  const locked = new Set(['member_id', 'mobile']);
+  for (const f of modules.kyc.fields) if (KYM_LOCKABLE.has(f.type) && String(stored[f.name] ?? '').trim() !== '') locked.add(f.name);
+  stored.member_id = gate.memberId;
+  stored.mobile = gate.mobile;
+  return { own, stored, locked };
+}
+/** Server-side values for every locked field (address parts included): what is on file is never taken from the POST. */
+function lockedBody(body, stored, locked) {
+  const out = { ...body };
+  for (const f of modules.kyc.fields) {
+    if (!locked.has(f.name)) continue;
+    out[f.name] = stored[f.name];
+    if (f.type === 'address') for (const k of ['province', 'district', 'municipality', 'ward', 'tole']) out[f.prefix + '_' + k] = stored[f.prefix + '_' + k] ?? '';
+    if (f.sameAs) delete out[f.sameAs.toggle];
+  }
+  return out;
+}
+function renderKymGate(req, res, { error = null, values = {}, status = 200 } = {}) {
+  antispam.mathPrompt(req, res, 'kycgate');
+  res.status(status).render('public/kyc-gate', { title: res.locals.t(...modules.kyc.title), mod: modules.kyc, error, values });
+}
+const gateLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip),
+  handler: (req, res) => renderKymGate(req, res, { status: 429, error: res.locals.t('धेरै पटक प्रयास भयो। केही समयपछि फेरि प्रयास गर्नुहोस्।', 'Too many attempts. Please try again later.') }) });
+router.post('/apply/kyc/verify', gateLimiter, ah(async (req, res) => {
+  if (req.member) return res.redirect('/apply/kyc');
+  const values = { member_id: String(req.body.member_id || '').slice(0, 50), mobile: String(req.body.mobile || '').slice(0, 20) };
+  if (isBot(req)) return renderKymGate(req, res, { values });
+  const block = await antispam.check(req, res.locals.settings, [], 'kycgate');
+  if (block) return renderKymGate(req, res, { status: 422, values, error: block.message ? res.locals.t(...block.message) : null });
+  const auth = require('../lib/auth');
+  const key = 'kycgate:' + (kym.normalizeId(values.member_id) || '-');
+  if (await auth.tooManyAttempts(key, req.ip)) return renderKymGate(req, res, { status: 429, values, error: res.locals.t('धेरै पटक गलत प्रयास भयो। १५ मिनेटपछि फेरि प्रयास गर्नुहोस्।', 'Too many failed attempts. Try again in 15 minutes.') });
+  const g = await kym.requireMemberIdAndMobile(values.member_id, values.mobile);
+  if (!g.ok) {
+    await auth.recordFailure(key, req.ip);
+    return renderKymGate(req, res, { status: 422, values, error: res.locals.t(...g.error) });
+  }
+  await auth.clearFailures(key, req.ip);
+  req.session.kymGate = { memberId: kym.normalizeId(values.member_id), mobile: kym.normalizeMobile(values.mobile), at: Date.now(), tenantId: req.tenant.id };
+  res.redirect('/apply/kyc?verified=1');
+}));
+router.post('/apply/kyc/reset', (req, res) => { delete req.session.kymGate; res.redirect('/apply/kyc'); });
+
 async function renderForm(req, res, mod, values = {}, errors = {}, status = 200) {
   const options = await forms.resolveOptions(mod);
+  let activeProgram = null;
+  if (mod.key === 'honor') {
+    if (!options.program_id.length) return renderHonorClosed(req, res, status);
+    const pick = String(values.program_id || req.query.program || options.program_id[0][0]);
+    activeProgram = await db.one('SELECT * FROM honor_programs WHERE id = $1', [Number(options.program_id.find(o => o[0] === pick)?.[0] || options.program_id[0][0])]);
+  }
   let existingDocs = {};
+  let locked = null, lockedValues = null;
+  if (mod.capture) res.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
+  if (mod.key === 'kyc' && !req.member) {
+    const gate = kymGate(req);
+    if (!gate) return renderKymGate(req, res, { status: status === 200 ? 200 : 403, error: status === 200 ? null : res.locals.t('पहिले सदस्यता नम्बर र मोबाइल प्रमाणित गर्नुहोस्।', 'Please verify your Member ID and mobile first.') });
+    const k = await kymLocked(gate);
+    if (k.own) existingDocs = Object.fromEntries(kym.DOC_KEYS.map(d => [d, !!k.own[d]]));
+    values = status === 200 ? { ...k.stored, ...values } : lockedBody(values, k.stored, k.locked);
+    locked = k.locked;
+    lockedValues = k.stored;
+  }
   if (mod.key === 'kyc' && req.member) {
     const own = await kym.loadLinkedKyc(req.member);
     if (own) {
@@ -458,10 +539,25 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
     }
     if (req.member.sadasyata_number) values.member_id = req.member.sadasyata_number;
   }
+  // member identity (member-prefill-block.php): shown read-only, never posted
+  let identity = null, kycStatus = null;
+  const skipFields = new Set();
+  if (mod.memberGate) {
+    if (req.member) {
+      const own = await kym.loadLinkedKyc(req.member);
+      identity = kym.identityFrom(own, req.member);
+      kycStatus = own ? own.status : 'none';
+    }
+    const mode = req.member ? 'all' : mod.memberGate.always ? 'personal' : null;
+    for (const f of mod.fields) if (forms.identitySkipped(mod, f, mode)) skipFields.add(f.name);
+  }
+  antispam.mathPrompt(req, res, 'apply:' + mod.key);
   if (req.query.program) values.program_id = values.program_id || req.query.program;
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
-  res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...prefillFromMember(req.member, mod), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number });
+  res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...(mod.memberGate ? {} : prefillFromMember(req.member, mod)), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number,
+    identity, kycStatus, skipFields, locked, lockedValues, kymGateOk: !!locked, guestEmailRequired: !!(mod.guestEmail && !req.member), activeProgram,
+    draftKey: `draft:${req.tenant.slug}:${mod.key}`, hasValues: status !== 200 || (mod.key === 'kyc' && (!!req.member || !!locked)) });
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {
@@ -470,28 +566,48 @@ router.get('/apply/:key', ah(async (req, res, next) => {
   await renderForm(req, res, mod);
 }));
 
-const SPAM_SCAN = ['grievance', 'feedback', 'appointment', 'survey'];
+/** Free-text fields scanned for links / promo spam on every form (contact-spam-guard.php); KYM AML fields are skipped (addresses look like domains). */
+const SPAM_NAMES = ['subject', 'message', 'loan_purpose', 'collateral_description', 'other_income', 'description', 'request_details', 'cover_letter', 'purpose_detail', 'suggestions', 'remarks', 'business_note'];
+const spamParts = (mod, body) => mod.fields.filter(f => f.store !== 'aml' && (f.type === 'textarea' || SPAM_NAMES.includes(f.name))).map(f => body[f.name]);
 router.post('/apply/:key', submitLimiter, (req, res, next) => {
   const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   if (!mod || mod.key === 'contact') return next();
-  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind })), { private: true }) : [];
+  if (mod.key === 'kyc' && !req.member && !kymGate(req)) {
+    return renderKymGate(req, res, { status: 403, error: res.locals.t('पहिले सदस्यता नम्बर र मोबाइल प्रमाणित गर्नुहोस्।', 'Please verify your Member ID and mobile first.') });
+  }
+  const chain = mod.fileFields.length ? upload(mod.key, mod.fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : f.kind, maxCount: f.multiple || 1 })), { private: true, fieldSizeMb: mod.capture ? 8 : 0 }) : [];
   let i = 0;
   const step = err => (err ? next(err) : i < chain.length ? chain[i++](req, res, step) : handle());
   const handle = () => (async () => {
     if (isBot(req)) return res.redirect('/');
-    const scan = SPAM_SCAN.includes(mod.key) ? mod.fields.filter(f => f.type === 'textarea' || f.name === 'subject').map(f => req.body[f.name]) : [];
-    const block = await antispam.check(req, res.locals.settings, scan);
+    if (mod.key === 'kyc' && !req.member) {
+      const gate = kymGate(req);
+      if (!gate) return renderForm(req, res, mod, {}, { _upload: 'gate' }, 403);
+      const k = await kymLocked(gate);
+      req.body = lockedBody(req.body, k.stored, k.locked);
+    }
+    // camera / signature pad (public/js/kyc-capture.js): a data: URL in <field>_data when no file was chosen
+    if (mod.capture) {
+      for (const f of mod.fileFields) {
+        const durl = req.body[f.name + '_data'];
+        if (f.type !== 'image' || (req.uploaded && req.uploaded[f.name]) || typeof durl !== 'string' || !durl.startsWith('data:image/')) continue;
+        const saved = require('../lib/uploads').saveDataUrl(req, mod.key, durl, { private: true, maxMb: 5 });
+        if (typeof saved === 'string') { req.uploaded = req.uploaded || {}; req.uploaded[f.name] = saved; } else req.uploadError = saved.error;
+      }
+    }
+    const scan = spamParts(mod, req.body);
+    const block = await antispam.check(req, res.locals.settings, scan, 'apply:' + mod.key);
     if (block && block.silent) return res.redirect('/');
     const options = await forms.resolveOptions(mod);
-    const { data, errors } = forms.validate(mod, req.body, req.uploaded, options, req.lang);
+    const { data, errors } = forms.validate(mod, req.body, req.uploaded, options, req.lang, { skipIdentity: submissions.identityMode(mod, req.member, req.body) });
     if (block) errors._upload = res.locals.t(...block.message);
     if (req.uploadError) errors._upload = req.uploadError;
     if (Object.keys(errors).length) return renderForm(req, res, mod, req.body, errors, 422);
     const extra = {};
-    if (mod.key === 'honor' && req.member) extra.member_portal_id = req.member.id;
+    if (req.member) extra.member_portal_id = req.member.id; // dropped by db.pick for tables without the column
     if (mod.key === 'honor') extra.is_member = data.member_id ? 1 : 0;
     if (mod.key === 'job' || mod.key === 'survey') extra.is_read = 0;
-    const out = await submissions.submit(mod, data, { body: req.body, member: req.member, options, lang: req.lang, extra });
+    const out = await submissions.submit(mod, data, { body: req.body, member: req.member, options, lang: req.lang, extra, ip: req.ip });
     if (out.errors) return renderForm(req, res, mod, req.body, out.errors, 422);
     const row = out.row;
     if (out.duplicate) {
@@ -511,6 +627,7 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
       notify.later(() => notify.adminEvent(mod, { name: row[mod.nameCol], details: submissions.details(mod, row, options) }));
     }
     req.session.lastSubmission = { module: mod.key, tracking: row.tracking_id || null, notice: out.notice || null };
+    if (mod.key === 'kyc') delete req.session.kymGate;
     res.redirect(`/apply/${mod.key}/done`);
   })().catch(next);
   step();
@@ -520,7 +637,7 @@ router.get('/apply/:key/done', (req, res, next) => {
   const mod = Object.hasOwn(modules, req.params.key) ? modules[req.params.key] : null;
   const last = req.session.lastSubmission;
   if (!mod || !last || last.module !== mod.key) return res.redirect('/apply/' + req.params.key);
-  res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking, notice: last.notice || null });
+  res.render('public/apply-done', { title: res.locals.t(...mod.title), mod, tracking: last.tracking, notice: last.notice || null, draftKey: `draft:${req.tenant.slug}:${mod.key}` });
 });
 
 // ---------------------------------------------------------------- tracker, signed ID-card preview, ID card verification
@@ -535,7 +652,7 @@ router.post('/verify/service', serviceLimiter, ah(async (req, res) => {
   const pv = req.session.partnerVerify;
   const title = res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card');
   const fresh = pv && Number(pv.mid) === util.int(req.body.member_id) && Date.now() - pv.at <= 30 * 60_000;
-  if (!fresh) return res.status(403).render('public/verify', { title, result: null, code: '', partners: [], log: { ok: false, text: res.locals.t('पहिले सदस्य प्रमाणित गर्नुहोस्, अनि मात्र सेवा लग गर्नुहोस्।', 'Please verify the member first, then log the service.') } });
+  if (!fresh) return res.status(403).render('public/verify', { title, result: null, code: '', mode: 'name', form: {}, partnerPref: '', partners: [], log: { ok: false, text: res.locals.t('पहिले सदस्य प्रमाणित गर्नुहोस्, अनि मात्र सेवा लग गर्नुहोस्।', 'Please verify the member first, then log the service.') } });
   const partnerId = util.int(req.body.partner_id, 0);
   const r = partnerId ? await require('../lib/partners').logService({
     memberId: pv.mid, cardNo: pv.card, partnerId, serviceName: req.body.service_name, taken: req.body.service_taken !== 'no', note: req.body.service_note, pin: req.body.partner_pin, ip: req.ip,
@@ -545,10 +662,12 @@ router.post('/verify/service', serviceLimiter, ah(async (req, res) => {
     duplicate: res.locals.t('यो साझेदारमा भर्खरै लग भइसकेको छ (९० सेकेन्ड)।', 'Already logged for this partner just now (90 s).'), invalid: res.locals.t('सेवा लग असफल।', 'Service log failed.'),
   };
   if (r.ok) pv.at = Date.now();
-  const card = await db.one('SELECT * FROM member_id_cards WHERE upper(verification_code) = $1', [String(pv.code || '').toUpperCase()]);
-  const member = await db.one('SELECT id, name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members WHERE id = $1', [pv.mid]);
+  const card = pv.code ? await db.one('SELECT * FROM member_id_cards WHERE upper(verification_code) = $1', [String(pv.code || '').toUpperCase()]) : null;
+  const member = await db.one('SELECT * FROM members WHERE id = $1', [pv.mid]);
+  const kyc = member ? await require('../lib/member-portal').linkedKyc(member) : null;
   res.status(r.ok ? 200 : 422).render('public/verify', {
-    title, code: pv.code, result: card && member ? { card, member } : null, partners: await verifyPartners(card || { status: 'active' }, member),
+    title, code: pv.code, mode: pv.code ? 'code' : 'name', form: {}, partnerPref: String(partnerId || ''),
+    result: member ? { card, member, kyc, valid: true, hasPhoto: !!(kyc?.photo || member.avatar_url) } : null, partners: await verifyPartners(card || { status: 'active' }, member),
     log: r.ok ? { ok: true, text: res.locals.t(`सेवा लग भयो — ${r.partner.partner_name}।`, `Service logged — ${r.partner.partner_name_en || r.partner.partner_name}.`) } : { ok: false, text: errors[r.error] || errors.invalid },
   });
 }));
@@ -602,6 +721,36 @@ router.get('/programs', ah(async (req, res) => {
     db.many('SELECT title, location, event_date FROM upcoming_programs WHERE is_active = 1 AND parent_program_id IS NULL AND event_date < CURRENT_DATE ORDER BY event_date DESC LIMIT 20'),
   ]);
   res.render('public/programs', { title: res.locals.t('कार्यक्रमहरू', 'Programmes'), upcoming, past });
+}));
+
+/**
+ * Public pre-registration (verify.php program_preregister) — Member ID AND the registered mobile, not the member number alone.
+ * Failures share the login throttle.
+ */
+const preregLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: req => (req.tenant?.slug || '') + ':' + rateLimit.ipKeyGenerator(req.ip) });
+router.post('/programs/:id/register', preregLimiter, ah(async (req, res) => {
+  const t = res.locals.t, back = () => res.redirect('/programs');
+  if (isBot(req)) return back();
+  const p = await db.one('SELECT * FROM upcoming_programs WHERE id = $1 AND is_active = 1 AND pre_registration_open = 1', [util.int(req.params.id)]);
+  if (!p) { flash(req, 'error', t('यो कार्यक्रममा पूर्व दर्ता खुला छैन।', 'Pre-registration is not open for this programme.')); return back(); }
+  const portal = require('../lib/member-portal'), auth = require('../lib/auth');
+  const key = 'prereg:' + (portal.normalizeId(req.body.member_no) || '-');
+  if (await auth.tooManyAttempts(key, req.ip)) { flash(req, 'error', t('धेरै पटक गलत प्रयास भयो। १५ मिनेटपछि फेरि प्रयास गर्नुहोस्।', 'Too many failed attempts. Try again in 15 minutes.')); return back(); }
+  const m = await portal.findBySadasyata(req.body.member_no);
+  const kyc = m ? await portal.linkedKyc(m) : null;
+  if (!m || m.approval_status !== 'approved' || !Number(m.is_active) || !(portal.phonesMatch(req.body.mobile, m.phone) || portal.phonesMatch(req.body.mobile, kyc?.mobile))) {
+    await auth.recordFailure(key, req.ip);
+    flash(req, 'error', t('सदस्यता नं. र दर्ता भएको मोबाइल मिलेन।', 'Member ID and registered mobile do not match.'));
+    return back();
+  }
+  const dup = await db.value('SELECT 1 FROM member_program_preregistrations WHERE member_id = $1 AND program_id = $2', [m.id, p.id]);
+  if (!dup) {
+    await db.query(`INSERT INTO member_program_preregistrations (member_id, member_card_no, member_name, phone, email, program_id, program_title, event_date, source, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'public_verify', now()) ON CONFLICT DO NOTHING`,
+      [m.id, m.member_card_no || m.sadasyata_number || null, m.name_np || m.name, m.phone, m.email, p.id, p.title, p.event_date]);
+  }
+  flash(req, dup ? 'info' : 'success', dup ? t('तपाईं पहिले नै दर्ता हुनुहुन्छ।', 'You are already registered.') : t(`पूर्व दर्ता भयो — ${p.title}`, `You are registered — ${p.title}`));
+  back();
 }));
 
 // QR codes printed at programmes point here; members sign in and confirm

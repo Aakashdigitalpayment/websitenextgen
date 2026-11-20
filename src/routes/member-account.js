@@ -205,6 +205,7 @@ router.post('/login/2fa', ah(async (req, res) => {
   const p = pending2fa(req);
   if (!p) return res.redirect('/member/login');
   const m = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [p.id]);
+  if (m) await portal.checkCardExpiry(m);
   const gate = m && portal.eligibilityError(m, t);
   if (!m || gate) { delete req.session.memberPending2fa; flash(req, 'error', gate || t('खाता भेटिएन।', 'Account not found.')); return res.redirect('/member/login'); }
   const next = auth.safeNext(req.query.next, '/member');
@@ -250,6 +251,7 @@ router.get('/oauth/facebook/callback', ah(async (req, res) => {
     if (!req.member) return fail(t('पहिले लगइन गर्नुहोस्।', 'Please sign in first.'));
     if (await db.value('SELECT 1 FROM members WHERE facebook_id = $1 AND id <> $2', [info.sub, req.member.id])) return fail(t('यो Facebook खाता अर्को सदस्यसँग जोडिएको छ।', 'This Facebook account is linked to another member.'));
     await db.query('UPDATE members SET facebook_id = $1 WHERE id = $2', [info.sub, req.member.id]);
+    if (/^https:\/\/[^\s"<>]{8,500}$/.test(info.picture || '')) await db.query("UPDATE members SET avatar_url = $1 WHERE id = $2 AND COALESCE(avatar_url, '') = ''", [info.picture, req.member.id]); // OAuth picture when there is no avatar yet
     await auth.audit(req, 'facebook_link', 'members', req.member.id, 'Facebook account linked');
     flash(req, 'success', t('Facebook खाता जोडियो।', 'Facebook account linked.'));
     return res.redirect('/member/profile');
@@ -266,6 +268,7 @@ router.get('/oauth/facebook/callback', ah(async (req, res) => {
     }
   }
   if (!m) return fail(t('यो Facebook खातासँग कुनै सदस्य जोडिएको छैन। पहिले सदस्य दर्ता गर्नुहोस् वा पासवर्डले लगइन गरेर प्रोफाइलबाट जोड्नुहोस्।', 'No member is linked to this Facebook account. Register first, or sign in with your password and link it from your profile.'));
+  await portal.checkCardExpiry(m);
   const gate = portal.eligibilityError(m, t);
   if (gate) return fail(gate);
   const r = await auth.startMemberSession(req, m);
