@@ -28,6 +28,8 @@ router.use((req, res, next) => {
   res.locals.modules = req.admin && auth.roleLevel(req.admin.role) < auth.roleLevel('admin')
     ? Object.fromEntries(Object.entries(modules).filter(([, m]) => !m.adminOnly)) : modules;
   res.locals.roleLevel = auth.roleLevel;
+  res.locals.iconNames = require('../lib/icons').names;
+  res.locals.faToNode = require('../lib/icons').faToNode;
   next();
 });
 
@@ -128,6 +130,9 @@ router.use(ah(async (req, res, next) => {
   return res.status(403).render('admin/denied', { title: '2FA required' });
 }));
 
+// date fields: pick in B.S. (default, like the PHP admin) or plain A.D. (Settings → General)
+router.use(ah(async (req, res, next) => { res.locals.bsDates = (await settings.get('admin_date_input', 'bs')) !== 'ad'; next(); }));
+
 // custom roles (per-section matrix) + superadmin menu-group hiding
 router.use(require('../lib/admin-perms').middleware);
 
@@ -195,6 +200,21 @@ async function refOptions(fields) {
   return out;
 }
 
+/** Filter controls for a resource list: [{ name, label, options: [[value, np, en]] }] (columns that exist only). */
+async function listFilters(r, cols, fields) {
+  const out = [];
+  for (const flt of r.filters || []) {
+    if (!cols.has(flt.name)) continue;
+    const f = fields.find(x => x.name === flt.name) || { name: flt.name, label: [flt.name, flt.name] };
+    let options;
+    if (flt.type === 'bool') options = [['1', 'हो', 'Yes'], ['0', 'होइन', 'No']];
+    else if (flt.type === 'distinct') options = (await db.many(`SELECT DISTINCT ${db.ident(flt.name)}::text AS v FROM ${r.table} WHERE ${db.ident(flt.name)} IS NOT NULL AND ${db.ident(flt.name)}::text <> '' ORDER BY 1 DESC LIMIT 100`)).map(x => [x.v, x.v, x.v]);
+    else options = (await refOptions([f]))[f.name] || [];
+    out.push({ name: flt.name, label: f.label, options });
+  }
+  return out;
+}
+
 function getResource(req, res, next) {
   const r = Object.hasOwn(resources, req.params.resource) ? resources[req.params.resource] : null;
   if (!r) return next('route');
@@ -212,15 +232,28 @@ router.get('/r/:resource', getResource, ah(async (req, res) => {
   const params = [];
   if (r.softDelete && cols.has('deleted_at')) where.push('deleted_at IS NULL');
   if (q) {
-    const textCols = fields.filter(f => ['text', 'textarea', 'richtext', 'url'].includes(f.type)).map(f => f.name).slice(0, 6);
+    const textCols = [...new Set([...fields.filter(f => ['text', 'textarea', 'richtext', 'url'].includes(f.type)).map(f => f.name).slice(0, 6), ...(r.searchExtra || []).filter(c => cols.has(c))])];
     if (textCols.length) { params.push('%' + q + '%'); where.push('(' + textCols.map(c => `${c}::text ILIKE $1`).join(' OR ') + ')'); }
   }
+  // per-resource list filters (?f_<col>=…) and the Live / Archive tabs (?active=1|0)
+  const filters = await listFilters(r, cols, fields);
+  const fvals = {};
+  for (const flt of filters) {
+    const v = String(req.query['f_' + flt.name] ?? '').trim();
+    if (v === '' || v.length > 100) continue;
+    fvals[flt.name] = v;
+    params.push(v); where.push(`${db.ident(flt.name)}::text = $${params.length}`);
+  }
+  const active = cols.has('is_active') && ['0', '1'].includes(String(req.query.active)) ? String(req.query.active) : '';
+  const baseWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const counts = cols.has('is_active') ? await db.one(`SELECT count(*) FILTER (WHERE is_active = 1) AS live, count(*) FILTER (WHERE COALESCE(is_active, 0) <> 1) AS archived FROM ${r.table} ${baseWhere}`, params) : null;
+  if (active) where.push(active === '1' ? 'is_active = 1' : 'COALESCE(is_active, 0) <> 1');
   const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
   const total = await db.value(`SELECT count(*) FROM ${r.table} ${w}`, params);
   const pg = util.paginate(total, util.int(req.query.page, 1), 25);
   const rows = await db.many(`SELECT * FROM ${r.table} ${w} ORDER BY ${r.order || 'id DESC'} LIMIT ${pg.perPage} OFFSET ${pg.offset}`, params);
   const options = await refOptions(fields.filter(f => f.list && f.type === 'select'));
-  res.render('admin/resource-list', { title: res.locals.t(...r.title), r, fields, listFields: fields.filter(f => f.list), rows, pg, q, options, hasActive: cols.has('is_active') });
+  res.render('admin/resource-list', { title: res.locals.t(...r.title), r, fields, listFields: fields.filter(f => f.list), rows, pg, q, options, hasActive: cols.has('is_active'), filters, fvals, active, counts });
 }));
 
 router.get('/r/:resource/new', getResource, ah(async (req, res) => {
@@ -239,6 +272,25 @@ router.get('/r/:resource/:id/edit', getResource, ah(async (req, res, next) => {
 function readResourceForm(fields, body, uploaded, existing) {
   const data = {}, errors = {};
   for (const f of fields) {
+    if (f.type === 'readonly') continue;
+    if (f.readonlyOnEdit && existing) continue; // e.g. a type code that requests already reference
+    if (f.type === 'images') {
+      // gallery JSON (legacy auctions.php): keep stored photos minus the ticked ones, add the new uploads
+      let list = [];
+      try { list = JSON.parse((existing && existing[f.name]) || '[]'); } catch { list = []; }
+      if (!Array.isArray(list)) list = [];
+      list = list.filter(x => typeof x === 'string');
+      const drop = new Set([].concat(body['remove_' + f.name] || []).map(String).filter(x => list.includes(x))); // only this record's own photos
+      list = list.filter(x => !drop.has(x)).concat([].concat((uploaded && uploaded[f.name]) || []));
+      data[f.name] = JSON.stringify(list.slice(0, f.max || 10));
+      data['_removed_' + f.name] = [...drop];
+      continue;
+    }
+    if (f.type === 'icon') {
+      const v = String(body[f.name] || '').trim();
+      data[f.name] = /^[a-z0-9 -]{1,80}$/i.test(v) ? v : (f.default ?? null);
+      continue;
+    }
     if (f.type === 'image' || f.type === 'file') {
       if (uploaded && uploaded[f.name]) data[f.name] = uploaded[f.name];
       else if (body['remove_' + f.name] === '1') data[f.name] = null;
@@ -258,7 +310,13 @@ function readResourceForm(fields, body, uploaded, existing) {
       if (!Number.isFinite(n)) { errors[f.name] = 'अंक चाहिन्छ / number'; continue; }
       v = n;
     } else if (f.type === 'date') {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { errors[f.name] = 'YYYY-MM-DD'; continue; }
+      v = nd.toLatinDigits(v);
+      if (!/^\d{4}-\d{1,2}-\d{1,2}$/.test(v)) { errors[f.name] = 'YYYY-MM-DD'; continue; }
+      if (Number(v.slice(0, 4)) >= 2050) { // a B.S. date typed directly (legacy coop-date-ui.php) → A.D.
+        const ad = nd.bsToAd(v);
+        if (!ad) { errors[f.name] = 'वि.सं. मिति मिलेन / invalid B.S. date'; continue; }
+        v = ad;
+      } else if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { errors[f.name] = 'YYYY-MM-DD'; continue; }
     } else if (f.type === 'url') {
       if (!/^(https?:\/\/|\/)/i.test(v)) { errors[f.name] = 'URL https:// बाट सुरु हुनुपर्छ'; continue; }
     } else if (f.type === 'richtext') {
@@ -274,7 +332,7 @@ function readResourceForm(fields, body, uploaded, existing) {
 function resourceUpload(req, res, next) {
   const fileFields = req.resource.fileFields;
   if (!fileFields.length || !req.is('multipart/form-data')) return next();
-  const [mw, csrf] = upload(req.resource.key.replace(/_/g, '-'), fileFields.map(f => ({ name: f.name, kind: f.type === 'image' ? 'image' : 'any' })), { maxMb: 20, private: !!req.resource.privateFiles });
+  const [mw, csrf] = upload(req.resource.key.replace(/_/g, '-'), fileFields.map(f => ({ name: f.name, kind: f.kind || (f.type === 'file' ? 'any' : 'image'), maxCount: f.type === 'images' ? (f.max || 10) : 1 })), { maxMb: 20, private: !!req.resource.privateFiles });
   mw(req, res, err => (err ? next(err) : csrf(req, res, next)));
 }
 
@@ -297,9 +355,11 @@ async function saveResource(req, res, existing) {
     return res.status(422).render('admin/resource-form', { title: res.locals.t(...r.title), r, fields, values: { ...existing, ...req.body }, errors, options: await refOptions(fields), item: existing });
   }
   try {
+    const removedImages = Object.keys(data).filter(k => k.startsWith('_removed_')).flatMap(k => { const v = data[k]; delete data[k]; return v; });
     const clean = await db.pick(r.table, data);
     const row = existing ? await db.update(r.table, existing.id, clean) : await db.insert(r.table, clean);
-    if (existing) for (const f of r.fileFields) if (clean[f.name] !== undefined && existing[f.name] && existing[f.name] !== clean[f.name]) remove(req, existing[f.name]);
+    if (existing) for (const f of r.fileFields) if (f.type !== 'images' && clean[f.name] !== undefined && existing[f.name] && existing[f.name] !== clean[f.name]) remove(req, existing[f.name]);
+    for (const x of removedImages) remove(req, x);
     if (r.afterSave) await r.afterSave(row, req);
     await auth.audit(req, existing ? 'update' : 'create', r.table, row.id, `${r.title[1]} #${row.id}`);
     settings.invalidate(); navigation.invalidate();
@@ -331,7 +391,7 @@ router.post('/r/:resource/bulk', getResource, ah(async (req, res) => {
     if (tally.deactivated || tally.blocked) flash(req, 'warn', res.locals.t(`${tally.deactivated} निष्क्रिय, ${tally.blocked} रोकियो (प्रयोगमा छन्)।`, `${tally.deactivated} deactivated and ${tally.blocked} kept because they are in use.`));
   } else if (action === 'delete') {
     if (r.softDelete && cols.has('deleted_at')) await db.query(`UPDATE ${r.table} SET deleted_at = now() WHERE id = ANY($1::int[])`, [ids]);
-    else for (const row of await db.many(`DELETE FROM ${r.table} WHERE id = ANY($1::int[]) RETURNING *`, [ids])) for (const f of r.fileFields) remove(req, row[f.name]);
+    else for (const row of await db.many(`DELETE FROM ${r.table} WHERE id = ANY($1::int[]) RETURNING *`, [ids])) removeRowFiles(req, r, row);
   } else if (cols.has('is_active')) {
     await db.query(`UPDATE ${r.table} SET is_active = $1 WHERE id = ANY($2::int[])`, [action === 'activate' ? 1 : 0, ids]);
   }
@@ -354,6 +414,13 @@ router.post('/r/:resource/:id/toggle', getResource, ah(async (req, res) => {
   res.redirect(back);
 }));
 
+function removeRowFiles(req, r, row) {
+  for (const f of r.fileFields) {
+    if (f.type !== 'images') { remove(req, row[f.name]); continue; }
+    try { for (const x of JSON.parse(row[f.name] || '[]')) if (typeof x === 'string') remove(req, x); } catch { /* not JSON */ }
+  }
+}
+
 /**
  * Delete one resource row through its rules. beforeDelete(id, {db}) may return [np, en] (block) or
  * { deactivate: true, message: [np, en] } (data references the row: set is_active = 0 instead, like the PHP app).
@@ -373,7 +440,7 @@ async function guardedDelete(req, r, id, cols) {
     if (r.afterDelete) await r.afterDelete(id, { db });
     row = await db.one(`DELETE FROM ${r.table} WHERE id = $1 RETURNING *`, [id]);
   });
-  if (row) for (const f of r.fileFields) remove(req, row[f.name]);
+  if (row) removeRowFiles(req, r, row);
   await auth.audit(req, 'delete', r.table, id, `${r.title[1]} #${id}`);
   return { outcome: 'deleted' };
 }

@@ -331,3 +331,95 @@ test('admin users: an admin manages admin/staff/editor, never superadmins; edit 
   await ed.form('/admin/login', { username: 'staff9', password: 'LongPassword1' }, '/admin/login');
   assert.notEqual((await ed.get('/admin/users')).status, 200);
 });
+
+// ---------------------------------------------------------------- P2-5 … P2-13 generic CRUD
+test('resources: icon picker, BS dates, rich-text hook, auto slug / tracking no. / area, member-of-year per year', async () => {
+  let r = await admin.get('/admin/r/why_choose_features/new');
+  assert.match(r.text, /class="icon-picker"/);
+  r = await admin.get('/admin/r/news/new');
+  assert.match(r.text, /data-richtext/);
+  assert.match(r.text, /\/static\/js\/rich-editor\.js/);
+  r = await admin.get('/admin/r/notices/new');
+  assert.match(r.text, /data-ad-date/);
+  // B.S. date typed directly is stored as A.D.
+  r = await admin.form('/admin/r/notices', { title_np: 'BS सूचना', notice_date: '२०८१-०१-०१', content_np: '<p>x<script>y</script></p>' }, '/admin/r/notices/new');
+  assert.equal(r.status, 302);
+  const n = await inA(() => db.one("SELECT notice_date, content_np FROM notices WHERE title_np = 'BS सूचना'"));
+  assert.equal(String(n.notice_date).slice(0, 10), '2024-04-13');
+  assert.equal(n.content_np, '<p>x</p>');
+  // icon field keeps a legacy Font Awesome value and renders the mapped icon
+  await inA(() => db.query("INSERT INTO useful_links (title, url, icon, is_active) VALUES ('Old', 'https://x.np', 'fas fa-university', 1)"));
+  r = await admin.get('/admin/r/useful_links');
+  assert.equal(r.status, 200);
+  // pages: blank slug from the English title; footer + menu → about
+  r = await admin.form('/admin/r/pages', { title_np: 'नीति', title_en: 'Loan Policy', menu_position: 'footer', show_in_menu: '1', menu_icon: 'file' }, '/admin/r/pages/new');
+  assert.equal(r.status, 302);
+  const pg = await inA(() => db.one("SELECT slug, menu_position, menu_icon FROM pages WHERE title_en = 'Loan Policy'"));
+  assert.deepEqual([pg.slug, pg.menu_position, pg.menu_icon], ['loan-policy', 'about', 'file']);
+  // digital service type: slug from the name, unique; locked on edit
+  await admin.form('/admin/r/digital_service_types', { name_np: 'क्यूआर', name_en: 'QR Pay', icon: 'qr' }, '/admin/r/digital_service_types/new');
+  await admin.form('/admin/r/digital_service_types', { name_np: 'क्यूआर २', name_en: 'QR Pay', icon: 'qr' }, '/admin/r/digital_service_types/new');
+  const slugs = (await inA(() => db.many("SELECT slug FROM digital_service_types WHERE name_en = 'QR Pay' ORDER BY id"))).map(x => x.slug);
+  assert.deepEqual(slugs, ['qr_pay', 'qr_pay_2']);
+  const dsId = await inA(() => db.value("SELECT id FROM digital_service_types WHERE slug = 'qr_pay'"));
+  await admin.form(`/admin/r/digital_service_types/${dsId}`, { slug: 'hacked', name_np: 'क्यूआर', name_en: 'QR Pay' }, `/admin/r/digital_service_types/${dsId}/edit`);
+  assert.equal(await inA(() => db.value('SELECT slug FROM digital_service_types WHERE id = $1', [dsId])), 'qr_pay');
+  // auction: notice number and area text are filled
+  r = await admin.form('/admin/r/auction_notices', { title: 'जग्गा लिलाम', area_ropani: '2', area_aana: '4', status: 'upcoming' }, '/admin/r/auction_notices/new');
+  assert.equal(r.status, 302);
+  const au = await inA(() => db.one("SELECT tracking_number, area FROM auction_notices WHERE title = 'जग्गा लिलाम'"));
+  assert.match(au.tracking_number, /^AUC-\d{6}-\d{4}$/);
+  assert.equal(au.area, '2 रोपनी 4 आना');
+  r = await admin.get('/admin/r/auction_notices?q=' + au.tracking_number);
+  assert.match(r.text, /जग्गा लिलाम/);
+  // member of the year: one per year
+  await admin.form('/admin/r/member_of_year', { spotlight_year: '2081', member_name: 'A' }, '/admin/r/member_of_year/new');
+  r = await admin.form('/admin/r/member_of_year', { spotlight_year: '2081', member_name: 'B' }, '/admin/r/member_of_year/new');
+  assert.equal(r.status, 422);
+});
+
+test('resources: list filters and live / archive tabs', async () => {
+  await inA(() => db.query("INSERT INTO interest_rates (category, name_np, name, rate, is_active) VALUES ('saving', 'बचत क', 'Saving K', 5, 1), ('loan', 'ऋण ख', 'Loan K', 12, 1), ('loan', 'ऋण ग', 'Loan Old', 14, 0)"));
+  let r = await admin.get('/admin/r/interest_rates?f_category=loan');
+  assert.match(r.text, /ऋण ख/);
+  assert.doesNotMatch(r.text, /बचत क/);
+  r = await admin.get('/admin/r/interest_rates?f_category=loan&active=0');
+  assert.match(r.text, /ऋण ग/);
+  assert.doesNotMatch(r.text, /ऋण ख/);
+  assert.match(r.text, /name="f_category"/);
+});
+
+test('delete guards: album with photos, service group, committee, designation are kept', async () => {
+  const ids = await inA(async () => ({
+    album: await db.value("INSERT INTO gallery_albums (name_np, is_active) VALUES ('एल्बम', 1) RETURNING id"),
+    emptyAlbum: await db.value("INSERT INTO gallery_albums (name_np, is_active) VALUES ('खाली', 1) RETURNING id"),
+    cat: await db.value("INSERT INTO service_categories (name_np, name, is_active) VALUES ('समूह', 'G', 1) RETURNING id"),
+    ct: await db.value("INSERT INTO committee_types (name, name_np, is_active) VALUES ('Board X', 'बोर्ड', 1) RETURNING id"),
+  }));
+  await inA(async () => {
+    await db.query("INSERT INTO gallery (title, image, album_id, is_active) VALUES ('p', 'x.jpg', $1, 1)", [ids.album]);
+    await db.query("INSERT INTO services (title, title_np, service_category_id, is_active) VALUES ('S', 'स', $1, 1)", [ids.cat]);
+    await db.query("INSERT INTO committee_tenures (committee_type_id, tenure_name, start_date, end_date, is_active) VALUES ($1, '2080-85', '2023-01-01', '2028-01-01', 1)", [ids.ct]);
+  });
+  const del = (res, id) => admin.form(`/admin/r/${res}/${id}/delete`, {}, `/admin/r/${res}`);
+  await del('gallery_albums', ids.album);
+  await del('gallery_albums', ids.emptyAlbum);
+  await del('service_categories', ids.cat);
+  await del('committee_types', ids.ct);
+  const left = await inA(async () => [
+    await db.value('SELECT count(*) FROM gallery_albums WHERE id = $1', [ids.album]), await db.value('SELECT count(*) FROM gallery_albums WHERE id = $1', [ids.emptyAlbum]),
+    await db.value('SELECT count(*) FROM service_categories WHERE id = $1', [ids.cat]), await db.value('SELECT count(*) FROM committee_types WHERE id = $1', [ids.ct])].map(Number));
+  assert.deepEqual(left, [1, 0, 1, 1]);
+});
+
+test('auction gallery: photos are added, and only the record\'s own photos can be removed', async () => {
+  const id = await inA(() => db.value("INSERT INTO auction_notices (title, status, images, tracking_number) VALUES ('Gal', 'upcoming', '[\"auction-notices/a.jpg\"]', 'AUC-1') RETURNING id"));
+  const tok = await admin.token(`/admin/r/auction_notices/${id}/edit`);
+  const png = await pngBuf();
+  const r = await admin.agent.post(`/admin/r/auction_notices/${id}?_csrf=${encodeURIComponent(tok)}`).set('Host', HA).field('_csrf', tok).field('title', 'Gal').field('status', 'upcoming')
+    .field('remove_images', 'auction-notices/a.jpg').field('remove_images', 'settings/logo.png').attach('images', png, 'n.png').attach('images', png, 'm.png');
+  assert.equal(r.status, 302);
+  const imgs = JSON.parse(await inA(() => db.value('SELECT images FROM auction_notices WHERE id = $1', [id])));
+  assert.equal(imgs.length, 2);
+  assert.ok(imgs.every(x => /^auction-notices\/[0-9a-f]{32}\.png$/.test(x)));
+});

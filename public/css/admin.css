@@ -94,3 +94,25 @@ body.panel { background: var(--bg); }
 .qr-img { border-radius: 12px; border: 1px solid var(--line); background: #fff; }
 .secret-key { display: block; word-break: break-all; font-size: 1rem; margin-bottom: 12px; }
 .backup-codes { font-family: ui-monospace, monospace; font-size: 1.05rem; gap: 6px 16px; }
+/* ---- rich-text editor (public/js/rich-editor.js) ---- */
+.rte { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.rte-bar { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.rte-btn { min-width: 32px; height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: .85rem; font-weight: 500; cursor: pointer; }
+.rte-btn:hover, .rte-btn[aria-pressed="true"] { background: var(--surface); }
+.rte-btn:disabled { opacity: .4; cursor: default; }
+.rte-b { font-weight: 600; } .rte-i { font-style: italic; }
+.rte-area { min-height: 180px; max-height: 60vh; overflow-y: auto; padding: 10px 12px; outline: none; }
+.rte-area:focus { box-shadow: inset 0 0 0 2px var(--brand); }
+.rte .textarea { border: 0; border-radius: 0; font-family: ui-monospace, monospace; font-size: .85rem; }
+/* ---- icon picker / multi-image field / read-only value ---- */
+.icon-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; max-height: 190px; overflow-y: auto; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius); }
+.icon-opt { position: relative; display: grid; place-items: center; height: 38px; border-radius: 8px; cursor: pointer; color: var(--muted); }
+.icon-opt input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.icon-opt:hover { background: var(--surface-2); }
+.icon-opt:has(input:checked) { background: var(--brand); color: #fff; }
+.icon-opt:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 1px; }
+.thumb-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.thumb-pick { display: grid; gap: 4px; justify-items: start; }
+.readonly-value { background: var(--surface-2); color: var(--muted); }
+.list-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.toolbar .select { width: auto; }

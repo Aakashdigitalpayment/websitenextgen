@@ -48,3 +48,4 @@
   <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('सुरक्षित गर्नुहोस्', 'Save settings') %></button></div>
 </form>
 <% } %>
+<% if (defs.some(d => d.type === 'richtext')) { %><script src="/static/js/rich-editor.js" defer></script><% } %>

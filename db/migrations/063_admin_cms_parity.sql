@@ -200,3 +200,6 @@ BEGIN
     CREATE INDEX IF NOT EXISTS institutional_profile_fy_month_idx ON institutional_profile (fiscal_year, (COALESCE(report_month, 0)));
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------- CMS fields (P2-7 / P2-8)
+ALTER TABLE team_staff_groups ADD COLUMN IF NOT EXISTS icon VARCHAR(80) DEFAULT 'users';

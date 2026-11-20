@@ -31,6 +31,7 @@ const DEFS = [
   d('site_url', 'general', 'url', 'वेबसाइट URL', 'Website URL'),
   d('pwa_short_name', 'general', 'text', 'एपको छोटो नाम (PWA)', 'App short name (PWA)', { max: 30 }),
   d('site_launch_date', 'general', 'text', 'वेबसाइट सुरु मिति', 'Website launch date', { max: 40 }),
+  d('admin_date_input', 'general', 'select', 'प्रशासनमा मिति राख्ने तरिका', 'Date entry in the admin forms', { options: [['bs', 'वि.सं. पात्रो (ई.सं. मा स्वतः)', 'B.S. calendar (converted to A.D.)'], ['ad', 'ई.सं. मात्र', 'A.D. only']] }),
   // ---- contact
   d('phone', 'contact', 'text', 'फोन', 'Phone', { max: 100 }),
   d('mobile', 'contact', 'text', 'मोबाइल', 'Mobile', { max: 100 }),
