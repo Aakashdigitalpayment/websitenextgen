@@ -230,3 +230,28 @@ test('public KYM: verify-first gate, values on file are locked and masked, only 
   r = await c.get('/apply/kyc');
   assert.match(r.text, /action="\/apply\/kyc\/verify"/);
 });
+
+// ---------------------------------------------------------------- P1-6 card verification by name + Member ID + mobile
+test('card verify: name + Member ID + mobile (Devanagari or English name), photo only after success, lock after 5 wrong tries', async () => {
+  const portal = require('../src/lib/member-portal');
+  assert.equal(portal.namesMatch('Ram Bahadur', 'ram bahadur kc'), true);
+  assert.equal(portal.namesMatch('sha', 'Sujan Sharma'), false, 'no short substring matches');
+  assert.equal(portal.namesMatch('Shree Sujan Sarma', 'Sujan Sharma'), true);
+  const { m } = await seedMember('V-100', '9841800001');
+  await inA(() => db.query(`UPDATE kyc_applications SET father_name = 'बुबा', dob_bs = '2040-01-01', photo = 'kyc/p.jpg' WHERE member_id = 'V-100'`));
+  await inA(() => db.query(`INSERT INTO member_id_cards (member_id, card_no, verification_code, cvv, issued_date, expiry_date, status) VALUES ($1, 'V-100-AAA', 'TST-AAAA-BBBB', '1234', CURRENT_DATE, CURRENT_DATE + 365, 'active')`, [String(m.id)]));
+  const c = client();
+  assert.equal((await c.get('/verify/photo/' + m.id)).status, 403, 'no photo before verification');
+  let r = await c.form('/verify', { mode: 'name', name: 'KYC V-100', member_no: 'v-100', mobile: '9841800001' });
+  assert.equal(r.status, 200);
+  assert.match(r.text, /badge-ok/);
+  assert.match(r.text, /बुबा/);
+  assert.match(r.text, /2040-01-01/);
+  assert.match(r.text, new RegExp('/verify/photo/' + m.id));
+  assert.equal(await inA(() => db.value("SELECT verify_count FROM member_id_cards WHERE card_no = 'V-100-AAA'")), 1);
+  r = await c.form('/verify', { mode: 'name', name: 'केवाइसी', member_no: 'V-100', mobile: '9841800001', cvv: '9999' });
+  assert.match(r.text, /CVV/, 'optional CVV is checked when given');
+  for (let i = 0; i < 4; i++) r = await c.form('/verify', { mode: 'name', name: 'Someone Else', member_no: 'V-100', mobile: '9841800001' });
+  assert.match(r.text, /LOCK/);
+  assert.ok(await inA(() => db.value("SELECT locked_at FROM member_id_cards WHERE card_no = 'V-100-AAA'")));
+});

@@ -620,7 +620,7 @@ router.post('/verify/service', serviceLimiter, ah(async (req, res) => {
   const pv = req.session.partnerVerify;
   const title = res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card');
   const fresh = pv && Number(pv.mid) === util.int(req.body.member_id) && Date.now() - pv.at <= 30 * 60_000;
-  if (!fresh) return res.status(403).render('public/verify', { title, result: null, code: '', partners: [], log: { ok: false, text: res.locals.t('पहिले सदस्य प्रमाणित गर्नुहोस्, अनि मात्र सेवा लग गर्नुहोस्।', 'Please verify the member first, then log the service.') } });
+  if (!fresh) return res.status(403).render('public/verify', { title, result: null, code: '', mode: 'name', form: {}, partnerPref: '', partners: [], log: { ok: false, text: res.locals.t('पहिले सदस्य प्रमाणित गर्नुहोस्, अनि मात्र सेवा लग गर्नुहोस्।', 'Please verify the member first, then log the service.') } });
   const partnerId = util.int(req.body.partner_id, 0);
   const r = partnerId ? await require('../lib/partners').logService({
     memberId: pv.mid, cardNo: pv.card, partnerId, serviceName: req.body.service_name, taken: req.body.service_taken !== 'no', note: req.body.service_note, pin: req.body.partner_pin, ip: req.ip,
@@ -630,10 +630,12 @@ router.post('/verify/service', serviceLimiter, ah(async (req, res) => {
     duplicate: res.locals.t('यो साझेदारमा भर्खरै लग भइसकेको छ (९० सेकेन्ड)।', 'Already logged for this partner just now (90 s).'), invalid: res.locals.t('सेवा लग असफल।', 'Service log failed.'),
   };
   if (r.ok) pv.at = Date.now();
-  const card = await db.one('SELECT * FROM member_id_cards WHERE upper(verification_code) = $1', [String(pv.code || '').toUpperCase()]);
-  const member = await db.one('SELECT id, name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members WHERE id = $1', [pv.mid]);
+  const card = pv.code ? await db.one('SELECT * FROM member_id_cards WHERE upper(verification_code) = $1', [String(pv.code || '').toUpperCase()]) : null;
+  const member = await db.one('SELECT * FROM members WHERE id = $1', [pv.mid]);
+  const kyc = member ? await require('../lib/member-portal').linkedKyc(member) : null;
   res.status(r.ok ? 200 : 422).render('public/verify', {
-    title, code: pv.code, result: card && member ? { card, member } : null, partners: await verifyPartners(card || { status: 'active' }, member),
+    title, code: pv.code, mode: pv.code ? 'code' : 'name', form: {}, partnerPref: String(partnerId || ''),
+    result: member ? { card, member, kyc, valid: true, hasPhoto: !!(kyc?.photo || member.avatar_url) } : null, partners: await verifyPartners(card || { status: 'active' }, member),
     log: r.ok ? { ok: true, text: res.locals.t(`सेवा लग भयो — ${r.partner.partner_name}।`, `Service logged — ${r.partner.partner_name_en || r.partner.partner_name}.`) } : { ok: false, text: errors[r.error] || errors.invalid },
   });
 }));
