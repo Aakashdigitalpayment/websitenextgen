@@ -569,6 +569,24 @@ router.badges = ah(async (req, res, next) => {
     + (SELECT count(*) FROM member_profile_change_requests WHERE status = 'pending')
     + (SELECT count(*) FROM member_id_cards WHERE status = 'active' AND unlock_requested = 1 AND locked_at IS NOT NULL)
     + (SELECT count(*) FROM member_password_reset_requests WHERE status = 'pending')`)) || 0;
+  // admin-header.php bell: KYM risk reviews due, marketplace listings and programme attendance requests waiting
+  const extra = await db.one(`SELECT (SELECT count(*) FROM kyc_applications WHERE status = 'approved' AND risk_review_status = 'due_review' AND deleted_at IS NULL) AS kyc_risk,
+                                     (SELECT count(*) FROM member_marketplace_listings WHERE status = 'pending') AS marketplace,
+                                     (SELECT count(*) FROM member_program_attendance_requests WHERE status = 'pending') AS attendance`).catch(() => null);
+  if (extra) Object.assign(res.locals.pendingCounts, { _kycRisk: Number(extra.kyc_risk) || 0, _marketplace: Number(extra.marketplace) || 0, _attendance: Number(extra.attendance) || 0 });
+  // bell entries that are not inboxes: key → [href, [np, en], permission section]
+  res.locals.bellLinks = {
+    _memberPortal: ['/admin/member-portal', ['सदस्य पोर्टल अनुरोध', 'Member portal queue'], 'member_portal'],
+    _kycRisk: ['/admin/kyc-risk-reviews', ['KYM जोखिम पुनरावलोकन', 'KYM risk reviews due'], 'inbox:kyc'],
+    _marketplace: ['/admin/marketplace?status=pending', ['बजार सूची (स्वीकृतिका लागि)', 'Marketplace listings to approve'], 'marketplace'],
+    _attendance: ['/admin/programs/register?tab=requests', ['उपस्थिति अनुरोध', 'Attendance requests'], 'programs'],
+  };
+  // open the bell once whenever the waiting total grows (admin-header.php popup), not on every page
+  if (!req.path.endsWith('.json') && !(req.get('accept') || '').includes('application/json')) {
+    const total = Object.values(res.locals.pendingCounts).reduce((a, n) => a + (Number(n) || 0), 0);
+    res.locals.bellOpen = total > (Number(req.session.pendingSeen) || 0);
+    req.session.pendingSeen = total;
+  }
   next();
 });
 

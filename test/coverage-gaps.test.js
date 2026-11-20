@@ -455,3 +455,21 @@ test('B-5: AI connection test button reports the provider result (or the missing
   } finally { global.fetch = realFetch; }
   assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'ai_test' LIMIT 1")));
 });
+
+// ---------------------------------------------------------------- B-6 admin bell
+test('B-6: admin bell counts KYM risk reviews, marketplace listings and attendance requests; opens once per increase', async () => {
+  const c = await adminClient();
+  await seedMember('BL-0800', '9841600010');
+  await c.get('/admin'); // settle the "seen" total
+  await inA(async () => {
+    await db.query("UPDATE kyc_applications SET risk_review_status = 'due_review' WHERE member_id = 'BL-0800'");
+    const mid = await db.value("SELECT id FROM members WHERE sadasyata_number = 'BL-0800'");
+    await db.query("INSERT INTO member_marketplace_listings (member_id, listing_type, title, status) VALUES ($1, 'product', 'Goats', 'pending')", [mid]);
+  });
+  let page = await c.get('/admin');
+  assert.match(page.text, /href="\/admin\/kyc-risk-reviews"/);
+  assert.match(page.text, /href="\/admin\/marketplace\?status=pending"/);
+  assert.match(page.text, /<details class="bell" open>/);
+  page = await c.get('/admin');
+  assert.match(page.text, /<details class="bell">/, 'not opened again without a new item');
+});
