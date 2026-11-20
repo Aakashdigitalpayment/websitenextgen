@@ -37,9 +37,10 @@ const renderTrack = (res, extra) => res.render('public/track', {
   list: null, listError: null, cardLink: null, cardName: null, mode: 'id', details: [], steps: [], ...extra,
 });
 
-router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, next) : next()), ah(async (req, res) => {
-  const id = String(req.query.id || '').trim().toUpperCase().slice(0, 96);
-  const phone = nd.toLatinDigits(String(req.query.phone || '').trim()).slice(0, 24);
+/** Tracking number + phone lookup. The form POSTs (the phone never lands in access logs / Referer); GET keeps old links working. */
+async function trackById(req, res, rawId, rawPhone) {
+  const id = String(rawId || '').trim().toUpperCase().slice(0, 96);
+  const phone = nd.toLatinDigits(String(rawPhone || '').trim()).slice(0, 24);
   let result = null, history = [], searched = false;
   const blocked = id && phone ? trackBlocked(req) : 0;
   if (id && phone && !blocked) {
@@ -60,13 +61,15 @@ router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, 
   const details = result ? await submissions.publicDetails(result.mod, result.row, await forms.resolveOptions(result.mod), req.lang) : [];
   const steps = result && !result.mod.noStatus ? submissions.stages(result.mod, result.row.status) : [];
   renderTrack(res, { id, phone, result, history, searched, blocked, details, steps });
-}));
+}
+router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, next) : next()), ah((req, res) => trackById(req, res, req.query.id, req.query.phone)));
 
 /**
  * Phone + email: every request of that person. One of their tracking numbers is the second factor
  * (it is not derivable from the phone/email), and that application must carry both contacts.
  */
 router.post('/track', trackLimiter, ah(async (req, res) => {
+  if (req.body.mode === 'id') return trackById(req, res, req.body.id, req.body.phone);
   const t = res.locals.t;
   const phone = portal.normalizeMobile(req.body.phone).slice(-10);
   const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);

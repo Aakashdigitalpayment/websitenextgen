@@ -682,3 +682,24 @@ test('SM-13: crawlers and cold Facebook in-app opens of a report file land on th
   await inA(() => require('../src/lib/public-cache').clear());
   assert.match((await client().get('/reports')).text, new RegExp(`/reports/${id}/file\\?nav=1`));
 });
+
+// ---------------------------------------------------------------- SM-15 tracker: POST lookup, notify chips
+test('SM-15: tracker looks up by POST (phone kept out of the URL) and shows email / SMS delivery chips', async () => {
+  const id = await inA(async () => {
+    const lid = await db.value("INSERT INTO loan_applications (full_name, mobile, tracking_id, status) VALUES ('Trk', '9841600014', 'LN-TRK-0001', 'approved') RETURNING id");
+    await db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, created_at, notify_sent, admin_chose_to_notify, notify_email_status, notify_email_reason, notify_sms_status)
+                    VALUES ('loan', $1, 'pending', 'approved', 'ok', now(), 1, 1, 'failed', 'SMTP 550 secret reason', 'sent')`, [lid]);
+    return lid;
+  });
+  assert.ok(id);
+  const c = client();
+  const page = await c.get('/track');
+  assert.match(page.text, /<form class="form-card" method="post" action="\/track">\s*<input type="hidden" name="_csrf"[^>]*><input type="hidden" name="mode" value="id">/);
+  const r = await c.form('/track', { mode: 'id', id: 'ln-trk-0001', phone: '9841600014' }, '/track');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /LN-TRK-0001/);
+  assert.match(r.text, /Email: (असफल|failed)/);
+  assert.match(r.text, /SMS: (पठाइयो|sent)/);
+  assert.doesNotMatch(r.text, /SMTP 550/, 'no failure reasons in public');
+  assert.equal((await c.get('/track?id=LN-TRK-0001&phone=9841600014')).status, 200, 'old GET links still work');
+});
