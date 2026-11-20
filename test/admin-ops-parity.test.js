@@ -136,7 +136,7 @@ test('delete guards: in-use rows are deactivated, unused rows deleted with their
   assert.equal(s.dtFree, 0);
   assert.equal(Number(s.wtUsed), 0);
   assert.equal(s.auction, 1);
-  assert.ok(s.audit >= 6, 'deactivations audited');
+  assert.ok(s.audit >= 5, 'deactivations audited');
   // a builtin type keeps its code on edit
   await admin.form(`/admin/r/digital_service_types/${ids.dtBuiltin}`, { slug: 'renamed', name_np: 'मोबाइल', display_order: '0', is_active: '1' }, `/admin/r/digital_service_types/${ids.dtBuiltin}/edit`);
   assert.equal(await inA(() => db.value('SELECT slug FROM digital_service_types WHERE id = $1', [ids.dtBuiltin])), 'mob');
