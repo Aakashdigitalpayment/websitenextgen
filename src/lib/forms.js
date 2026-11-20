@@ -369,7 +369,7 @@ const STATUS_LABELS = {
   confirmed: ['निश्चित', 'Confirmed'], cancelled: ['रद्द', 'Cancelled'], resolved: ['समाधान', 'Resolved'], closed: ['बन्द', 'Closed'],
   reviewed: ['हेरियो', 'Reviewed'], shortlisted: ['छनोट सूचीमा', 'Shortlisted'], interviewed: ['अन्तर्वार्ता', 'Interviewed'],
   selected: ['छनोट', 'Selected'], under_review: ['समीक्षामा', 'Under review'], accepted: ['स्वीकार', 'Accepted'],
-  expired: ['म्याद सकियो', 'Expired'], paid: ['भुक्तानी भयो', 'Paid'], withdrawn: ['फिर्ता', 'Withdrawn'], cleared: ['फछ्र्यौट', 'Cleared'],
+  expired: ['म्याद सकियो', 'Expired'], withdrawn: ['फिर्ता', 'Withdrawn'], cleared: ['फछ्र्यौट', 'Cleared'],
 };
 const statusLabel = (s, lang = 'np') => (STATUS_LABELS[s] ? STATUS_LABELS[s][lang === 'en' ? 1 : 0] : s);
 
