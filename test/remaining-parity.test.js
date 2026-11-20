@@ -203,7 +203,7 @@ test('public extras: WhatsApp float (validated), bottom nav, header background, 
   let r = await get('/about');
   assert.ok(!/wa-float/.test(r.text) && !/wa\.me/.test(r.text));
   assert.match(r.text, /class="bottom-nav"/);
-  assert.match(r.text, /has-bottom-nav/);
+  assert.match(r.text, /<body class="[^"]*" data-bottom-nav>/);
   for (const href of ['/', '/services', '/apply', '/track', '/member/login']) assert.match(r.text, new RegExp(`<nav class="bottom-nav"[\\s\\S]*href="${href.replace(/\//g, '\\/')}"`));
 
   await setting('whatsapp_number', '+977 981-2345678');

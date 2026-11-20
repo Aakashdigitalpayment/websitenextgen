@@ -12,7 +12,7 @@
 .ip-card .kv { grid-template-columns: 1fr auto; font-size: .9rem; }
 @media print {
   .topbar, .site-header, .site-footer, .no-print, .float-widgets, .chat, .notice-popup, .ticker, .page-head .crumbs, .bottom-nav, .wa-float { display: none !important; }
-  body.has-bottom-nav { padding-bottom: 0 !important; }
+  body[data-bottom-nav] { padding-bottom: 0 !important; }
   body { background: #fff; }
   .card { break-inside: avoid; box-shadow: none; }
 }
@@ -154,9 +154,9 @@
   .bottom-nav a.active { color: var(--brand); font-weight: 600; }
   .bottom-nav a:hover { text-decoration: none; color: var(--brand); }
   .bottom-nav .hdr-count { position: absolute; top: 4px; left: calc(50% + 6px); }
-  body.has-bottom-nav { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
-  body.has-bottom-nav .chat, body.has-bottom-nav .float-widgets, body.has-bottom-nav .wa-float { bottom: calc(74px + env(safe-area-inset-bottom)); }
-  body.has-bottom-nav .wa-float.with-chat { bottom: calc(142px + env(safe-area-inset-bottom)); }
+  body[data-bottom-nav] { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+  body[data-bottom-nav] .chat, body[data-bottom-nav] .float-widgets, body[data-bottom-nav] .wa-float { bottom: calc(74px + env(safe-area-inset-bottom)); }
+  body[data-bottom-nav] .wa-float.with-chat { bottom: calc(142px + env(safe-area-inset-bottom)); }
 }
 
 /* digital services: how it works */

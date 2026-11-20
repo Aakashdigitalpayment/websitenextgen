@@ -18,7 +18,7 @@
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
 <% const bottomNav = settings.mobile_bottom_nav !== '0'; %>
-<body class="<%= locals.siteLayout ? siteLayout.bodyClass : '' %><%= bottomNav ? ' has-bottom-nav' : '' %>">
+<body class="<%= locals.siteLayout ? siteLayout.bodyClass : '' %>"<%- bottomNav ? ' data-bottom-nav' : '' %>>
   <a class="sr-only" href="#main">Skip to content</a>
   <div class="topbar">
     <div class="container">
