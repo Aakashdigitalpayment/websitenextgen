@@ -601,7 +601,7 @@ Legend: COVERED / PARTIAL / MISSING / NOT-NEEDED. Node refs: `admin.js` = `src/r
 
 ### 6.1 Schema presence
 - 103 `CREATE TABLE` in `database/install.sql`; **all 103 exist in `db/schema.sql` (+ migrations) with every column** (parser comparison; the only diff was a comment parse artefact in `notification_log.module`). Node adds 15 tables (admin_roles, api_*, app_error_log, group_centres, institutional_profile_welfare, institutional_welfare_opening, member_accounts, member_documents, member_profile_change_requests, member_transactions, payment_channels, rate_disclosures).
-- `db/legacy/install.sql` differs from the PHP file (older copy); `npm run schema:convert` reads it — keep it in sync or point the script at the real PHP file (P3).
+- `db/legacy/install.sql` refreshed from the PHP file (B-18).
 
 ### 6.2 Tables present in schema but never used by Node code
 
@@ -658,7 +658,7 @@ Every other install.sql table is edited through `res.*`, `inbox:*` or a dedicate
 15. **COVERED** (`res.pages` fields + `navigation.js` `isNew` → "New" chip in `layouts/public.ejs`) — **pages.is_new / new_until**: show a "New" chip on dynamic-page menu items while `is_new=1 AND (new_until IS NULL OR new_until >= CURRENT_DATE)` and expose both fields on `res.pages`.
 16. **COVERED** (`test/coverage-gaps.test.js`: admin button type, img alt, label for=, headers + noopener, concurrent check-in, over-size upload) — **Tests to add** (smoke parity): admin `<button>` type lint, `<img>` alt lint, label `for=` lint, security headers + `rel=noopener`, concurrent double check-in (Promise.all → one VALID row), over-size upload error message.
 17. **COVERED** (`readPhpSite` reads `includes/push-vapid.local.php`, `parseVapid` converts the PEM and checks it matches the public key; migration stores `push_vapid_public/private`; the shared fallback pair in push-vapid-config.php is deliberately not imported — that private key is public in the PHP repo) — **VAPID key import**: copy the PHP site's VAPID key pair (push-vapid.local.php / settings) into `push_vapid_public/private` during site migration so existing member push subscriptions keep working.
-18. `db/legacy/install.sql` is an older copy of the PHP file; refresh it or point `schema:convert` at the PHP repo copy.
+18. **COVERED** (refreshed from the PHP v7.0 `database/install.sql`: adds `reports.view_only`, already in Node via migrations) — 18. `db/legacy/install.sql` is an older copy of the PHP file; refresh it or point `schema:convert` at the PHP repo copy.
 19. **COVERED** — Create `docs/parity/coverage.md` (required by CLAUDE.md §1, currently absent) from this matrix + matrix A.
 
 ---
