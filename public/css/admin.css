@@ -105,9 +105,11 @@ body.panel { background: var(--bg); }
 .rte-area:focus { box-shadow: inset 0 0 0 2px var(--brand); }
 .rte .textarea { border: 0; border-radius: 0; font-family: ui-monospace, monospace; font-size: .85rem; }
 /* ---- icon picker / multi-image field / read-only value ---- */
+.icon-search { margin-bottom: 6px; }
 .icon-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; max-height: 190px; overflow-y: auto; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius); }
 .icon-opt { position: relative; display: grid; place-items: center; height: 38px; border-radius: 8px; cursor: pointer; color: var(--muted); }
 .icon-opt input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.icon-opt[hidden] { display: none; }
 .icon-opt:hover { background: var(--surface-2); }
 .icon-opt:has(input:checked) { background: var(--brand); color: #fff; }
 .icon-opt:has(input:focus-visible) { outline: 2px solid var(--brand); outline-offset: 1px; }

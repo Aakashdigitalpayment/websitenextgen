@@ -162,7 +162,7 @@ test('help guide: content data is bilingual, links real admin pages, filtered by
       assert.equal(pair.length, 2); assert.ok(pair[0] && pair[1], a.id + ' has np + en');
       assert.match(pair[0], /[ऀ-ॿ]/, a.id + ' Nepali text');
     }
-    assert.ok(require('../src/lib/icons').names.includes(a.icon), a.id + ' icon ' + a.icon);
+    assert.ok(require('../src/lib/icons').has(a.icon), a.id + ' icon ' + a.icon);
   }
   const editor = help.visibleFor({ level: 1 }).map(a => a.id);
   assert.ok(editor.includes('notices') && !editor.includes('settings') && !editor.includes('backup'));

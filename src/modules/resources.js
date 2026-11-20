@@ -3,7 +3,7 @@
  * Admin CRUD resources — one definition per content table.
  * Field: { name, label:[np,en], type, required, options | ref:{table,label}, list:true, folder }
  * Types: text, textarea, richtext, number, date, datetime, select, bool, image, file, color, url,
- *        icon (picker over lib/icons; PHP Font Awesome values still render), images (JSON gallery), readonly (shown, never saved)
+ *        icon (Lucide picker over lib/icons; stored PHP Font Awesome / old custom values still render via its alias table), images (JSON gallery), readonly (shown, never saved)
  * Resource: filters [{ name, type: select|ref|bool|distinct }] add list filters; beforeDelete may block or deactivate.
  */
 const T = (name, np, en, extra = {}) => ({ name, label: [np, en], type: 'text', ...extra });

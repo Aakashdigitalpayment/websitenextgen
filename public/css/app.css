@@ -335,6 +335,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: .93rem; }
 .text-center { text-align: center; } .text-right { text-align: right; }
 .w-full { width: 100%; } .maxw-sm { max-width: 520px; } .maxw-md { max-width: 760px; } .mx-auto { margin-left: auto; margin-right: auto; }
 .layout-side { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; align-items: start; }
+.layout-side-wide { grid-template-columns: minmax(0, 1fr) 380px; }
 @media (max-width: 900px) { .layout-side { grid-template-columns: 1fr; } }
 .pagination { display: flex; gap: 6px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
 .pagination a, .pagination span { min-width: 36px; height: 36px; padding: 0 10px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: .9rem; background: var(--surface); }
@@ -507,6 +508,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: .93rem; }
 /* ---- gallery videos ---- */
 .gallery .video-tile { position: relative; display: block; }
 .gallery .video-tile .play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 2rem; text-shadow: 0 2px 8px rgba(0, 0, 0, .5); pointer-events: none; }
+.gallery .video-tile .play .icon { width: 44px; height: 44px; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .5)); }
 /* ---- floating widgets (satisfaction, useful links) ---- */
 .float-widgets { position: fixed; left: 16px; bottom: 16px; z-index: 45; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .float-widget { position: relative; }

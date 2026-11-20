@@ -3,7 +3,7 @@
 <section class="section"><div class="container">
   <nav class="tabs" aria-label="<%= t('मिडियाको प्रकार', 'Media type') %>">
     <a class="tab <%= type === 'photo' ? 'active' : '' %>" href="<%= link({ type: '', album: '', category: '' }) %>"><%- icon('image') %> <%= t('फोटो', 'Photos') %> (<%= num(counts.photo || 0) %>)</a>
-    <a class="tab <%= type === 'video' ? 'active' : '' %>" href="<%= link({ type: 'video', album: '', category: '' }) %>"><%= t('▶ भिडियो', '▶ Videos') %> (<%= num(counts.video || 0) %>)</a>
+    <a class="tab <%= type === 'video' ? 'active' : '' %>" href="<%= link({ type: 'video', album: '', category: '' }) %>"><%- icon('play') %> <%= t('भिडियो', 'Videos') %> (<%= num(counts.video || 0) %>)</a>
   </nav>
 
   <% if (showAlbums) { %>
@@ -21,7 +21,7 @@
     <% if (!items.length) { %><div class="empty"><%= type === 'video' ? t('भिडियो छैन।', 'No videos yet.') : t('फोटो छैन।', 'No photos yet.') %></div><% } %>
     <div class="gallery" data-lightbox-group><% items.forEach(g => { %>
       <% if (type === 'video') { const ok = /^https:\/\//i.test(g.video_url || ''); if (ok) { %>
-        <a class="video-tile" href="<%= g.video_url %>" target="_blank" rel="noopener" title="<%= f(g, 'title') %>"<% if (g.ytId) { %> data-video="<%= g.ytId %>"<% } %>><% if (g.thumb) { %><img src="<%= /^https?:/i.test(g.thumb) ? g.thumb : mediaUrl(g.thumb) %>" alt="<%= f(g, 'title') %>" loading="lazy"><% } else { %><span class="icon-tile"><%- icon('image') %></span><% } %><span class="play" aria-hidden="true">▶</span><span class="sr-only"><%= t('भिडियो', 'Video') %>: <%= f(g, 'title') %></span></a>
+        <a class="video-tile" href="<%= g.video_url %>" target="_blank" rel="noopener" title="<%= f(g, 'title') %>"<% if (g.ytId) { %> data-video="<%= g.ytId %>"<% } %>><% if (g.thumb) { %><img src="<%= /^https?:/i.test(g.thumb) ? g.thumb : mediaUrl(g.thumb) %>" alt="<%= f(g, 'title') %>" loading="lazy"><% } else { %><span class="icon-tile"><%- icon('image') %></span><% } %><span class="play" aria-hidden="true"><%- icon('play') %></span><span class="sr-only"><%= t('भिडियो', 'Video') %>: <%= f(g, 'title') %></span></a>
       <% } } else if (g.image) { %>
         <a href="<%= mediaUrl(g.image) %>" target="_blank" rel="noopener" title="<%= f(g, 'title') %>" data-lightbox data-caption="<%= f(g, 'title') %>"><img src="<%= mediaUrl(g.image) %>"<%- srcset(g.image, '(max-width: 600px) 50vw, (max-width: 1000px) 33vw, 300px') %> alt="<%= f(g, 'title') %>" loading="lazy"></a>
       <% } %>

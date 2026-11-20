@@ -13,6 +13,7 @@ The original MySQL schema is kept at `db/legacy/install.sql` (input for the sche
 | Database | PostgreSQL 14+ (tested on 16) |
 | Sessions | PostgreSQL (`platform.user_sessions`) |
 | Design | Own CSS design system (`public/css/app.css`): Inter + Noto Sans Devanagari at **400/500/600** (no heavy weights), neutral surfaces, one brand colour per tenant, dark mode |
+| Icons | [Lucide](https://lucide.dev) only, self-hosted from the pinned `lucide-static` package and rendered server-side as inline SVG by `src/lib/icons.js` (`icon(name, cls \| { class, size, title })`). One alias table there maps the old custom names and PHP-era Font Awesome values (`fas fa-piggy-bank`) to Lucide; unknown names fall back to `circle`. The admin icon picker offers a curated set and searches all Lucide icons (`GET /admin/icons?q=`). No CDN, no icon font. |
 
 ## Multi-tenancy: one schema per tenant
 

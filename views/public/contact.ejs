@@ -1,5 +1,5 @@
 <%- include('../partials/page-head', { lead: t('प्रश्न, सुझाव वा सहयोगका लागि हामीलाई लेख्नुहोस्।', 'Write to us with questions, feedback or for help.') }) %>
-<section class="section"><div class="container layout-side" style="grid-template-columns:1fr 380px">
+<section class="section"><div class="container layout-side layout-side-wide">
   <form class="form-card" method="post" action="/contact" novalidate>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
     <% if (errors._form) { %><div class="alert alert-error"><%- icon('alert') %><span><%= errors._form %></span></div><% } %>

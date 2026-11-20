@@ -15,7 +15,7 @@ const auth = require('./auth');
 const settings = require('./settings');
 
 const ACTIONS = { v: ['हेर्ने', 'View'], c: ['थप्ने', 'Add'], e: ['सम्पादन', 'Edit'], d: ['हटाउने', 'Delete'] };
-const ALWAYS = ['/', '/profile', '/password', '/2fa', '/2fa/enable', '/2fa/disable', '/logout', '/quick-search', '/plan', '/help'];
+const ALWAYS = ['/', '/profile', '/password', '/2fa', '/2fa/enable', '/2fa/disable', '/logout', '/quick-search', '/icons', '/plan', '/help'];
 
 // bespoke admin pages: [section key, label, group, url prefixes]
 const EXTRA = [
