@@ -8,7 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="preload" href="/static/fonts/noto-deva-300.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css">
-  <% if (settings.logo) { %><link rel="icon" href="<%= mediaUrl(settings.logo) %>"><% } %>
+  <% const siteLogo = (lang === 'en' ? settings.logo_en : settings.logo_np) || settings.logo; const favicon = settings.site_favicon || siteLogo; %>
+  <% if (favicon) { %><link rel="icon" href="<%= mediaUrl(favicon) %>"><% } %>
   <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="<%= locals.theme ? theme.brand : brandColor %>">
   <style>:root{--brand:<%= locals.theme ? theme.brand : brandColor %>}</style>
 </head>
@@ -35,7 +36,7 @@
   <header class="site-header">
     <div class="container">
       <a class="brand" href="/">
-        <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>"<%- srcset(settings.logo, '160px') %> alt="<%= siteName %>">
+        <% if (siteLogo) { %><img src="<%= mediaUrl(siteLogo) %>"<%- srcset(siteLogo, '160px') %> alt="<%= siteName %>">
         <% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
         <span>
           <span class="brand-name"><%= siteName %></span>
@@ -80,7 +81,7 @@
       <div class="footer-grid">
         <div>
           <a class="brand" href="/">
-            <% if (settings.logo) { %><img src="<%= mediaUrl(settings.logo) %>"<%- srcset(settings.logo, '160px') %> alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
+            <% if (siteLogo) { %><img src="<%= mediaUrl(siteLogo) %>"<%- srcset(siteLogo, '160px') %> alt=""><% } else { %><span class="brand-mark"><%= (siteName || 'C').trim().charAt(0) %></span><% } %>
             <span class="brand-name"><%= siteName %></span>
           </a>
           <p class="mt-2"><%= util.excerpt(settings.about_short, 200) %></p>
@@ -123,7 +124,7 @@
       </div>
       <div class="footer-bottom">
         <span>© <%= num(new Date().getFullYear()) %> <%= siteName %>. <%= t('सर्वाधिकार सुरक्षित।', 'All rights reserved.') %></span>
-        <span><a href="/sitemap.xml">Sitemap</a> · <a href="/admin">Admin</a></span>
+        <span><% if (settings.supported_name) { %><%= t('सहयोग', 'Supported by') %>: <% if (/^https:\/\//i.test(settings.supported_url || '')) { %><a href="<%= settings.supported_url %>" target="_blank" rel="noopener"><%= settings.supported_name %></a><% } else { %><%= settings.supported_name %><% } %> · <% } %><a href="/sitemap.xml">Sitemap</a> · <a href="/admin">Admin</a></span>
       </div>
     </div>
   </footer>

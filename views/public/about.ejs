@@ -3,6 +3,8 @@
   <div class="container layout-side">
     <div class="prose">
       <%- util.richText(settings.about_content || settings.about_short || t('संस्थाको परिचय चाँडै राखिनेछ।', 'Our introduction will be added soon.')) %>
+      <% const history = lang === 'en' ? settings.history_content_en || settings.history_content_np : settings.history_content_np || settings.history_content_en; %>
+      <% if (history) { %><h2><%= t('हाम्रो इतिहास', 'Our history') %></h2><% if (settings.history_photo) { %><img src="<%= mediaUrl(settings.history_photo) %>"<%- srcset(settings.history_photo, '(max-width: 900px) 100vw, 700px') %> alt="" loading="lazy"><% } %><%- util.richText(history) %><% } %>
     </div>
     <aside class="card">
       <h3><%= t('संक्षिप्त जानकारी', 'At a glance') %></h3>

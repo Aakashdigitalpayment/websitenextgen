@@ -510,3 +510,19 @@ test('licence expired: a non-superadmin with the right password can send a payme
   await admin.form('/admin/license/cancel', { id: String(id) }, '/admin/license');
   assert.equal(await inA(() => db.value('SELECT status FROM site_license_renewal_notices WHERE id = $1', [id])), 'cancelled');
 });
+
+// ---------------------------------------------------------------- settings used on the public site
+test('public site: favicon, footer "supported by" credit (https only), history on the about page', async () => {
+  await setSetting('site_favicon', 'settings/fav.png');
+  await setSetting('supported_name', 'Sahakari Sangh');
+  await setSetting('supported_url', 'https://sangh.example.np');
+  await setSetting('history_content_np', '<p>२०५० सालमा स्थापना</p>');
+  const c = client();
+  let r = await c.get('/about');
+  assert.match(r.text, /rel="icon" href="\/uploads\/settings\/fav\.png"/);
+  assert.match(r.text, /href="https:\/\/sangh\.example\.np"[^>]*>Sahakari Sangh/);
+  assert.match(r.text, /२०५० सालमा स्थापना/);
+  await setSetting('supported_url', 'javascript:alert(1)');
+  r = await c.get('/about');
+  assert.doesNotMatch(r.text, /javascript:alert/);
+});
