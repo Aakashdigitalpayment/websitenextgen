@@ -71,7 +71,9 @@
   <div class="ticker" role="region" aria-label="<%= t('पछिल्ला सूचना', 'Latest notices') %>">
     <div class="container">
       <a class="ticker-label" href="/notices"><%- icon('bell') %><%= t('सूचना', 'Notices') %></a>
-      <div class="ticker-track"><ul class="ticker-list"><% tick.forEach(n => { %><li><a href="/notices/<%= n.id %>"><%= util.excerpt(f(n, 'title'), 90) %></a></li><% }) %></ul></div>
+      <% /* the list is rendered twice so the marquee loops seamlessly (0 → -50%) and starts with text visible on phones; speed follows the text length */
+         const tickTitles = tick.map(n => [n.id, util.excerpt(f(n, 'title'), 90)]); const tickDur = Math.max(18, Math.min(160, Math.round(tickTitles.reduce((a, x) => a + String(x[1]).length, 0) * 0.28 + tick.length * 2))); %>
+      <div class="ticker-track"><ul class="ticker-list" style="--ticker-dur:<%= tickDur %>s"><% [0, 1].forEach(copy => { tickTitles.forEach(([id, title]) => { %><li<%- copy ? ' aria-hidden="true"' : '' %>><a href="/notices/<%= id %>"<%- copy ? ' tabindex="-1"' : '' %>><%= title %></a></li><% }) }) %></ul></div>
     </div>
   </div>
   <% } %>
