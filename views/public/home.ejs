@@ -85,7 +85,7 @@
         <div class="section-head" style="margin-bottom:8px"><h3 class="mb-0"><%= t('पछिल्ला सूचना', 'Latest notices') %></h3><a class="small" href="/notices"><%= t('सबै', 'View all') %></a></div>
         <% if (!notices.length) { %><p class="muted"><%= t('हाल कुनै सूचना छैन।', 'No notices yet.') %></p><% } %>
         <ul class="list">
-          <% notices.forEach(n => { const bs = nd.adToBs(n.notice_date || String(n.created_at).slice(0, 10)) || ''; const parts = bs.split('-'); %>
+          <% notices.forEach(n => { const bs = nd.toBs(n.notice_date || n.created_at) || ''; const parts = bs.split('-'); %>
             <li class="list-item">
               <div class="date-chip"><b><%= num(Number(parts[2] || 0)) %></b><span><%= parts[1] ? (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[Number(parts[1]) - 1] : '' %></span></div>
               <div><a href="/notices/<%= n.id %>" style="color:var(--text);font-weight:500"><%= f(n, 'title') %></a>

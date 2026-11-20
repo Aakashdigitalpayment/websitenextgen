@@ -302,6 +302,13 @@ async function migrate(o) {
     step('member 2FA', 'ok', 'required for every member, as on the PHP site (Admin → Member portal to change)');
   });
 
+  // ---- BS dates typed into AD date columns (notices, careers, auctions …) → AD, so ordering and deadlines work
+  await db.withSchema(tenant.schema_name, async () => {
+    const fixed = await require('./bs-dates').normalise();
+    const n = Object.values(fixed).reduce((a, b) => a + b, 0);
+    step('BS dates', n ? 'ok' : 'skip', n ? `${n} dates converted from B.S. to A.D. (${Object.keys(fixed).join(', ')})` : 'none found');
+  });
+
   // ---- verify
   await db.withSchema(tenant.schema_name, async () => {
     for (const t of report.tables.filter(x => x.status === 'copied')) {

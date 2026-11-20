@@ -1,10 +1,38 @@
 <%- include('../partials/page-head', {}) %>
+<% const JOB_TYPES = { full_time: ['पूर्णकालीन', 'Full time'], part_time: ['आंशिक', 'Part time'], contract: ['करार', 'Contract'], temporary: ['अस्थायी', 'Temporary'], internship: ['इन्टर्नसिप', 'Internship'] };
+   const qsFor = o => { const p = new URLSearchParams(); const v = { q, dept, status, ...o }; Object.entries(v).forEach(([k, x]) => { if (x && !(k === 'status' && x === 'open')) p.set(k, x); }); const s = p.toString(); return s ? '?' + s : '/careers'; }; %>
 <section class="section"><div class="container">
-  <% if (!jobs.length) { %><div class="empty"><%= t('हाल कुनै रिक्त पद छैन।', 'No openings right now.') %></div><% } %>
-  <div class="stack"><% jobs.forEach(j => { const open = !j.deadline || j.deadline >= new Date().toISOString().slice(0,10); %>
-    <a class="card card-link flex justify-between items-center gap-2 wrap" href="/careers/<%= j.id %>">
-      <div><h3 class="mb-0"><%= f(j, 'title') %></h3><div class="small muted"><%= [j.department, j.location, j.job_type, j.vacancies ? num(j.vacancies) + ' ' + t('पद', 'posts') : ''].filter(Boolean).join(' · ') %></div></div>
-      <span class="badge <%= open ? 'badge-ok' : '' %>"><%= open ? (j.deadline ? t('अन्तिम मिति ', 'Apply by ') + bsDate(j.deadline) : t('खुला', 'Open')) : t('म्याद सकियो', 'Closed') %></span>
+  <form class="filter-pills" method="get" action="/careers" role="search">
+    <input class="input" type="search" name="q" value="<%= q %>" maxlength="80" placeholder="<%= t('पद, विभाग वा स्थान खोज्नुहोस्', 'Search position, department or place') %>" aria-label="<%= t('खोज', 'Search') %>" style="max-width:280px">
+    <% if (dept) { %><input type="hidden" name="dept" value="<%= dept %>"><% } %>
+    <% if (status !== 'open') { %><input type="hidden" name="status" value="<%= status %>"><% } %>
+    <button class="btn btn-outline btn-sm"><%- icon('search') %><%= t('खोज्नुहोस्', 'Search') %></button>
+  </form>
+  <div class="tabs" role="navigation" aria-label="<%= t('स्थिति', 'Status') %>">
+    <% [['open', t('खुला', 'Open')], ['closed', t('म्याद सकिएको', 'Closed')], ['all', t('सबै', 'All')]].forEach(([k, label]) => { %>
+      <a class="tab <%= status === k ? 'active' : '' %>" href="<%= qsFor({ status: k }) %>"<%- status === k ? ' aria-current="page"' : '' %>><%= label %> (<%= num(counts[k]) %>)</a>
+    <% }) %>
+  </div>
+  <% if (depts.length > 1) { %><div class="tabs" aria-label="<%= t('विभाग', 'Department') %>">
+    <a class="tab <%= !dept ? 'active' : '' %>" href="<%= qsFor({ dept: '' }) %>"><%= t('सबै विभाग', 'All departments') %></a>
+    <% depts.forEach(d => { %><a class="tab <%= dept === d ? 'active' : '' %>" href="<%= qsFor({ dept: d }) %>"><%= d %></a><% }) %>
+  </div><% } %>
+  <% if (!jobs.length) { %><div class="empty"><%= status === 'open' && !q && !dept ? t('हाल कुनै रिक्त पद छैन।', 'No openings right now.') : t('मिल्ने पद भेटिएन।', 'No matching positions.') %></div><% } %>
+  <div class="stack"><% jobs.forEach(j => { const jt = JOB_TYPES[j.job_type]; %>
+    <a class="card card-link job-card" href="/careers/<%= j.id %>">
+      <div class="flex justify-between items-center gap-2 wrap">
+        <div class="grow">
+          <h3 class="mb-0"><%= f(j, 'title') %>
+            <% if (j.isNew) { %><span class="badge badge-info"><%= t('नयाँ', 'New') %></span><% } %>
+            <% if (j.urgent) { %><span class="badge badge-bad"><%= t('अत्यावश्यक', 'Urgent') %></span><% } %></h3>
+          <div class="small muted"><%= [j.department, j.location, jt ? t(...jt) : j.job_type, j.vacancies ? num(j.vacancies) + ' ' + t('पद', 'posts') : '', j.salary_range].filter(Boolean).join(' · ') %></div>
+        </div>
+        <div class="text-right">
+          <span class="badge <%= j.open ? 'badge-ok' : '' %>"><%= j.open ? (j.deadline ? t('अन्तिम मिति ', 'Apply by ') + bsDate(j.deadline) : t('खुला', 'Open')) : t('म्याद सकियो', 'Closed') %></span>
+          <% if (j.open && j.daysLeft !== null) { %><div class="small <%= j.urgent ? 'text-bad' : 'muted' %> mt-1"><%= j.daysLeft === 0 ? t('आज अन्तिम दिन', 'Last day today') : t(num(j.daysLeft) + ' दिन बाँकी', j.daysLeft + ' days left') %></div><% } %>
+        </div>
+      </div>
+      <% if (j.progress !== null) { %><div class="progress mt-1" role="presentation"><span class="<%= j.urgent ? 'is-bad' : '' %>" style="width:<%= j.progress %>%"></span></div><% } %>
     </a>
   <% }) %></div>
 </div></section>

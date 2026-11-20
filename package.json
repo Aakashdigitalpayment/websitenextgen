@@ -20,6 +20,7 @@
     "migrate:site": "node scripts/migrate-site.js",
     "images:variants": "node scripts/image-variants.js",
     "pii": "node scripts/pii.js",
+    "bs-dates:normalise": "node scripts/normalise-bs-dates.js",
     "yeti": "bash deploy/yeti/remote.sh"
   },
   "dependencies": {

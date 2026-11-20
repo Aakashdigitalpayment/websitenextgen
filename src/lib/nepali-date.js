@@ -98,7 +98,44 @@ function monthGrid(y, m) {
   return { year: y, month: m, days: MONTH_DAYS[y][m - 1], startWeekday: new Date(Date.UTC(ay, am - 1, ad)).getUTCDay(), adStart };
 }
 
+/**
+ * BS dates typed into AD DATE columns (PHP coop_notice_date_bs / careerDeadlineAd): a 'YYYY-MM-DD' value whose
+ * year is 2070 or later is a BS date. Display it as is; convert it to AD for comparisons and ordering.
+ */
+const ymd = v => (v instanceof Date ? `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}` : String(v ?? '').trim().slice(0, 10));
+function isBsLike(v) {
+  const p = parse(ymd(v));
+  return !!p && p[0] >= 2070;
+}
+/** AD 'YYYY-MM-DD' for a DATE-column value that may hold a BS date (null when empty / invalid). */
+function toAd(v) {
+  const s = ymd(v);
+  if (!s) return null;
+  if (isBsLike(s)) return bsToAd(s);
+  const p = parse(s);
+  return p ? fmt(p) : null;
+}
+/** BS 'YYYY-MM-DD' for a DATE-column value that may already hold a BS date. */
+function toBs(v) {
+  const s = ymd(v);
+  if (!s) return null;
+  if (isBsLike(s)) { const p = parse(s); return p && isValidBs(...p) ? fmt(p) : null; }
+  return adToBs(s);
+}
+/** Today in Kathmandu as AD 'YYYY-MM-DD'. */
+function todayAd() {
+  const k = new Date(Date.now() + (5 * 60 + 45) * 60_000);
+  return `${k.getUTCFullYear()}-${pad(k.getUTCMonth() + 1)}-${pad(k.getUTCDate())}`;
+}
+/** Whole days from today (Kathmandu) to a DATE-column value (BS or AD); null when empty. */
+function daysUntil(v) {
+  const ad = toAd(v);
+  if (!ad) return null;
+  return Math.round((Date.parse(ad + 'T00:00:00Z') - Date.parse(todayAd() + 'T00:00:00Z')) / DAY);
+}
+
 module.exports = {
+  isBsLike, toAd, toBs, todayAd, daysUntil,
   bsToAd, adToBs, todayBs, isValidBs, monthLengths, formatBs, monthGrid, parse,
   toNepaliDigits, toLatinDigits, MONTHS_NP, MONTHS_EN, WEEKDAYS_NP, MIN_YEAR, MAX_YEAR,
 };

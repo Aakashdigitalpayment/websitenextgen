@@ -69,7 +69,7 @@ router.get('/', ah(async (req, res) => {
   const [sliders, services, notices, news, rates, stats, features, popup, programs, profile, links] = await Promise.all([
     db.many(`SELECT * FROM sliders WHERE ${ACTIVE} ORDER BY display_order, id LIMIT 6`),
     db.many(`SELECT * FROM services WHERE ${ACTIVE} ORDER BY display_order, id LIMIT 6`),
-    db.many(`SELECT * FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY notice_date DESC NULLS LAST, id DESC LIMIT 5`),
+    db.many(`SELECT * FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC LIMIT 5`),
     db.many(`SELECT * FROM news WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY created_at DESC LIMIT 3`),
     db.many(`SELECT * FROM interest_rates WHERE ${ACTIVE} ORDER BY category DESC, display_order, id LIMIT 8`),
     db.many('SELECT stat_key, stat_value FROM site_stats'),
@@ -215,14 +215,14 @@ router.get('/news/:id', ah(async (req, res, next) => {
 }));
 
 router.get('/notices', ah(async (req, res) => {
-  const { rows, pg } = await listing(req, 'notices', `${ACTIVE} AND ${NOT_DELETED}`, 'notice_date DESC NULLS LAST, id DESC', 15);
+  const { rows, pg } = await listing(req, 'notices', `${ACTIVE} AND ${NOT_DELETED}`, 'id DESC', 15);
   res.render('public/notices', { title: res.locals.t('सूचनाहरू', 'Notices'), items: rows, pg });
 }));
 
 router.get('/notices/:id', ah(async (req, res, next) => {
   const item = await db.one(`SELECT * FROM notices WHERE id = $1 AND ${ACTIVE} AND ${NOT_DELETED}`, [util.int(req.params.id)]);
   if (!item) return next();
-  const more = await db.many(`SELECT id, title, title_np, notice_date AS created_at FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} AND id <> $1 ORDER BY notice_date DESC NULLS LAST LIMIT 5`, [item.id]);
+  const more = await db.many(`SELECT id, title, title_np, notice_date AS created_at FROM notices WHERE ${ACTIVE} AND ${NOT_DELETED} AND id <> $1 ORDER BY id DESC LIMIT 5`, [item.id]);
   const content = res.locals.f(item, 'content');
   res.locals.jsonLd.push(seo.newsArticle(req, res.locals.settings, { headline: res.locals.f(item, 'title'), desc: util.excerpt(content, 158), url: res.locals.seo.canonical, date: item.notice_date || item.created_at, image: item.popup_image }, req.lang === 'en'));
   res.render('public/article', { title: res.locals.f(item, 'title'), description: util.excerpt(content, 158), ogImage: item.popup_image || null, breadcrumbs: [[res.locals.t('सूचना', 'Notices'), '/notices']], item, content, image: item.popup_image, attachment: item.attachment, date: item.notice_date || item.created_at, more, base: '/notices', crumb: res.locals.t('सूचना', 'Notices') });
@@ -329,16 +329,38 @@ router.get('/page/:slug', ah(async (req, res, next) => {
 }));
 
 // ---------------------------------------------------------------- careers & auctions & elections
+/** careers: BS deadlines typed into the DATE column count as BS (nd.toAd); open = no deadline or deadline today or later. */
+const careerOpen = j => { const d = nd.daysUntil(j.deadline); return d === null || d >= 0; };
 router.get('/careers', ah(async (req, res) => {
-  const jobs = await db.many(`SELECT * FROM careers WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY (deadline IS NULL OR deadline >= CURRENT_DATE) DESC, deadline NULLS LAST, id DESC`);
-  res.render('public/careers', { title: res.locals.t('रोजगारीका अवसर', 'Careers'), jobs });
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  const dept = String(req.query.dept || '').trim().slice(0, 120);
+  const status = ['open', 'closed', 'all'].includes(req.query.status) ? req.query.status : 'open';
+  const all = await db.many(`SELECT * FROM careers WHERE ${ACTIVE} AND ${NOT_DELETED} ORDER BY id DESC`);
+  const today = nd.todayAd();
+  for (const j of all) {
+    j.open = careerOpen(j);
+    j.daysLeft = nd.daysUntil(j.deadline);
+    const created = j.created_at ? new Date(j.created_at) : null;
+    j.isNew = j.open && created && Date.now() - created.getTime() < 7 * 86400_000;
+    j.urgent = j.open && j.daysLeft !== null && j.daysLeft <= 7;
+    const total = created && j.daysLeft !== null ? Math.round((Date.parse(nd.toAd(j.deadline) + 'T00:00:00Z') - Date.parse(created.toISOString().slice(0, 10) + 'T00:00:00Z')) / 86400_000) : 0;
+    j.progress = j.open && total > 0 && j.daysLeft !== null ? Math.max(4, Math.min(100, Math.round(j.daysLeft / total * 100))) : null;
+  }
+  const depts = [...new Set(all.map(j => String(j.department || '').trim()).filter(Boolean))].sort();
+  const counts = { open: all.filter(j => j.open).length, closed: all.filter(j => !j.open).length, all: all.length };
+  const needle = q.toLowerCase();
+  const jobs = all.filter(j => (status === 'all' || (status === 'open') === j.open)
+    && (!dept || String(j.department || '').trim() === dept)
+    && (!needle || [j.title, j.title_np, j.title_en, j.department, j.location, j.description].some(v => String(v || '').toLowerCase().includes(needle))))
+    .sort((a, b) => (b.open - a.open) || (a.open ? (a.daysLeft ?? 1e9) - (b.daysLeft ?? 1e9) : (b.daysLeft ?? -1e9) - (a.daysLeft ?? -1e9)) || b.id - a.id);
+  res.render('public/careers', { title: res.locals.t('रोजगारीका अवसर', 'Careers'), jobs, depts, counts, q, dept, status, today });
 }));
 
 router.get('/careers/:id', ah(async (req, res, next) => {
   const job = await db.one(`SELECT * FROM careers WHERE id = $1 AND ${ACTIVE} AND ${NOT_DELETED}`, [util.int(req.params.id)]);
   if (!job) return next();
-  const open = (!job.deadline || job.deadline >= new Date().toISOString().slice(0, 10)) && Number(job.allow_online_apply ?? 1) === 1;
-  res.render('public/career-detail', { title: res.locals.f(job, 'title'), job, open });
+  const open = careerOpen(job) && Number(job.allow_online_apply ?? 1) === 1;
+  res.render('public/career-detail', { title: res.locals.f(job, 'title'), job, open, closed: !careerOpen(job) });
 }));
 
 router.get('/auctions', ah(async (req, res) => {

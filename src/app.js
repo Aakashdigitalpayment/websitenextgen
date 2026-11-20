@@ -103,7 +103,7 @@ function createApp() {
       },
       num: v => (lang === 'np' ? nd.toNepaliDigits(v) : String(v ?? '')),
       money: v => util.money(v, lang),
-      bsDate: ad => (ad ? nd.formatBs(nd.adToBs(ad instanceof Date ? ad : String(ad).slice(0, 10)), lang) : ''),
+      bsDate: ad => (ad ? nd.formatBs(nd.toBs(ad), lang) : ''), // BS values typed into DATE columns stay BS
     });
   };
   app.use((req, res, next) => {
