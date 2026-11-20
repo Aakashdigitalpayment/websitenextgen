@@ -79,15 +79,22 @@ async function completeAdminLogin(req, user) {
 
 async function memberLogin(req, identifier, password, t = np => np) {
   const ip = req.ip;
+  // email, member no. (Latin / Devanagari digits), card no., or mobile in any format (+977, dashes); rows with a password first
+  const portal = require('./member-portal');
+  const mob = portal.normalizeMobile(identifier);
   const m = await db.one(
-    `SELECT * FROM members WHERE deleted_at IS NULL AND (phone = $1 OR lower(email) = lower($1) OR upper(trim(sadasyata_number)) = upper($1) OR member_card_no = $1)
-     ORDER BY id LIMIT 1`, [identifier]);
+    `SELECT * FROM members WHERE deleted_at IS NULL AND (
+       lower(email) = lower($1) OR upper(trim(sadasyata_number)) = ANY($2) OR member_card_no = $1
+       OR ($3 <> '' AND ${portal.phoneDigitsSql('phone')} = $3))
+     ORDER BY (password_hash IS NOT NULL AND password_hash <> '') DESC, id LIMIT 1`,
+    [identifier, portal.idVariants(identifier), /^\d{10}$/.test(mob) ? mob : '']);
   // throttle on the resolved account, so phone / email / member no. share one counter
   const key = m ? 'member:' + m.id : 'm:' + identifier;
   if (await tooManyAttempts(key, ip)) return { error: t(`धेरै पटक गलत प्रयास भयो। ${WINDOW_MIN} मिनेटपछि फेरि प्रयास गर्नुहोस्।`, `Too many failed attempts. Try again in ${WINDOW_MIN} minutes.`) };
   const ok = m && (await checkPassword(password, m.password_hash));
   if (!ok) { await recordFailure(key, ip); return { error: t('सदस्य विवरण वा पासवर्ड मिलेन।', 'Member details or password did not match.') }; }
   // credentials were right: approval / rejection (with the office's reason) is told to the member
+  await require('./member-portal').checkCardExpiry(m);
   const gate = require('./member-portal').eligibilityError(m, t);
   if (gate) { await clearFailures(key, ip); return { error: gate }; }
   await clearFailures(key, ip);

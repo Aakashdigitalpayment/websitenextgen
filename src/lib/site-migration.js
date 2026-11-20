@@ -296,6 +296,12 @@ async function migrate(o) {
   // ---- PII (citizenship numbers): PHP pii1:/pii2: → decrypt with the old key → new pii3: format
   await db.withSchema(tenant.schema_name, () => convertPii(o.piiKey, step, warn));
 
+  // ---- the PHP portal forced an authenticator for every member (member/login.php): keep it, so moving does not weaken sign-in
+  await db.withSchema(tenant.schema_name, async () => {
+    await require('./settings').set('member_2fa_required', '1', { label: 'Member 2FA (authenticator app) required for every member (1 = yes)', group: 'members' });
+    step('member 2FA', 'ok', 'required for every member, as on the PHP site (Admin → Member portal to change)');
+  });
+
   // ---- verify
   await db.withSchema(tenant.schema_name, async () => {
     for (const t of report.tables.filter(x => x.status === 'copied')) {

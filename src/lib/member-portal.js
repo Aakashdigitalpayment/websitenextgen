@@ -148,9 +148,19 @@ async function register({ sadasyata, email, phone, password, confirm }, t) {
   }
 }
 
+/** member-auth.php:737-753: an approved member whose 5-year card has expired moves to renewal_pending (mutates m). */
+async function checkCardExpiry(m) {
+  if (m && m.approval_status === 'approved' && m.card_expires_at && new Date(m.card_expires_at) < new Date()) {
+    await db.query("UPDATE members SET approval_status = 'renewal_pending', updated_at = now() WHERE id = $1 AND approval_status = 'approved'", [m.id]);
+    m.approval_status = 'renewal_pending';
+  }
+  return m;
+}
+
 /** Login gate shared by password, OAuth and 2FA completion (memberLoginEligibilityError). */
 function eligibilityError(m, t) {
   if (!m.is_active) return t('तपाईंको खाता निष्क्रिय छ। कार्यालयमा सम्पर्क गर्नुहोस्।', 'Your account is inactive. Please contact the office.');
+  if (m.approval_status === 'renewal_pending') return t('तपाईंको Member Card को ५ बर्षे म्याद सकिएको छ। कार्यालयमा सम्पर्क गरी renew गर्नुहोस्।', 'Your 5-year member card has expired. Please contact the office to renew it.');
   if (m.approval_status === 'pending') return t('तपाईंको खाता स्वीकृत हुन बाँकी छ। Admin अनुमोदनपछि लगिन गर्न सक्नुहुन्छ।', 'Your account is awaiting approval. You can sign in once the office approves it.');
   if (m.approval_status === 'rejected') {
     return t('तपाईंको दर्ता अस्वीकृत भएको छ।', 'Your registration has been rejected.')
@@ -560,7 +570,7 @@ async function activities(member, { from = null, to = null } = {}) {
 
 module.exports = {
   normalizeId, idVariants, normalizeMobile, phonesMatch, phoneDigitsSql, findBySadasyata, findKycByMemberId, linkedKyc, phoneOwnedByOther,
-  passwordPolicyError, register, eligibilityError, approve, reject, alertOffice,
+  passwordPolicyError, register, eligibilityError, checkCardExpiry, approve, reject, alertOffice,
   createOtp, verifyOtp, dispatchOtp, otpChannels, findForReset, maskPhone, maskEmail,
   cardPrefix, issueCard, CARD_LOCK_AFTER, signCardLink, checkCardLink, normalizeName, namesMatch, similarPct, verifyByNameIdMobile, cardOf,
   parseMonthlySaving, msFromDb, msLabel, monthlySavingFieldUpdate,

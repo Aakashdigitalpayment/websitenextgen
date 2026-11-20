@@ -432,3 +432,39 @@ test('job: closed / not-online positions refused, one application per email or p
   assert.equal(r.status, 422, 'duplicate email');
   assert.match(r.text, /पहिले नै आवेदन/);
 });
+
+// ---------------------------------------------------------------- P2-13 / P2-14 / P2-16 / SR member auth + portal
+test('member login: +977 / dashed mobile and Devanagari member number; expired card → renewal pending', async () => {
+  await inB(async () => {
+    await db.query(`INSERT INTO members (name, phone, email, sadasyata_number, approval_status, is_active, password_hash) VALUES ('Login One', '984-1950001', 'l1@example.com', 'L-123', 'approved', 1, $1)`, [await hash('Member@12345')]);
+    await db.query(`INSERT INTO members (name, phone, sadasyata_number, approval_status, is_active, password_hash, card_expires_at) VALUES ('Old Card', '9841950002', 'L-124', 'approved', 1, $1, now() - interval '1 day')`, [await hash('Member@12345')]);
+  });
+  const login = async (identifier) => client(HB).form('/member/login', { identifier, password: 'Member@12345' });
+  assert.equal((await login('+977-9841950001')).status, 302);
+  assert.equal((await login('l-१२३')).status, 302, 'Devanagari digits in the member number');
+  const r = await login('9841950002');
+  assert.equal(r.status, 401);
+  assert.match(r.text, /renew/);
+  assert.equal(await inB(() => db.value("SELECT approval_status FROM members WHERE sadasyata_number = 'L-124'")), 'renewal_pending');
+});
+
+test('member portal: dashboard counters + quick apply, ID card expiry warning and back side, service request', async () => {
+  const { m } = await seedMember('D-100', '9841960001', { password: 'Member@12345' });
+  await inA(() => db.query(`INSERT INTO member_id_cards (member_id, card_no, verification_code, cvv, issued_date, expiry_date, status) VALUES ($1, 'D-100-C', 'TST-DDDD-0001', '4321', CURRENT_DATE, CURRENT_DATE + 30, 'active')`, [String(m.id)]));
+  const c = await memberClient('9841960001', 'Member@12345');
+  let r = await c.get('/member');
+  assert.match(r.text, /quick-grid/);
+  assert.match(r.text, /href="\/member\/requests\?status=pending"/);
+  assert.match(r.text, /href="\/apply\/appointment"/);
+  r = await c.get('/member/id-card');
+  assert.match(r.text, /alert-warn/, 'expires within 60 days');
+  assert.match(r.text, /id-card-back/);
+  assert.match(r.text, /\/member\/profile\/kyc-file\/photo|person-photo/);
+  r = await c.form('/member/service-request', { service_type: 'grievance', message: 'Passbook not updated' });
+  assert.equal(r.status, 302);
+  const g = await inA(() => db.one("SELECT * FROM grievances WHERE member_portal_id = $1 ORDER BY id DESC LIMIT 1", [m.id]));
+  assert.equal(g.phone, '9841960001');
+  assert.match(g.description, /Passbook/);
+  r = await c.form('/member/service-request', { service_type: 'loan_inquiry', message: 'Rates?', preferred_date: '', preferred_time: '' });
+  assert.equal(r.status, 422, 'appointment types need a date and time');
+});

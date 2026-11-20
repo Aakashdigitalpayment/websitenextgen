@@ -205,6 +205,7 @@ router.post('/login/2fa', ah(async (req, res) => {
   const p = pending2fa(req);
   if (!p) return res.redirect('/member/login');
   const m = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [p.id]);
+  if (m) await portal.checkCardExpiry(m);
   const gate = m && portal.eligibilityError(m, t);
   if (!m || gate) { delete req.session.memberPending2fa; flash(req, 'error', gate || t('खाता भेटिएन।', 'Account not found.')); return res.redirect('/member/login'); }
   const next = auth.safeNext(req.query.next, '/member');
@@ -266,6 +267,7 @@ router.get('/oauth/facebook/callback', ah(async (req, res) => {
     }
   }
   if (!m) return fail(t('यो Facebook खातासँग कुनै सदस्य जोडिएको छैन। पहिले सदस्य दर्ता गर्नुहोस् वा पासवर्डले लगइन गरेर प्रोफाइलबाट जोड्नुहोस्।', 'No member is linked to this Facebook account. Register first, or sign in with your password and link it from your profile.'));
+  await portal.checkCardExpiry(m);
   const gate = portal.eligibilityError(m, t);
   if (gate) return fail(gate);
   const r = await auth.startMemberSession(req, m);

@@ -1,0 +1,15 @@
+<div class="content-head"><div><h1><%= title %></h1><div class="small muted"><%= t('एउटै फारमबाट भेटघाट, जानकारी, कागजात माग वा गुनासो पठाउनुहोस्। तपाईंको नाम, मोबाइल र सदस्यता नं. प्रोफाइलबाट लिइन्छ।', 'Send a visit, information, document request or grievance from one form. Your name, mobile and Member ID come from your profile.') %></div></div></div>
+<% if (error) { %><div class="alert alert-error maxw-md"><%- icon('alert') %><span><%= error %></span></div><% } %>
+<form class="form-card maxw-md" method="post" action="/member/service-request">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="form-grid">
+    <div class="field span-2"><label for="sr_type"><%= t('सेवा प्रकार', 'Service type') %><span class="req">*</span></label>
+      <select class="select" id="sr_type" name="service_type" required><option value=""><%= t('छान्नुहोस्', 'Select') %></option>
+        <% Object.entries(types).forEach(([k, v]) => { %><option value="<%= k %>" <%= values.service_type === k ? 'selected' : '' %>><%= t(...v.label) %></option><% }) %></select></div>
+    <div class="field span-2"><label for="sr_msg"><%= t('सन्देश / विवरण', 'Message / details') %><span class="req">*</span></label><textarea class="textarea" id="sr_msg" name="message" rows="4" required maxlength="2000"><%= values.message || '' %></textarea></div>
+    <div class="field"><label for="sr_date"><%= t('मनपर्ने मिति (गुनासो बाहेक)', 'Preferred date (not for grievances)') %></label><input class="input" type="date" id="sr_date" name="preferred_date" value="<%= values.preferred_date || '' %>"></div>
+    <div class="field"><label for="sr_time"><%= t('समय', 'Time') %></label><select class="select" id="sr_time" name="preferred_time"><option value=""><%= t('छान्नुहोस्', 'Select') %></option><% times.forEach(o => { %><option value="<%= o[0] %>" <%= values.preferred_time === o[0] ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select></div>
+    <% if (branches.length) { %><div class="field"><label for="sr_branch"><%= t('शाखा', 'Branch') %></label><select class="select" id="sr_branch" name="branch"><option value=""><%= t('छान्नुहोस्', 'Select') %></option><% branches.forEach(o => { %><option value="<%= o[0] %>" <%= values.branch === o[0] ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select></div><% } %>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary"><%- icon('check') %><%= t('अनुरोध पठाउनुहोस्', 'Send request') %></button></div>
+</form>
