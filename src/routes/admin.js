@@ -536,14 +536,19 @@ router.get('/plan', ah(async (req, res) => {
     staffCount: Number(await db.value('SELECT count(*) FROM admin_users WHERE deleted_at IS NULL AND is_active = 1')) || 0 });
 }));
 
-// ---------------------------------------------------------------- admin users (super admin)
-router.get('/users', requireAdmin('superadmin'), ah(async (req, res) => {
+// ---------------------------------------------------------------- admin users (admin+; legacy manage-admins.php)
+// An admin manages admin / staff / editor accounts; only a superadmin creates or touches superadmins, or resets 2FA.
+const ALL_ROLES = ['superadmin', 'admin', 'staff', 'editor'];
+const isSuperAdmin = req => auth.roleLevel(req.admin.role) >= 4;
+const grantableRoles = req => (isSuperAdmin(req) ? ALL_ROLES : ALL_ROLES.slice(1));
+async function usersPage(req, res, { errors = {}, values = { role: 'staff' }, status = 200 } = {}) {
   const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled, custom_role_id FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
   const customRoles = await db.many('SELECT id, name FROM admin_roles ORDER BY name');
-  res.render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, customRoles, errors: {}, values: { role: 'staff' } });
-}));
+  res.status(status).render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, customRoles, errors, values, roles: grantableRoles(req), isSuper: isSuperAdmin(req) });
+}
+router.get('/users', requireAdmin('admin'), ah((req, res) => usersPage(req, res)));
 
-router.post('/users', requireAdmin('superadmin'), ah(async (req, res) => {
+router.post('/users', requireAdmin('admin'), ah(async (req, res) => {
   const b = req.body, errors = {};
   const maxStaff = res.locals.plan.info.staff;
   if (Number(await db.value('SELECT count(*) FROM admin_users WHERE deleted_at IS NULL AND is_active = 1')) >= maxStaff) {
@@ -551,30 +556,40 @@ router.post('/users', requireAdmin('superadmin'), ah(async (req, res) => {
     return res.redirect('/admin/users');
   }
   const username = String(b.username || '').trim().toLowerCase();
+  const email = String(b.email || '').trim().toLowerCase();
   if (!/^[a-z0-9_.-]{3,50}$/.test(username)) errors.username = '3–50: a-z 0-9 _ . -';
   if (String(b.password || '').length < 10) errors.password = 'min 10 characters';
-  if (!['superadmin', 'admin', 'staff', 'editor'].includes(b.role)) errors.role = 'role';
+  if (!grantableRoles(req).includes(b.role)) errors.role = 'role';
+  if (email && (!util.isEmail(email) || email.length > 100)) errors.email = res.locals.t('इमेल मिलेन', 'Invalid email');
   if (!Object.keys(errors).length && await db.value('SELECT 1 FROM admin_users WHERE lower(username) = $1', [username])) errors.username = res.locals.t('यो नाम पहिले नै छ', 'Username taken');
-  if (Object.keys(errors).length) {
-    const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled, custom_role_id FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
-    return res.status(422).render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, customRoles: await db.many('SELECT id, name FROM admin_roles ORDER BY name'), errors, values: b });
-  }
+  if (Object.keys(errors).length) return usersPage(req, res, { errors, values: b, status: 422 });
   const roleId = b.role !== 'superadmin' ? util.int(b.custom_role_id, 0) : 0;
   const customRole = roleId ? await db.value('SELECT id FROM admin_roles WHERE id = $1', [roleId]) : null;
-  const row = await db.insert('admin_users', { username, password: await auth.hashPassword(b.password), full_name: String(b.full_name || username).slice(0, 100), email: b.email || null, role: b.role, custom_role_id: customRole || null, is_active: 1, status: 'active', must_change_password: 1, created_by: req.admin.id });
+  const row = await db.insert('admin_users', { username, password: await auth.hashPassword(b.password), full_name: String(b.full_name || username).trim().slice(0, 100), email: email || null, role: b.role, custom_role_id: customRole || null, is_active: 1, status: 'active', must_change_password: 1, created_by: req.admin.id });
   await auth.audit(req, 'create', 'admin_users', row.id, `Admin user ${username} (${b.role})`);
   flash(req, 'success', res.locals.t('प्रयोगकर्ता थपियो।', 'User added.'));
   res.redirect('/admin/users');
 }));
 
-router.post('/users/:id', requireAdmin('superadmin'), ah(async (req, res) => {
+router.post('/users/:id', requireAdmin('admin'), ah(async (req, res) => {
+  const t = res.locals.t;
   const id = util.int(req.params.id);
-  if (id === req.admin.id && (req.body.action === 'disable' || req.body.action === 'delete')) {
-    flash(req, 'error', res.locals.t('आफ्नै खाता निष्क्रिय गर्न मिल्दैन।', 'You cannot disable your own account.'));
-    return res.redirect('/admin/users');
+  const action = String(req.body.action || '');
+  const target = await db.one('SELECT id, role FROM admin_users WHERE id = $1 AND deleted_at IS NULL', [id]);
+  if (!target) return res.redirect('/admin/users');
+  const deny = msg => { flash(req, 'error', msg); return res.redirect('/admin/users'); };
+  if (id === req.admin.id && ['disable', 'delete', 'role'].includes(action)) return deny(t('आफ्नै खाताको भूमिका बदल्न वा निष्क्रिय गर्न मिल्दैन।', 'You cannot change the role of, or disable, your own account.'));
+  if (!isSuperAdmin(req) && (auth.roleLevel(target.role) >= 4 || action === 'reset2fa')) return deny(t('सुपर प्रशासकले मात्र यो गर्न सक्छन्।', 'Only a superadmin can do this.'));
+  if (action === 'role') {
+    if (!grantableRoles(req).includes(req.body.role)) return deny(t('यो भूमिका दिन मिल्दैन।', 'You cannot grant that role.'));
+    await db.query('UPDATE admin_users SET role = $1 WHERE id = $2', [req.body.role, id]);
   }
-  const action = req.body.action;
-  if (action === 'role' && ['superadmin', 'admin', 'staff', 'editor'].includes(req.body.role)) await db.query('UPDATE admin_users SET role = $1 WHERE id = $2', [req.body.role, id]);
+  if (action === 'edit') {
+    const fullName = String(req.body.full_name || '').trim().slice(0, 100), email = String(req.body.email || '').trim().toLowerCase();
+    if (!fullName) return deny(t('पूरा नाम चाहिन्छ।', 'Full name is required.'));
+    if (email && (!util.isEmail(email) || email.length > 100)) return deny(t('इमेल मिलेन।', 'Invalid email.'));
+    await db.query('UPDATE admin_users SET full_name = $1, email = $2 WHERE id = $3', [fullName, email || null, id]);
+  }
   if (action === 'custom_role') {
     const rid = util.int(req.body.custom_role_id, 0);
     await db.query('UPDATE admin_users SET custom_role_id = $1 WHERE id = $2', [rid && (await db.value('SELECT id FROM admin_roles WHERE id = $1', [rid])) ? rid : null, id]);
@@ -583,14 +598,29 @@ router.post('/users/:id', requireAdmin('superadmin'), ah(async (req, res) => {
   if (action === 'enable') await db.query("UPDATE admin_users SET is_active = 1, status = 'active' WHERE id = $1", [id]);
   if (action === 'delete') await db.query('UPDATE admin_users SET deleted_at = now(), is_active = 0 WHERE id = $1', [id]);
   if (action === 'reset2fa') await db.query('UPDATE admin_users SET twofa_enabled = 0, twofa_secret = NULL, twofa_backup_codes = NULL WHERE id = $1', [id]);
-  if (['role', 'disable', 'delete', 'reset2fa', 'reset'].includes(action)) await auth.bumpSessionVersion('admin_users', id);
+  if (['role', 'disable', 'delete', 'reset2fa', 'reset', 'custom_role'].includes(action)) await auth.bumpSessionVersion('admin_users', id, id === req.admin.id ? req : null);
   if (action === 'reset') {
     const temp = crypto.randomBytes(8).toString('base64url');
     await db.query('UPDATE admin_users SET password = $1, must_change_password = 1 WHERE id = $2', [await auth.hashPassword(temp), id]);
-    flash(req, 'info', res.locals.t('अस्थायी पासवर्ड: ', 'Temporary password: ') + temp);
+    flash(req, 'info', t('अस्थायी पासवर्ड: ', 'Temporary password: ') + temp);
   }
-  await auth.audit(req, 'user_' + action, 'admin_users', id, `Admin user ${action}`);
+  await auth.audit(req, 'user_' + action.slice(0, 20), 'admin_users', id, `Admin user ${action}`);
   res.redirect('/admin/users');
+}));
+
+// ---------------------------------------------------------------- own profile (legacy profile.php)
+router.get('/profile', (req, res) => res.render('admin/profile', { title: res.locals.t('मेरो प्रोफाइल', 'My profile'), errors: {}, values: req.admin }));
+router.post('/profile', ah(async (req, res) => {
+  const t = res.locals.t;
+  const values = { full_name: String(req.body.full_name || '').trim(), email: String(req.body.email || '').trim().toLowerCase() };
+  const errors = {};
+  if (!values.full_name || values.full_name.length > 100) errors.full_name = t('१–१०० अक्षर', '1–100 characters');
+  if (values.email && (!util.isEmail(values.email) || values.email.length > 100)) errors.email = t('इमेल मिलेन', 'Invalid email');
+  if (Object.keys(errors).length) return res.status(422).render('admin/profile', { title: t('मेरो प्रोफाइल', 'My profile'), errors, values: { ...req.admin, ...values } });
+  await db.query('UPDATE admin_users SET full_name = $1, email = $2 WHERE id = $3', [values.full_name, values.email || null, req.admin.id]);
+  await auth.audit(req, 'profile_update', 'admin_users', req.admin.id, 'Own profile updated', { old: { full_name: req.admin.full_name, email: req.admin.email }, new: values });
+  flash(req, 'success', t('प्रोफाइल सुरक्षित भयो।', 'Profile saved.'));
+  res.redirect('/admin/profile');
 }));
 
 // ---------------------------------------------------------------- own password

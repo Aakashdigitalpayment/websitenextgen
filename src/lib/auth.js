@@ -77,10 +77,14 @@ async function admin2faMode(user) {
   return (await admin2faRequired()) ? 'setup' : null;
 }
 
+const uaHash = req => require('crypto').createHash('sha256').update(String(req.get('user-agent') || '')).digest('hex').slice(0, 16);
+
 async function completeAdminLogin(req, user) {
   delete req.session.pending2fa;
   req.session.adminId = user.id;
   req.session.adminVer = user.session_version || 1;
+  req.session.adminSeen = Date.now();
+  req.session.adminUa = uaHash(req);
   await db.query('UPDATE admin_users SET last_login = now() WHERE id = $1', [user.id]);
   await audit(req, 'login', 'admin_users', user.id, `Admin login: ${user.username}`, { actorId: user.id, actorName: user.username });
   return { user };
@@ -143,6 +147,18 @@ async function loadUsers(req, res, next) {
                                 WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL`, [req.session.adminId]);
       // credentials changed since this session signed in → session is no longer valid
       if (!req.admin || (req.admin.session_version || 1) !== (req.session.adminVer || 1)) { req.admin = null; delete req.session.adminId; }
+      // idle sign-out (Admin → Security policy, default 30 min) and browser binding (legacy config.php isAdminLoggedIn)
+      else {
+        const idleMs = Math.max(5, Number(await require('./settings').get('admin_idle_minutes', '30')) || 30) * 60_000;
+        const ua = uaHash(req);
+        if ((req.session.adminUa && req.session.adminUa !== ua) || (req.session.adminSeen && Date.now() - req.session.adminSeen > idleMs)) {
+          req.admin = null; delete req.session.adminId; delete req.session.adminSeen; delete req.session.adminUa;
+          (req.session.flash = req.session.flash || []).push({ type: 'warn', message: 'सत्र समाप्त भयो — फेरि लगइन गर्नुहोस्। / Your session expired — please sign in again.' });
+        } else {
+          req.session.adminSeen = Date.now();
+          req.session.adminUa = req.session.adminUa || ua;
+        }
+      }
     }
     if (req.session.memberId) {
       req.member = await db.one(`SELECT * FROM members WHERE id = $1 AND is_active = 1 AND deleted_at IS NULL`, [req.session.memberId]);

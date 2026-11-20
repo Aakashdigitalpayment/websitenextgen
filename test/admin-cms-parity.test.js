@@ -137,7 +137,7 @@ test('security page: superadmin only, password confirmed, audited', async () => 
 });
 
 // ---------------------------------------------------------------- P1-2 settings registry
-const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex');
+const pngBuf = () => require('sharp')({ create: { width: 4, height: 4, channels: 3, background: '#0f766e' } }).png().toBuffer();
 async function postSettings(c, tab, fields, files = {}) {
   const tok = await c.token('/admin/settings?tab=' + tab);
   let r = c.agent.post('/admin/settings?_csrf=' + encodeURIComponent(tok)).set('Host', HA).field('_csrf', tok).field('_tab', tab);
@@ -164,7 +164,7 @@ test('settings: registry-driven tabs, validation, unseeded keys, image remove, s
   assert.equal(s.history_content_en, '<p>Founded <strong>2050</strong></p>');
   assert.equal(s.years_experience, '25');
   // favicon (any image def) uploads; then remove
-  r = await postSettings(admin, 'general', { s_site_name: 'CMS A' }, { file_site_favicon: PNG });
+  r = await postSettings(admin, 'general', { s_site_name: 'CMS A' }, { file_site_favicon: await pngBuf() });
   assert.equal(r.status, 302);
   await inA(() => settings.invalidate());
   assert.match(await inA(() => settings.get('site_favicon')), /^settings\//);
@@ -275,4 +275,59 @@ test('institutional profile: new indicators, BS date fills month + AD date, one 
   r = await admin.get('/admin/r/institutional_profile/new');
   assert.match(r.text, /name="liquidity_percent"/);
   assert.match(r.text, /<option value="2081\/82"/);
+});
+
+// ---------------------------------------------------------------- P2-1 / P2-2 / P2-3 accounts
+test('profile: edit own name and email (validated, audited)', async () => {
+  let r = await admin.form('/admin/profile', { full_name: 'Head Admin', email: 'not-an-email' });
+  assert.equal(r.status, 422);
+  r = await admin.form('/admin/profile', { full_name: 'Head Admin', email: 'Boss@Coop.NP' });
+  assert.equal(r.status, 302);
+  const u = await inA(() => db.one("SELECT full_name, email FROM admin_users WHERE username = 'admin'"));
+  assert.deepEqual([u.full_name, u.email], ['Head Admin', 'boss@coop.np']);
+  assert.ok(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'profile_update'")));
+});
+
+test('admin session: idle timeout and browser binding', async () => {
+  const sidCookie = r => [].concat(r.headers['set-cookie'] || []).map(x => x.split(';')[0]).find(x => x.startsWith('coop.sid='));
+  const c = client();
+  let r = await c.form('/admin/login', { username: 'admin2', password: PW }, '/admin/login');
+  const cookie = sidCookie(r);
+  assert.ok(cookie);
+  assert.equal((await c.get('/admin')).status, 200);
+  // another browser presenting the same cookie is signed out
+  const stolen = await request(app).get('/admin').set('Host', HA).set('Cookie', cookie).set('User-Agent', 'Other/1.0');
+  assert.equal(stolen.status, 302);
+  assert.equal((await c.get('/admin')).status, 302); // the session was dropped
+  // idle: last activity older than the limit
+  const c2 = client();
+  r = await c2.form('/admin/login', { username: 'admin2', password: PW }, '/admin/login');
+  const sid = decodeURIComponent(sidCookie(r).slice('coop.sid='.length)).slice(2).split('.')[0];
+  await db.query(`UPDATE platform.user_sessions SET sess = jsonb_set(sess::jsonb, '{adminSeen}', to_jsonb((extract(epoch from now()) * 1000)::bigint - 3600000))::json WHERE sid = $1`, [sid]);
+  assert.equal((await c2.get('/admin')).status, 302);
+});
+
+test('admin users: an admin manages admin/staff/editor, never superadmins; edit name/email', async () => {
+  const c = client();
+  await c.form('/admin/login', { username: 'admin2', password: PW }, '/admin/login');
+  assert.equal((await c.get('/admin/users')).status, 200);
+  let r = await c.form('/admin/users', { username: 'super2', password: 'LongPassword1', role: 'superadmin', full_name: 'X' }, '/admin/users');
+  assert.equal(r.status, 422);
+  r = await c.form('/admin/users', { username: 'staff9', password: 'LongPassword1', role: 'staff', full_name: 'Staff Nine', email: 'S9@x.np' }, '/admin/users');
+  assert.equal(r.status, 302);
+  const staffId = await inA(() => db.value("SELECT id FROM admin_users WHERE username = 'staff9'"));
+  const superId = await inA(() => db.value("SELECT id FROM admin_users WHERE username = 'admin'"));
+  await c.form(`/admin/users/${staffId}`, { action: 'role', role: 'superadmin' }, '/admin/users');
+  assert.equal(await inA(() => db.value('SELECT role FROM admin_users WHERE id = $1', [staffId])), 'staff');
+  await c.form(`/admin/users/${staffId}`, { action: 'edit', full_name: 'Staff 9', email: 'nine@x.np' }, '/admin/users');
+  assert.equal(await inA(() => db.value('SELECT email FROM admin_users WHERE id = $1', [staffId])), 'nine@x.np');
+  await c.form(`/admin/users/${superId}`, { action: 'disable' }, '/admin/users');
+  await c.form(`/admin/users/${superId}`, { action: 'reset' }, '/admin/users');
+  assert.equal(Number(await inA(() => db.value('SELECT is_active FROM admin_users WHERE id = $1', [superId]))), 1);
+  await c.form(`/admin/users/${staffId}`, { action: 'reset2fa' }, '/admin/users');
+  assert.ok(!(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'user_reset2fa'"))));
+  // an editor still cannot open it
+  const ed = client();
+  await ed.form('/admin/login', { username: 'staff9', password: 'LongPassword1' }, '/admin/login');
+  assert.notEqual((await ed.get('/admin/users')).status, 200);
 });
