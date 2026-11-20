@@ -79,7 +79,7 @@ function sections(data, menuSlug) {
       add('cmt-' + c.id, [c.name_np || c.name, c.name || c.name_np], by('cmt_' + c.id), '', { link: '/committees/' + c.id });
     }
   }
-  const officers = (!cat || (cat.source_type === 'staff' && Number(cat.include_contact_officers))) ? people.filter(p => Number(p.is_information_officer) || Number(p.is_grievance_officer)) : [];
+  const officers = (!cat || (cat.source_type === 'staff' && Number(cat.include_contact_officers))) ? people.filter(p => Number(p.is_chairman) || Number(p.is_ceo) || Number(p.is_information_officer) || Number(p.is_grievance_officer)) : [];
   return { cat, sections: out, officers };
 }
 

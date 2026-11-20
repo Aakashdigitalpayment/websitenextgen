@@ -142,6 +142,16 @@
     $$(input.dataset.liveFilter).forEach(el => { el.hidden = !!v && !el.textContent.toLowerCase().includes(v); });
   }));
 
+  // ---------------------------------------------------------------- PWA install button (shown only when the browser offers it)
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $$('[data-pwa-install]').forEach(b => { b.hidden = false; }); });
+  $$('[data-pwa-install]').forEach(b => b.addEventListener('click', async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch (e) { /* dismissed */ }
+    installEvt = null; b.hidden = true;
+  }));
+
   // ---------------------------------------------------------------- legacy about.php#anchors → their own pages
   if (location.pathname === '/about' && location.hash) {
     const h = location.hash.toLowerCase();

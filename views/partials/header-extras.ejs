@@ -11,6 +11,7 @@ const extLinks = [
 ].filter(l => l[0]);
 const portal = !locals.plan || plan.has('member_portal');
 %>
+<button type="button" class="btn btn-ghost btn-icon" data-pwa-install hidden aria-label="<%= t('एप इन्स्टल गर्नुहोस्', 'Install app') %>" title="<%= t('एप इन्स्टल गर्नुहोस्', 'Install app') %>"><%- icon('download') %></button>
 <a class="btn btn-ghost btn-icon" href="/search" data-search-open aria-label="<%= t('खोज्नुहोस्', 'Search') %>" title="<%= t('खोज्नुहोस्', 'Search') %>"><%- icon('search') %></a>
 <details class="hdr-menu hdr-bell" data-menu>
   <summary class="btn btn-ghost btn-icon" aria-label="<%= t('सूचनाहरू', 'Notices') %><%= recent ? ' (' + recent + ')' : '' %>"><%- icon('bell') %><% if (recent) { %><span class="hdr-count"><%= num(Math.min(recent, 9)) %></span><% } %></summary>
