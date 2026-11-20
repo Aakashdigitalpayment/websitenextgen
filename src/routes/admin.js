@@ -184,17 +184,18 @@ router.get('/', ah(async (req, res) => {
 /** Legacy dashboard.php widgets; each block only for admins who may open that section, and never fatal. */
 async function dashboardWidgets(req, res) {
   const can = res.locals.can || (() => true);
+  const ok = (section, path) => can(section) && (!res.locals.plan || res.locals.plan.allows(path)); // role matrix + subscription plan
   const lvl = auth.roleLevel(req.admin.role);
   const safe = async (fn, fallback = null) => { try { return await fn(); } catch { return fallback; } };
   const w = {};
-  if (lvl >= 2 && can('inbox:kyc')) {
+  if (lvl >= 2 && ok('inbox:kyc', '/admin/inbox/kyc')) {
     w.kyc = await safe(() => db.one(`SELECT count(*) FILTER (WHERE status IN ('pending', 'incomplete')) AS pending,
       count(*) FILTER (WHERE status = 'approved' AND risk_review_status = 'due_review') AS due FROM kyc_applications WHERE deleted_at IS NULL`));
   }
-  if (lvl >= 2 && can('inbox:loan')) w.loans = await safe(() => db.value("SELECT count(*) FROM loan_applications WHERE status = 'pending' AND deleted_at IS NULL"));
-  if (lvl >= 2 && can('password_requests')) w.pwRequests = await safe(() => db.value("SELECT count(*) FROM member_password_reset_requests WHERE status = 'pending'"));
-  if (lvl >= 2 && can('members')) w.pendingMembers = await safe(() => db.many("SELECT id, name, name_np, phone, created_at FROM members WHERE approval_status = 'pending' AND deleted_at IS NULL ORDER BY id DESC LIMIT 5"), []);
-  if (lvl >= 2 && can('programs')) {
+  if (lvl >= 2 && ok('inbox:loan', '/admin/inbox/loan')) w.loans = await safe(() => db.value("SELECT count(*) FROM loan_applications WHERE status = 'pending' AND deleted_at IS NULL"));
+  if (lvl >= 2 && ok('password_requests', '/admin/password-requests')) w.pwRequests = await safe(() => db.value("SELECT count(*) FROM member_password_reset_requests WHERE status = 'pending'"));
+  if (lvl >= 2 && ok('members', '/admin/members')) w.pendingMembers = await safe(() => db.many("SELECT id, name, name_np, phone, created_at FROM members WHERE approval_status = 'pending' AND deleted_at IS NULL ORDER BY id DESC LIMIT 5"), []);
+  if (lvl >= 2 && ok('programs', '/admin/programs')) {
     w.programs = await safe(async () => ({
       totals: await db.one('SELECT count(*) AS total, count(DISTINCT member_id) AS members FROM member_program_attendance'),
       pending: await db.value("SELECT count(*) FROM member_program_attendance_requests WHERE status = 'pending'"),
@@ -202,15 +203,15 @@ async function dashboardWidgets(req, res) {
       top: await db.many("SELECT COALESCE(program_title, '—') AS title, count(*) AS n FROM member_program_attendance GROUP BY 1 ORDER BY 2 DESC LIMIT 8"),
     }));
   }
-  if (lvl >= 2 && can('inbox:welfare')) {
+  if (lvl >= 2 && ok('inbox:welfare', '/admin/inbox/welfare')) {
     w.welfare = await safe(async () => ({
       counts: await db.one("SELECT count(*) FILTER (WHERE status = 'pending') AS pending, count(*) FILTER (WHERE status = 'under_review') AS review, count(*) FILTER (WHERE status = 'approved') AS approved FROM member_welfare_claims"),
       byType: await db.many('SELECT claim_type, count(*) AS n, COALESCE(sum(claim_amount), 0) AS amount FROM member_welfare_claims GROUP BY 1 ORDER BY 2 DESC LIMIT 10'),
       recent: await db.many('SELECT id, claim_type, claim_amount, status, created_at FROM member_welfare_claims ORDER BY id DESC LIMIT 5'),
     }));
   }
-  if (lvl >= 2 && can('credentials')) w.credentials = await safe(() => db.many('SELECT id, site_name, site_url, username, category FROM office_credentials WHERE is_active = 1 ORDER BY category, sort_order, site_name LIMIT 60'), []);
-  if (lvl >= 3 && can('audit')) w.activity = await safe(() => db.many("SELECT actor_name, action, summary, created_at FROM audit_log WHERE actor_type IN ('admin', 'superadmin') ORDER BY id DESC LIMIT 10"), []);
+  if (lvl >= 2 && ok('credentials', '/admin/credentials')) w.credentials = await safe(() => db.many('SELECT id, site_name, site_url, username, category FROM office_credentials WHERE is_active = 1 ORDER BY category, sort_order, site_name LIMIT 60'), []);
+  if (lvl >= 3 && ok('audit', '/admin/audit')) w.activity = await safe(() => db.many("SELECT actor_name, action, summary, created_at FROM audit_log WHERE actor_type IN ('admin', 'superadmin') ORDER BY id DESC LIMIT 10"), []);
   return w;
 }
 
