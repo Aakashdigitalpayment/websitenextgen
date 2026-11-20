@@ -357,6 +357,55 @@ const cardOf = memberPk => db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry
                                    WHERE member_id = $1 ORDER BY (status = 'active') DESC, id DESC LIMIT 1`, [String(memberPk)]);
 
 /** Count a wrong try on a card; locked after CARD_LOCK_AFTER. Returns the tries left. */
+// ---------------------------------------------------------------- card CVV (card-verify-helpers.php)
+/** pickNameForCardCvv: prefer a name with Latin letters (easier for vendors to type). */
+function pickNameForCardCvv(primary, secondary = '') {
+  primary = String(primary || '').trim(); secondary = String(secondary || '').trim();
+  if (primary && /[A-Za-z]/.test(primary)) return primary;
+  if (secondary && /[A-Za-z]/.test(secondary)) return secondary;
+  return primary || secondary;
+}
+/**
+ * deriveMemberCardCvv: the memorable CVV printed on PHP-issued cards — first 3 letters of the first name
+ * (Latin preferred, else the first 3 Unicode characters, 'X'-padded) + last 4 digits of the Member ID.
+ * "Sujan Sharma" + "MEM-2081-0123" → "SUJ0123".
+ */
+function deriveCardCvv(fullName, memberNumber) {
+  const first = String(fullName || '').replace(/\s+/gu, ' ').trim().split(' ')[0] || '';
+  const latin = first.replace(/[^A-Za-z]/g, '').toUpperCase();
+  let prefix;
+  if (latin) prefix = (latin + 'XXX').slice(0, 3);
+  else {
+    const clean = first.replace(/[\s\d\p{P}\p{S}]+/gu, '');
+    prefix = Array.from(clean || 'XXX').slice(0, 3).join('');
+    while (Array.from(prefix).length < 3) prefix += 'X';
+  }
+  const digits = String(memberNumber ?? '').replace(/\D/g, '') || '0000';
+  return prefix + digits.padStart(4, '0').slice(-4);
+}
+/** Every derived CVV a PHP card for this member may carry (PHP used two slightly different Member-ID picks). */
+function derivedCvvs(member, kyc) {
+  if (!member) return [];
+  const names = [pickNameForCardCvv(kyc?.full_name, member.name), kyc?.full_name_en, member.name].filter(Boolean);
+  const mc = String(member.member_card_no || '').trim();
+  const ids = [member.sadasyata_number || mc || member.id, member.sadasyata_number || (/^[A-Z]{2,4}-\d{4}-\d+$/i.test(mc) ? '' : mc) || member.id];
+  const out = new Set();
+  for (const n of names) for (const i of ids) out.add(deriveCardCvv(n, i));
+  return [...out];
+}
+const normalizeCvv = v => nd.toLatinDigits(String(v ?? '')).replace(/\s+/gu, '').toUpperCase().slice(0, 20);
+/** cvvCredentialsMatch: input vs the stored CVV and the derived ones, case-insensitive, constant time per candidate. */
+function cvvMatches(input, stored, derived = []) {
+  const a = Buffer.from(normalizeCvv(input));
+  if (!a.length) return false;
+  let ok = false;
+  for (const c of [stored, ...[].concat(derived)].map(normalizeCvv).filter(Boolean)) {
+    const b = Buffer.from(c);
+    if (b.length === a.length && crypto.timingSafeEqual(a, b)) ok = true;
+  }
+  return ok;
+}
+
 async function cardFailure(card) {
   if (!card) return null;
   const r = await db.one(`UPDATE member_id_cards SET failed_verify_count = COALESCE(failed_verify_count, 0) + 1,
@@ -372,7 +421,7 @@ async function cardFailure(card) {
 async function verifyByNameIdMobile({ name, memberId, mobile, cvv = '' }) {
   name = String(name || '').trim().slice(0, 120);
   const id = normalizeId(memberId), mob = normalizeMobile(mobile);
-  cvv = nd.toLatinDigits(String(cvv || '')).replace(/\D/g, '').slice(0, 4);
+  cvv = normalizeCvv(cvv);
   const mismatch = left => ({ ok: false, error: left === 0
     ? ['यो कार्ड ५ पटक गलत प्रयासका कारण LOCK भएको छ। कृपया कार्यालय/Admin सँग unlock अनुरोध गर्नुहोस्।', 'This card is now locked after 5 wrong tries. Please ask the office to unlock it.']
     : [`नाम / सदस्यता नं. / मोबाइल मेल खाएन।${left ? ' बाँकी प्रयास: ' + left : ''}`, `Name / Member ID / mobile did not match.${left ? ' Tries left: ' + left : ''}`] });
@@ -398,7 +447,7 @@ async function verifyByNameIdMobile({ name, memberId, mobile, cvv = '' }) {
   }
   const card = await cardOf(hit.member.id);
   if (card?.locked_at) return { ok: false, error: ['यो कार्ड हाल LOCK छ। कृपया कार्यालय/Admin सँग unlock गर्नुहोस्।', 'This card is locked. Please ask the office to unlock it.'] };
-  if (cvv && (!card || !card.cvv || card.cvv !== cvv)) {
+  if (cvv && !cvvMatches(cvv, card?.cvv, derivedCvvs(hit.member, hit.kyc))) {
     const left = await cardFailure(card);
     return left === 0 ? mismatch(0) : { ok: false, error: [`CVV मेल खाएन।${left ? ' बाँकी प्रयास: ' + left : ''}`, `CVV did not match.${left ? ' Tries left: ' + left : ''}`] };
   }
@@ -576,6 +625,7 @@ module.exports = {
   passwordPolicyError, register, eligibilityError, checkCardExpiry, approve, reject, alertOffice,
   createOtp, verifyOtp, dispatchOtp, otpChannels, findForReset, maskPhone, maskEmail,
   cardPrefix, issueCard, CARD_LOCK_AFTER, signCardLink, checkCardLink, normalizeName, namesMatch, similarPct, verifyByNameIdMobile, cardOf,
+  deriveCardCvv, pickNameForCardCvv, derivedCvvs, cvvMatches, normalizeCvv,
   parseMonthlySaving, msFromDb, msLabel, monthlySavingFieldUpdate,
   duplicateReport, uniqueGuardExists, tryUniqueGuard, sadasyataTaken, activities,
 };

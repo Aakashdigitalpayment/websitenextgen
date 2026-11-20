@@ -174,7 +174,7 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
     return verifyView(res, { mode: 'name', form: {}, partnerPref: pref, result, partners: result.valid ? await partnersFor(r.card || { status: 'active' }, r.member) : [] });
   }
   const code = String(req.body.code || '').trim().toUpperCase().slice(0, 20);
-  const cvv = nd.toLatinDigits(String(req.body.cvv || '').trim()).slice(0, 4);
+  const cvv = portal.normalizeCvv(req.body.cvv);
   const card = code.length >= 8 ? await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
                                                 FROM member_id_cards WHERE upper(verification_code) = $1 ORDER BY (status = 'active') DESC, id DESC LIMIT 1`, [code]) : null;
   const log = ok => db.query('INSERT INTO card_verify_attempts (ip, code_tried, success, created_at) VALUES ($1, $2, $3, now())', [req.ip, code, ok ? 1 : 0]);
@@ -183,7 +183,13 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
     await log(false);
     return verifyView(res, { mode: 'code', result: false, code, message: t('यो कार्ड हाल LOCK छ। कृपया कार्यालय/Admin सँग unlock गर्नुहोस्।', 'This card is locked. Please ask the office to unlock it.') });
   }
-  if (!card.cvv || card.cvv !== cvv) {
+  // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
+  const member = await db.one(`SELECT * FROM members
+                               WHERE (id::text = $1 OR sadasyata_number = $1 OR member_card_no = $1) AND deleted_at IS NULL
+                               ORDER BY (id::text = $1) DESC, id LIMIT 1`, [card.member_id]);
+  const kyc = member ? await portal.linkedKyc(member) : null;
+  // the stored CVV (Node: 4 random digits) or the name+Member-ID CVV printed on PHP-issued cards (e.g. SUJ0123)
+  if (!portal.cvvMatches(cvv, card.cvv, portal.derivedCvvs(member, kyc))) {
     await log(false);
     const r = await db.one(`UPDATE member_id_cards SET failed_verify_count = COALESCE(failed_verify_count, 0) + 1,
                               locked_at = CASE WHEN COALESCE(failed_verify_count, 0) + 1 >= $2 THEN now() ELSE locked_at END
@@ -199,11 +205,7 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
   await log(true);
   const vc = await db.one('UPDATE member_id_cards SET verify_count = COALESCE(verify_count, 0) + 1, failed_verify_count = 0, last_verified_at = now() WHERE id = $1 RETURNING verify_count', [card.id]);
   card.verify_count = vc.verify_count;
-  // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
-  const member = await db.one(`SELECT * FROM members
-                               WHERE (id::text = $1 OR sadasyata_number = $1 OR member_card_no = $1) AND deleted_at IS NULL
-                               ORDER BY (id::text = $1) DESC, id LIMIT 1`, [card.member_id]);
-  const result = await verifiedResult(req, card, member, member ? await portal.linkedKyc(member) : null);
+  const result = await verifiedResult(req, card, member, kyc);
   verifyView(res, { mode: 'code', result, code, partnerPref: pref, partners: result.valid ? await partnersFor(card, member) : [] });
 }));
 

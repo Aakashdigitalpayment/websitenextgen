@@ -1,4 +1,4 @@
-<%- include('../partials/page-head', { lead: t('परिचयपत्रमा लेखिएको नाम, सदस्यता नम्बर र मोबाइल, वा प्रमाणीकरण कोड र ४ अंकको CVV राख्नुहोस्।', 'Enter the name, Member ID and mobile on the card, or the verification code and 4-digit CVV.') }) %>
+<%- include('../partials/page-head', { lead: t('परिचयपत्रमा लेखिएको नाम, सदस्यता नम्बर र मोबाइल, वा प्रमाणीकरण कोड र कार्डमा लेखिएको CVV राख्नुहोस्।', 'Enter the name, Member ID and mobile on the card, or the verification code and the CVV printed on the card.') }) %>
 <% const m0 = locals.mode === 'code' ? 'code' : 'name'; const fv = locals.form || {}; %>
 <section class="section"><div class="container maxw-sm" style="margin-left:0">
   <div class="tabs" role="tablist">
@@ -13,7 +13,7 @@
       <div class="field span-2"><label for="v_name"><%= t('सदस्यको नाम', "Member's name") %></label><input class="input" id="v_name" name="name" value="<%= fv.name || '' %>" required autocomplete="off"></div>
       <div class="field"><label for="v_member"><%= t('सदस्यता नं.', 'Member ID') %></label><input class="input" id="v_member" name="member_no" value="<%= fv.member_no || '' %>" required autocomplete="off"></div>
       <div class="field"><label for="v_mobile"><%= t('मोबाइल', 'Mobile') %></label><input class="input" id="v_mobile" name="mobile" type="tel" value="<%= fv.mobile || '' %>" required inputmode="numeric"></div>
-      <div class="field"><label for="v_cvv">CVV <span class="small faint"><%= t('(ऐच्छिक)', '(optional)') %></span></label><input class="input" id="v_cvv" name="cvv" inputmode="numeric" maxlength="4" autocomplete="off"></div>
+      <div class="field"><label for="v_cvv">CVV <span class="small faint"><%= t('(ऐच्छिक)', '(optional)') %></span></label><input class="input" id="v_cvv" name="cvv" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
     </div>
     <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button></div>
   </form>
@@ -22,7 +22,7 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="partner_pref" value="<%= partnerPref %>">
     <div class="form-grid">
       <div class="field"><label for="code"><%= t('प्रमाणीकरण कोड', 'Verification code') %></label><input class="input" id="code" name="code" value="<%= code %>" placeholder="AKS-9F7K-2X4M" required></div>
-      <div class="field"><label for="cvv">CVV</label><input class="input" id="cvv" name="cvv" inputmode="numeric" maxlength="4" required></div>
+      <div class="field"><label for="cvv">CVV</label><input class="input" id="cvv" name="cvv" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" required></div>
     </div>
     <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button></div>
   </form>
