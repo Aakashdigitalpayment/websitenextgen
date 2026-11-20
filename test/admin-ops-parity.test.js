@@ -501,3 +501,33 @@ test('pii CLI: status, migrate (dry run, guarded, round trip) and decrypt rollba
     if (before === undefined) delete process.env.PII_KEY; else process.env.PII_KEY = before;
   }
 });
+
+// ---------------------------------------------------------------- P3: election nav flag, report view-only, resource selects
+test('P3: Elections menu follows show_in_navbar, view-only reports open inline, resource forms keep legacy values', async () => {
+  const pub = client();
+  let home = await pub.get('/');
+  assert.doesNotMatch(home.text, /href="\/elections"/);
+  const cy = await inA(() => db.value("INSERT INTO election_cycles (title_np, is_published, show_in_navbar) VALUES ('Nav E', 1, 1) RETURNING id"));
+  await inA(async () => require('../src/lib/navigation').invalidate());
+  home = await pub.get('/');
+  assert.match(home.text, /href="\/elections"/);
+  await inA(() => db.query('UPDATE election_cycles SET show_in_navbar = 0 WHERE id = $1', [cy]));
+  await inA(async () => require('../src/lib/navigation').invalidate());
+
+  // view-only report: served inline even for a non-preview type
+  const dir = path.join(config.uploadDir, A, '_private', 'reports');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'r.docx'), 'x');
+  const rid = await inA(() => db.value("INSERT INTO reports (title, title_np, report_type, file_path, view_only, is_active) VALUES ('R', 'R', 'Annual Report', '_private/reports/r.docx', 1, 1) RETURNING id"));
+  const f = await pub.get(`/reports/${rid}/file`);
+  assert.equal(f.status, 200);
+  assert.equal(f.headers['content-disposition'], 'inline');
+  // a legacy free-text value stays selected in the new select
+  const form = await admin.get(`/admin/r/reports/${rid}/edit`);
+  assert.match(form.text, /<option value="Annual Report" selected>/);
+  assert.match(form.text, /name="view_only"/);
+  for (const r of ['reports', 'information_room_items', 'election_cycles', 'election_candidates', 'election_milestones', 'honor_programs', 'digital_service_types', 'welfare_claim_types', 'upcoming_programs']) {
+    assert.equal((await admin.get(`/admin/r/${r}/new`)).status, 200, r);
+  }
+  assert.match((await admin.get('/admin/r/information_room_items/new')).text, /value="board_decision"/);
+});

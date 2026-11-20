@@ -39,7 +39,7 @@ router.post('/:id/pin', auth.requireAdmin('admin'), ah(async (req, res) => {
     await partners.setPin(p.id, null);
     flash(req, 'success', res.locals.t('PIN हटाइयो — सेवा लग गर्न PIN चाहिँदैन।', 'PIN cleared — no PIN is needed to log services.'));
   } else if (!partners.validPin(req.body.pin)) {
-    flash(req, 'error', res.locals.t('PIN ४–१२ अंक/अक्षरको हुनुपर्छ।', 'The PIN must be 4–12 letters or digits.'));
+    flash(req, 'error', res.locals.t('PIN ६–१२ अंक/अक्षरको हुनुपर्छ।', 'The PIN must be 6–12 letters or digits.'));
     return res.redirect('/admin/partners');
   } else {
     await partners.setPin(p.id, req.body.pin);

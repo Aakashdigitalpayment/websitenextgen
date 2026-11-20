@@ -290,7 +290,7 @@ router.get('/reports/:id/file', ah(async (req, res, next) => {
     }
   }
   if (/^https?:/i.test(stored)) return level === 'member' ? next() : res.redirect(stored);
-  require('../lib/uploads').sendStored(req, res, next, stored);
+  require('../lib/uploads').sendStored(req, res, next, stored, { viewOnly: Number(item.view_only) === 1 });
 }));
 
 router.get('/institutional-profile', ah(async (req, res) => {

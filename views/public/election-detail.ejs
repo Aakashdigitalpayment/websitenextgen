@@ -10,6 +10,6 @@
   </div>
   <aside class="card"><h3><%= t('कार्यतालिका', 'Schedule') %></h3>
     <% if (!milestones.length) { %><p class="muted small"><%= t('कार्यतालिका प्रकाशित भएको छैन।', 'Not published yet.') %></p><% } %>
-    <ul class="timeline"><% milestones.forEach(m => { %><li><div class="small faint"><%= bsDate(m.event_date) %></div><div style="font-weight:500"><%= f(m, 'title') %></div><% if (m.attachment) { %><a class="small" href="<%= mediaUrl(m.attachment) %>" target="_blank" rel="noopener"><%= t('सूचना', 'Notice') %></a><% } %></li><% }) %></ul>
+    <ul class="timeline"><% milestones.forEach(m => { %><li><div class="small faint"><%= bsDate(m.event_date) %></div><div style="font-weight:500"><%= f(m, 'title') %></div><% if (f(m, 'detail')) { %><div class="small muted" style="white-space:pre-wrap"><%= f(m, 'detail') %></div><% } %><% if (m.attachment) { %><a class="small" href="<%= mediaUrl(m.attachment) %>" target="_blank" rel="noopener"><%= t('सूचना', 'Notice') %></a><% } %></li><% }) %></ul>
   </aside>
 </div></section>

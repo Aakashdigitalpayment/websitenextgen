@@ -45,6 +45,28 @@ async function galleryAfterSave(row) {
 }
 const ORDER = N('display_order', 'क्रम', 'Order', { default: 0 });
 
+// publications (legacy admin/reports.php selects)
+const REPORT_TYPES = [['monthly', 'मासिक', 'Monthly'], ['quarterly', 'त्रैमासिक', 'Quarterly'], ['progress', 'प्रगति', 'Progress'], ['annual', 'वार्षिक', 'Annual'],
+  ['financial', 'वित्तीय', 'Financial'], ['audit', 'लेखापरीक्षण', 'Audit'], ['agm', 'साधारण सभा', 'AGM'], ['other', 'अन्य', 'Other']];
+const BS_MONTHS = ['बैशाख', 'जेठ', 'असार', 'साउन', 'भदौ', 'असोज', 'कात्तिक', 'मंसिर', 'पुस', 'माघ', 'फागुन', 'चैत']
+  .map((np, i) => [np, np, ['Baisakh', 'Jestha', 'Asar', 'Shrawan', 'Bhadra', 'Asoj', 'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'][i]]);
+/** Fiscal years "2082/83" … (Nepali FY starts in Shrawan), current first, plus any value already stored. */
+async function fiscalYearOptions() {
+  const nd = require('../lib/nepali-date');
+  const [y, m] = String(nd.todayBs() || '').split('-').map(Number);
+  const cur = (y || 2082) - (m && m < 4 ? 1 : 0);
+  const years = Array.from({ length: 12 }, (_, i) => `${cur - i}/${String((cur - i + 1) % 100).padStart(2, '0')}`);
+  const stored = (await lazyDb().many("SELECT DISTINCT report_year FROM reports WHERE COALESCE(report_year, '') <> ''")).map(r => r.report_year);
+  return [...new Set([...years, ...stored])].map(v => [v, v, v]);
+}
+// information room categories (legacy irCategories()); values stored before stay selectable
+const IR_CATEGORIES = [['board_decision', 'बोर्ड निर्णय', 'Board decision'], ['policy', 'नीति', 'Policy'], ['karyabidhi', 'कार्यविधि', 'Procedure'], ['biniyam', 'बिनियम', 'Bylaws'],
+  ['meeting_minutes', 'बैठक माइन्युट', 'Meeting minutes'], ['circular', 'परिपत्र', 'Circular'], ['other', 'अन्य', 'Other']];
+async function irCategoryOptions() {
+  const stored = (await lazyDb().many("SELECT DISTINCT category FROM information_room_items WHERE COALESCE(category, '') <> ''")).map(r => r.category);
+  return [...IR_CATEGORIES, ...stored.filter(c => !IR_CATEGORIES.some(o => o[0] === c)).map(c => [c, c, c])];
+}
+
 // ---- delete guards (legacy programs.php, election-*.php, *-types.php): keep data-bearing rows, deactivate instead
 const IN_USE = ['प्रयोगमा भएकाले मेटाइएन — निष्क्रिय गरियो।', 'In use, so it was deactivated instead of deleted.'];
 const deactivateIf = n => (Number(n) > 0 ? { deactivate: true, message: IN_USE } : null);
@@ -91,13 +113,16 @@ const resources = {
   // report files are private and served through /reports/:id/file (members-only reports stay gated)
   reports: { group: 'media', icon: 'chart', title: ['प्रतिवेदन', 'Reports'], order: 'report_year DESC NULLS LAST, id DESC', privateFiles: true, fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
-    T('report_type', 'प्रकार', 'Type', { list: true }), T('report_year', 'वर्ष', 'Year', { list: true }), T('report_quarter', 'त्रैमास', 'Quarter'), T('report_month', 'महिना', 'Month'),
-    FILE('file_path', 'फाइल', 'File'), SEL('access_level', 'पहुँच', 'Access', [['none', 'सबै', 'Public'], ['member', 'सदस्य मात्र', 'Members only']], { default: 'none', list: true }), ORDER, ACTIVE] },
+    SEL('report_type', 'प्रकार', 'Type', REPORT_TYPES, { default: 'annual', list: true }), SEL('report_year', 'आर्थिक वर्ष', 'Fiscal year', [], { list: true, optionsFn: fiscalYearOptions }),
+    SEL('report_quarter', 'त्रैमास', 'Quarter', [['Q1', 'पहिलो त्रैमास', 'Q1'], ['Q2', 'दोस्रो त्रैमास', 'Q2'], ['Q3', 'तेस्रो त्रैमास', 'Q3'], ['Q4', 'चौथो त्रैमास', 'Q4']]),
+    SEL('report_month', 'महिना', 'Month', BS_MONTHS),
+    FILE('file_path', 'फाइल', 'File'), SEL('access_level', 'पहुँच', 'Access', [['none', 'सबै', 'Public'], ['member', 'सदस्य मात्र', 'Members only']], { default: 'none', list: true }),
+    B('view_only', 'हेर्न मात्र (डाउनलोड नहुने)', 'View only (no download)'), ORDER, ACTIVE] },
 
-  information_room_items: { minRole: 'admin', privateFiles: true, group: 'media', icon: 'shield', title: ['सूचना कक्ष (सदस्य)', 'Information room'], order: 'display_order, meeting_date DESC NULLS LAST, id DESC',
+  information_room_items: { minRole: 'admin', privateFiles: true, bulk: true, group: 'media', icon: 'shield', title: ['सूचना कक्ष (सदस्य)', 'Information room'], order: 'display_order, meeting_date DESC NULLS LAST, id DESC',
     links: [['/admin/information-room/browse', 'eye', 'पूर्वावलोकन', 'Preview'], ['/admin/information-room/logs', 'inbox', 'पहुँच लग', 'Access log']], fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title', 'शीर्षक (English)', 'Title (English)'),
-    T('category', 'समूह', 'Category', { list: true }), D('meeting_date', 'बैठक मिति', 'Meeting date', { list: true }), T('reference_no', 'च.नं./सन्दर्भ', 'Reference no.'),
+    SEL('category', 'समूह', 'Category', IR_CATEGORIES, { list: true, optionsFn: irCategoryOptions }), D('meeting_date', 'बैठक मिति', 'Meeting date', { list: true }), T('reference_no', 'च.नं./सन्दर्भ', 'Reference no.'),
     FILE('file_path', 'फाइल (PDF)', 'File (PDF)', { required: true }), TA('description_np', 'विवरण', 'Description'),
     B('allow_download', 'डाउनलोड अनुमति', 'Allow download', { default: 0 }), ORDER, ACTIVE] },
 
@@ -117,7 +142,7 @@ const resources = {
     N('rate', 'ब्याजदर (%)', 'Rate (%)', { required: true, list: true, step: '0.01' }), TA('description_np', 'विवरण', 'Description (Nepali)'), TA('description', 'विवरण (English)', 'Description (English)'), ORDER, ACTIVE] },
   digital_service_types: { group: 'services', icon: 'phone', title: ['डिजिटल सेवा प्रकार', 'Digital service types'], order: 'display_order, id', fields: [
     T('slug', 'कोड', 'Code', { required: true, list: true }), T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
-    B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE], ...typeGuard('digital_service_types', 'digital_service_requests', 'service_type') },
+    T('icon', 'आइकन', 'Icon', { default: 'fas fa-laptop', hint: 'lucide / fa नाम' }), T('color', 'रङ', 'Colour', { default: 'var(--primary-color)', hint: '#0f766e' }), B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE], ...typeGuard('digital_service_types', 'digital_service_requests', 'service_type') },
   app_features: { group: 'services', icon: 'phone', title: ['एप सुविधा', 'App features'], order: 'sort_order, id', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { list: true }), T('title', 'शीर्षक (English)', 'Title (English)', { required: true }), TA('description_np', 'विवरण', 'Description (Nepali)'), TA('description', 'विवरण (English)', 'Description (English)'),
     B('is_new', 'नयाँ', 'New', { list: true }), N('sort_order', 'क्रम', 'Order', { default: 0 }), ACTIVE] },
@@ -232,8 +257,9 @@ const resources = {
     SEL('recurrence', 'दोहोरिने', 'Repeats', [['yearly', 'हरेक वर्ष', 'Yearly'], ['once', 'एक पटक', 'Once']], { default: 'yearly' }), T('event_type', 'प्रकार', 'Type'), TA('description_np', 'विवरण', 'Description'), ACTIVE] },
   honor_programs: { group: 'engage', icon: 'award', title: ['सम्मान कार्यक्रम', 'Honour programmes'], order: 'id DESC',
     rowLinks: [{ href: '/admin/honor-programs/:id/categories', label: ['विधा', 'Categories'], icon: 'award' }], fields: [
-    T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('fiscal_year', 'आ.व.', 'Fiscal year', { list: true }),
-    T('opens_at', 'खुल्ने मिति', 'Opens', { type: 'datetime' }), T('closes_at', 'बन्द मिति', 'Closes', { type: 'datetime', list: true }), TA('instructions_np', 'निर्देशन', 'Instructions'), ACTIVE],
+    T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('fiscal_year', 'आ.व.', 'Fiscal year', { list: true }), T('event_label', 'कार्यक्रम लेबल', 'Event label'),
+    T('opens_at', 'खुल्ने मिति', 'Opens', { type: 'datetime' }), T('closes_at', 'बन्द मिति', 'Closes', { type: 'datetime', list: true }), TA('instructions_np', 'निर्देशन', 'Instructions'),
+    TA('instructions_en', 'निर्देशन (English)', 'Instructions (English)'), B('show_new_badge', '"नयाँ" ब्याज देखाउने', 'Show "New" badge', { default: 1 }), ACTIVE],
   beforeDelete: async (id, { db }) => deactivateIf(await db.value('SELECT count(*) FROM honor_applications WHERE program_id = $1', [id])),
   afterDelete: async (id, { db }) => db.query('DELETE FROM honor_program_categories WHERE program_id = $1', [id]) },
   honor_categories: { group: 'engage', icon: 'award', title: ['सम्मान विधा', 'Honour categories'], order: 'display_order, id', fields: [
@@ -244,10 +270,11 @@ const resources = {
   welfare_claim_types: { group: 'engage', icon: 'heart', title: ['कल्याण दाबी प्रकार', 'Welfare claim types'], order: 'display_order, id', fields: [
     T('slug', 'कोड', 'Code', { required: true, list: true }), T('name_np', 'नाम (नेपाली)', 'Name (Nepali)', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'),
     SEL('form_profile', 'फारमका थप विवरण', 'Form fields', [['other', 'सामान्य', 'General'], ['death', 'मृत्यु (मृतक, प्रमाणपत्र, लाभग्राही)', 'Death (deceased, certificate, beneficiary)'], ['maternity', 'सुत्केरी (प्रसूति मिति, अस्पताल)', 'Maternity (delivery date, hospital)'], ['medical', 'उपचार (रोग, उपचार मिति)', 'Medical (illness, treatment date)'], ['accident', 'दुर्घटना', 'Accident'], ['insurance', 'बीमा (पोलिसी नं., बीमा कम्पनी)', 'Insurance (policy no., insurer)']], { default: 'other', list: true }),
-    B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE], ...typeGuard('welfare_claim_types', 'member_welfare_claims', 'claim_type') },
+    T('icon', 'आइकन', 'Icon', { default: 'fas fa-gift', hint: 'lucide / fa नाम' }), T('color', 'रङ', 'Colour', { default: '#ff9800', hint: '#ff9800' }), B('requires_document', 'कागजात चाहिन्छ', 'Requires document'), ORDER, ACTIVE], ...typeGuard('welfare_claim_types', 'member_welfare_claims', 'claim_type') },
   election_cycles: { minRole: 'admin', group: 'engage', icon: 'vote', title: ['निर्वाचन', 'Elections'], order: 'sort_order, date_from DESC NULLS LAST', fields: [
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('period_label', 'अवधि', 'Period'),
-    D('date_from', 'देखि', 'From'), D('date_to', 'सम्म', 'To'), TA('intro_np', 'परिचय', 'Introduction'), B('is_published', 'प्रकाशित', 'Published', { list: true }), N('sort_order', 'क्रम', 'Order', { default: 0 }),
+    D('date_from', 'देखि', 'From'), D('date_to', 'सम्म', 'To'), TA('intro_np', 'परिचय', 'Introduction'), TA('intro_en', 'परिचय (English)', 'Introduction (English)'), B('is_published', 'प्रकाशित', 'Published', { list: true }),
+    B('show_in_navbar', 'मेनुमा "निर्वाचन" देखाउने', 'Show "Elections" in the site menu', { list: true }), N('sort_order', 'क्रम', 'Order', { default: 0 }),
     B('voting_enabled', 'अनलाइन मतदान सक्रिय', 'Voting enabled', { list: true }), T('vote_start_at', 'मतदान खुल्ने समय', 'Voting opens', { type: 'datetime', hint: 'नेपाल समय / Nepal time' }),
     T('vote_end_at', 'मतदान बन्द हुने समय', 'Voting closes', { type: 'datetime' })],
   // legacy election-information.php: enabling voting needs both times, and closing must follow opening
@@ -290,11 +317,12 @@ const resources = {
   election_candidates: { minRole: 'admin', group: 'engage', icon: 'user', title: ['उम्मेदवार', 'Candidates'], order: 'cycle_id DESC, position_id, display_order', fields: [
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true }), REF('position_id', 'पद', 'Position', 'election_positions', 'title_np', { required: true, list: true }),
     IMG('photo', 'फोटो', 'Photo', { list: true }), T('name', 'नाम', 'Name', { required: true, list: true }), T('name_en', 'नाम (English)', 'Name (English)'), T('symbol_no', 'चिन्ह नं.', 'Symbol no.'),
-    T('phone', 'फोन', 'Phone'), TA('bio_np', 'परिचय', 'Bio'), ORDER, ACTIVE],
+    T('phone', 'फोन', 'Phone'), T('email', 'इमेल', 'Email', { type: 'email' }), T('address', 'ठेगाना', 'Address'), TA('bio_np', 'परिचय', 'Bio'), TA('bio_en', 'परिचय (English)', 'Bio (English)'), ORDER, ACTIVE],
   beforeDelete: async (id, { db }) => deactivateIf(await db.value('SELECT count(*) FROM election_votes WHERE candidate_id = $1', [id])) },
   election_milestones: { minRole: 'admin', group: 'engage', icon: 'calendar', title: ['निर्वाचन कार्यतालिका', 'Election schedule'], order: 'cycle_id DESC, event_date', fields: [
     REF('cycle_id', 'निर्वाचन', 'Election', 'election_cycles', 'title_np', { required: true, list: true }), D('event_date', 'मिति', 'Date', { required: true, list: true }),
-    T('title_np', 'कार्य (नेपाली)', 'Item (Nepali)', { required: true, list: true }), T('title_en', 'कार्य (English)', 'Item (English)'), FILE('attachment', 'सूचना', 'Notice'), ORDER, ACTIVE] },
+    T('title_np', 'कार्य (नेपाली)', 'Item (Nepali)', { required: true, list: true }), T('title_en', 'कार्य (English)', 'Item (English)'),
+    TA('detail_np', 'विवरण (नेपाली)', 'Details (Nepali)'), TA('detail_en', 'विवरण (English)', 'Details (English)'), FILE('attachment', 'सूचना', 'Notice'), ORDER, ACTIVE] },
 
   // ---------------------------------------------------------------- links
   important_links: { group: 'links', icon: 'link', title: ['महत्त्वपूर्ण लिङ्क', 'Important links'], order: 'display_order, id', fields: [
