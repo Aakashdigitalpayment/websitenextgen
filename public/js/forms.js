@@ -134,6 +134,8 @@
     const els = $$(`[name="${name}"]`, form);
     let el = els.find(e => (e.type === 'radio' || e.type === 'checkbox') ? e.checked : true);
     if (!el) return '';
+    const box = el.closest('.field');
+    if (box && box.hidden && box.hasAttribute('data-show-field')) return ''; // a hidden controlling field counts as empty (same rule as the server)
     if (el.type === 'checkbox') return el.checked ? el.value : '';
     if (meta && el.tagName === 'SELECT') {
       const o = el.selectedOptions[0];
@@ -142,7 +144,8 @@
     }
     return el.value;
   };
-  function refresh() {
+  function refresh() { showHide(); showHide(); rest(); } // twice: chained conditions settle (visit type → member? → Member ID)
+  function showHide() {
     $$('[data-show-field]', form || document).forEach(box => {
       const v = String(controlValue(box.dataset.showField, box.dataset.showMeta) ?? '');
       let show;
@@ -152,6 +155,8 @@
       else show = !!v;
       box.hidden = !show;
     });
+  }
+  function rest() {
     $$('[data-req-field]', form || document).forEach(box => {
       const star = box.querySelector('[data-req-star]');
       if (star) star.hidden = !controlValue(box.dataset.reqField, box.dataset.reqMeta);

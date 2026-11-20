@@ -95,11 +95,19 @@ async function resolveOptions(mod) {
   return out;
 }
 
+/** Fields whose values come from the member / KYM instead of the POST ('all' = signed-in member, 'personal' = verified Member ID). */
+function identitySkipped(mod, f, skip) {
+  if (!skip || !mod.memberGate) return false;
+  if (f.identity) return true;
+  return skip === 'all' && [mod.phoneCol, mod.memberCol, 'is_coop_member'].includes(f.name);
+}
+
 /**
  * Validate a submission.
+ * @param {{skipIdentity?: 'all'|'personal'|null}} [opts]
  * @returns {{data:object, errors:object}} errors keyed by field name (bilingual messages)
  */
-function validate(mod, body, uploaded, options, lang = 'np') {
+function validate(mod, body, uploaded, options, lang = 'np', opts = {}) {
   const data = {}, errors = {};
   const msg = (np, en) => (lang === 'en' ? en : np);
   const aml = {};
@@ -108,10 +116,13 @@ function validate(mod, body, uploaded, options, lang = 'np') {
     const o = (options[field] || []).find(x => String(x[0]) === cur);
     return o && o[3] ? o[3][key] : undefined;
   };
-  const shown = f => {
+  const byName = new Map(mod.fields.map(f => [f.name, f]));
+  const shown = (f, depth = 0) => {
     if (!f.showIf) return true;
     const c = f.showIf;
-    let cur = String(body[c.field] ?? '').trim();
+    const ctl = byName.get(c.field);
+    // a hidden controlling field counts as empty (appointment: cooperative visit hides "are you a member?")
+    let cur = ctl && depth < 5 && !shown(ctl, depth + 1) ? '' : String(body[c.field] ?? '').trim();
     if (c.meta) cur = metaOf(c.field, c.meta) ?? cur;
     if (c.in) return c.in.includes(cur);
     return c.eq !== undefined ? cur === c.eq : c.ne !== undefined ? cur !== c.ne : !!cur;
@@ -120,6 +131,7 @@ function validate(mod, body, uploaded, options, lang = 'np') {
   for (const f of mod.fields) {
     const label = lang === 'en' ? f.label[1] : f.label[0];
     if (f.type === 'heading') continue;
+    if (identitySkipped(mod, f, opts.skipIdentity)) continue; // overwritten from the KYM / member on the server
     if (!shown(f)) continue; // hidden branch (e.g. business-only fields): value is dropped, as in the PHP form
     if (f.type === 'address') {
       const p = f.prefix;
@@ -249,7 +261,7 @@ function validate(mod, body, uploaded, options, lang = 'np') {
     }
     if (f.pattern && !errors[f.name] && !f.pattern.test(String(v))) errors[f.name] = msg(`${label} मिलेन`, `Invalid ${label.toLowerCase()}`);
     if (!errors[f.name]) {
-      if (f.store === 'aml') aml[f.name] = v; else data[f.name] = v;
+      if (f.store === 'aml') aml[f.name] = v; else if (f.store !== 'none') data[f.name] = v;
     }
   }
   if (mod.amlCol) {
@@ -327,4 +339,4 @@ const STATUS_LABELS = {
 };
 const statusLabel = (s, lang = 'np') => (STATUS_LABELS[s] ? STATUS_LABELS[s][lang === 'en' ? 1 : 0] : s);
 
-module.exports = { resolveOptions, validate, insertSubmission, statusesFor, statusLabel, optionSources, rowToValues, displayData, composeAddress, addressValid, normalizeAdDate, DISTRICTS };
+module.exports = { identitySkipped, resolveOptions, validate, insertSubmission, statusesFor, statusLabel, optionSources, rowToValues, displayData, composeAddress, addressValid, normalizeAdDate, DISTRICTS };

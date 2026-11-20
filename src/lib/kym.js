@@ -77,6 +77,37 @@ async function requireMemberIdAndMobile(memberId, mobile) {
   return { ok: true, member: m, kyc };
 }
 
+/**
+ * kyc-public-form.php verifyPublicFormKycByMemberId / ...ApprovedByMemberId: the newest non-rejected KYM of the
+ * Member ID (approved first) whose KYM mobile or ledger mobile equals the posted mobile. Returns { ok, kyc, member }.
+ */
+async function verifyForForm(memberId, mobile, { approved = false } = {}) {
+  const id = normalizeId(memberId);
+  if (!id) return err('सदस्यता नम्बर अनिवार्य छ।', 'Member ID is required.');
+  const kyc = await findKycByMemberId(id);
+  if (!kyc) return err('यो सदस्यता नम्बरको केवाइएम रेकर्ड भेटिएन।', 'No KYC record found for this Member ID.');
+  const member = await findMemberBySadasyata(id);
+  if (!phonesMatch(mobile, kyc.mobile) && !phonesMatch(mobile, member?.phone)) {
+    return { ...err('सदस्यता नम्बरसँग मोबाइल नम्बर मिलेन। KYM/सदस्यता दर्ता गर्दा दिएकै मोबाइल नम्बर लेख्नुहोस्।', 'Mobile number does not match this Member ID. Enter the mobile number given at KYC/registration.'), mismatch: true };
+  }
+  if (approved && kyc.status !== 'approved') return err('यो सेवा प्रयोग गर्न KYM verify (approved) हुनुपर्छ। कृपया पहिले केवाइएम स्वीकृत गराउनुहोस्।', 'KYC must be verified (approved) before using this service.');
+  return { ok: true, kyc, member };
+}
+
+/** Identity values a public form takes from the KYM (and the members row), never from the POST. */
+function identityFrom(kyc, member) {
+  const k = kyc || {}, m = member || {};
+  const s = v => (v == null ? '' : String(v).trim());
+  const perm = s(k.permanent_address) || s(m.address), temp = s(k.temporary_address);
+  return {
+    name: s(k.full_name) || s(m.name_np) || s(m.name), name_en: s(k.full_name_en) || s(m.name),
+    member_id: normalizeId(m.sadasyata_number || k.member_id), phone: normalizeMobile(k.mobile) || normalizeMobile(m.phone), email: s(k.email) || s(m.email),
+    address: [temp, perm].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(' / '), permanent_address: perm, temporary_address: temp,
+    citizenship_no: s(k.citizenship_no), citizenship_issued_place: s(k.citizenship_issued_place), citizenship_issued_date: s(k.citizenship_issued_date),
+    dob_bs: s(k.dob_bs), dob_ad: s(k.dob_ad), gender: s(k.gender) || s(m.gender), marital_status: s(k.marital_status), father_name: s(k.father_name), mother_name: s(k.mother_name),
+  };
+}
+
 /** Public path: never overwrite non-empty stored values (memberSsotMergePublicKycFillEmpty). */
 function mergeFillEmpty(existing, incoming) {
   const merged = { ...existing };
@@ -311,7 +342,7 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
 }
 
 module.exports = {
-  normalizeId, normalizeMobile, phonesMatch, findMemberBySadasyata, findKycByMemberId, loadLinkedKyc, requireMemberIdAndMobile,
+  normalizeId, normalizeMobile, phonesMatch, findMemberBySadasyata, findKycByMemberId, loadLinkedKyc, requireMemberIdAndMobile, verifyForForm, identityFrom,
   mergeFillEmpty, upsertMemberFromKyc, afterKycWrite, issueIdCard, autoIssueIdCard, applyStatus, refreshReviewCycle, markReviewed,
   submit, DOC_KEYS, REVIEW_YEARS,
 };

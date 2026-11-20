@@ -2,14 +2,28 @@
 <link rel="stylesheet" href="/static/css/forms.css">
 <section class="section"><div class="container <%= mod.wide ? 'maxw-lg' : 'maxw-md' %>" style="margin-left:0">
   <% if (Object.keys(errors).length) { %><div class="alert alert-error"><%- icon('alert') %><span><%= errors._upload || t('कृपया रातो चिन्ह लागेका विवरण सच्याउनुहोस्।', 'Please correct the highlighted fields.') %></span></div><% } %>
-  <% if (member) { %><div class="alert alert-info"><%- icon('user') %><span><%= t('तपाईंको सदस्य विवरण पहिले नै भरिएको छ।', 'Your member details have been pre-filled.') %></span></div><% } %>
+  <% if (locals.identity) { %>
+    <div class="card identity-card mb-3">
+      <div class="small muted mb-1"><%- icon('shield') %> <%= t('तपाईंको जानकारी (KYM / प्रोफाइलबाट)', 'Your details (from your KYM / profile)') %></div>
+      <div class="kv">
+        <div><%= t('नाम', 'Name') %></div><div><%= identity.name || '—' %></div>
+        <div><%= t('सदस्यता नं.', 'Member ID') %></div><div><%= identity.member_id || '—' %></div>
+        <div><%= t('मोबाइल', 'Mobile') %></div><div><%= identity.phone || '—' %></div>
+        <div><%= t('इमेल', 'Email') %></div><div><%= identity.email || '—' %></div>
+        <% if (identity.address) { %><div><%= t('ठेगाना', 'Address') %></div><div><%= identity.address %></div><% } %>
+      </div>
+      <div class="small faint mt-1"><%= t('यी विवरण परिवर्तन गर्न प्रोफाइल वा केवाइएम अद्यावधिक गर्नुहोस्।', 'To change these, update your profile or KYM.') %> <a href="/member/profile"><%= t('प्रोफाइल', 'Profile') %></a></div>
+    </div>
+    <% if (mod.memberGate.approved && kycStatus !== 'approved') { %><div class="alert alert-warn"><%- icon('alert') %><span><%= t('यो सेवाका लागि स्वीकृत केवाइएम चाहिन्छ।', 'This service needs an approved KYM.') %> <a href="/apply/kyc"><%= t('केवाइएम भर्नुहोस्', 'Fill in the KYM') %></a></span></div><% } %>
+  <% } else if (member) { %><div class="alert alert-info"><%- icon('user') %><span><%= t('तपाईंको सदस्य विवरण पहिले नै भरिएको छ।', 'Your member details have been pre-filled.') %></span></div>
+  <% } else if (mod.memberGate && mod.memberGate.always) { %><div class="alert alert-info"><%- icon('shield') %><span><%= t('सदस्यता नं. र दर्ता भएको मोबाइल मिलेपछि नाम, इमेल र ठेगाना तपाईंको स्वीकृत केवाइएमबाट लिइन्छ।', 'Once your Member ID and registered mobile match, your name, email and address are taken from your approved KYM.') %></span></div><% } %>
   <% if (mod.wide) { %><nav class="form-toc" aria-label="<%= t('खण्डहरू', 'Sections') %>"><% mod.sections.forEach((sec, i) => { if (!sec.title) return; %><a href="#sec_<%= i %>"><%= num(i + 1) %>. <%= t(...sec.title) %></a><% }) %></nav><% } %>
   <form class="form-card" method="post" action="/apply/<%= mod.key %><%= mod.fileFields.length ? "?_csrf=" + encodeURIComponent(csrfToken) : "" %>" enctype="<%= mod.fileFields.length ? 'multipart/form-data' : 'application/x-www-form-urlencoded' %>" novalidate data-app-form data-lang="<%= lang %>">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
     <% mod.sections.forEach((sec, i) => { %>
       <div class="form-section" id="sec_<%= i %>">
         <% if (sec.title) { %><div class="form-section-title"><%= t(...sec.title) %></div><% } %>
-        <div class="form-grid"><% sec.fields.forEach(fl => { %><%- include('../partials/field', { field: fl, values: Object.assign({}, values, query.type && fl.name === 'service_type' && !values.service_type ? { service_type: query.type } : {}), errors, options }) %><% }) %></div>
+        <div class="form-grid"><% sec.fields.filter(fl => !(locals.skipFields && skipFields.has(fl.name))).forEach(fl => { %><%- include('../partials/field', { field: fl, values: Object.assign({}, values, query.type && fl.name === 'service_type' && !values.service_type ? { service_type: query.type } : {}), errors, options }) %><% }) %></div>
       </div>
     <% }) %>
     <%- include('../partials/turnstile') %>

@@ -458,10 +458,23 @@ async function renderForm(req, res, mod, values = {}, errors = {}, status = 200)
     }
     if (req.member.sadasyata_number) values.member_id = req.member.sadasyata_number;
   }
+  // member identity (member-prefill-block.php): shown read-only, never posted
+  let identity = null, kycStatus = null;
+  const skipFields = new Set();
+  if (mod.memberGate) {
+    if (req.member) {
+      const own = await kym.loadLinkedKyc(req.member);
+      identity = kym.identityFrom(own, req.member);
+      kycStatus = own ? own.status : 'none';
+    }
+    const mode = req.member ? 'all' : mod.memberGate.always ? 'personal' : null;
+    for (const f of mod.fields) if (forms.identitySkipped(mod, f, mode)) skipFields.add(f.name);
+  }
   if (req.query.program) values.program_id = values.program_id || req.query.program;
   if (req.query.career) values.career_id = values.career_id || req.query.career;
   if (req.query.auction) values.auction_id = values.auction_id || req.query.auction;
-  res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...prefillFromMember(req.member, mod), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number });
+  res.status(status).render('public/apply-form', { title: res.locals.t(...mod.title), mod, options, values: { ...(mod.memberGate ? {} : prefillFromMember(req.member, mod)), ...values }, errors, existingDocs, lockMemberId: mod.key === 'kyc' && !!req.member?.sadasyata_number,
+    identity, kycStatus, skipFields });
 }
 
 router.get('/apply/:key', ah(async (req, res, next) => {
@@ -483,15 +496,15 @@ router.post('/apply/:key', submitLimiter, (req, res, next) => {
     const block = await antispam.check(req, res.locals.settings, scan);
     if (block && block.silent) return res.redirect('/');
     const options = await forms.resolveOptions(mod);
-    const { data, errors } = forms.validate(mod, req.body, req.uploaded, options, req.lang);
+    const { data, errors } = forms.validate(mod, req.body, req.uploaded, options, req.lang, { skipIdentity: submissions.identityMode(mod, req.member, req.body) });
     if (block) errors._upload = res.locals.t(...block.message);
     if (req.uploadError) errors._upload = req.uploadError;
     if (Object.keys(errors).length) return renderForm(req, res, mod, req.body, errors, 422);
     const extra = {};
-    if (mod.key === 'honor' && req.member) extra.member_portal_id = req.member.id;
+    if (req.member) extra.member_portal_id = req.member.id; // dropped by db.pick for tables without the column
     if (mod.key === 'honor') extra.is_member = data.member_id ? 1 : 0;
     if (mod.key === 'job' || mod.key === 'survey') extra.is_read = 0;
-    const out = await submissions.submit(mod, data, { body: req.body, member: req.member, options, lang: req.lang, extra });
+    const out = await submissions.submit(mod, data, { body: req.body, member: req.member, options, lang: req.lang, extra, ip: req.ip });
     if (out.errors) return renderForm(req, res, mod, req.body, out.errors, 422);
     const row = out.row;
     if (out.duplicate) {

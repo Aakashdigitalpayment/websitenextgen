@@ -17,22 +17,27 @@ const FAMILY_RELATIONS = [['father', 'बुबा', 'Father'], ['mother', 'आ�
 const WELFARE = profiles => ({ field: 'claim_type', meta: 'profile', in: profiles });
 const COOP_VISIT = { field: 'visit_kind', eq: 'cooperative' };
 const DS = slugs => ({ field: 'service_type', in: slugs });
+/** "Are you a cooperative member?" (includes/kyc-public-form.php): with yes, Member ID + mobile are checked and identity comes from the KYM. */
+const IS_MEMBER = { field: 'is_coop_member', eq: 'yes' };
+const MEMBER_Q = { name: 'is_coop_member', label: ['तपाईं सहकारी सदस्य हुनुहुन्छ?', 'Are you an existing cooperative member?'], type: 'radio', store: 'none', default: 'no', options: YES_NO,
+  hint: ['हो भने सदस्यता नं. र दर्ता भएको मोबाइल मिलाइन्छ; नाम, इमेल र ठेगाना तपाईंको केवाइएमबाट लिइन्छ।', 'If yes, your Member ID and registered mobile are checked; name, email and address are taken from your KYM.'] };
+const MEMBER_NO = { name: 'member_id', label: ['सदस्यता नं.', 'Member ID'], showIf: IS_MEMBER, requiredWhenShown: true };
 
 const GENDER = { name: 'gender', label: ['लिङ्ग', 'Gender'], type: 'radio', options: [['male', 'पुरुष', 'Male'], ['female', 'महिला', 'Female'], ['other', 'अन्य', 'Other']] };
 
 const modules = {
   loan: {
     table: 'loan_applications', prefix: 'LN', icon: 'banknote', nameCol: 'full_name', phoneCol: 'mobile', memberCol: 'member_id',
-    title: ['ऋण आवेदन', 'Loan application'],
+    title: ['ऋण आवेदन', 'Loan application'], memberGate: { approved: false },
     intro: ['आवश्यक विवरण भर्नुहोस्। हाम्रो कर्मचारीले २ कार्य दिनभित्र सम्पर्क गर्नेछन्।', 'Fill in the details. Our staff will contact you within 2 working days.'],
     sections: [
       { title: ['आवेदकको विवरण', 'Applicant'], fields: [
-        { name: 'full_name', label: ['पूरा नाम', 'Full name'], required: true, show: true },
-        { name: 'member_id', label: ['सदस्यता नं.', 'Membership no.'] },
+        MEMBER_Q, MEMBER_NO,
+        { name: 'full_name', label: ['पूरा नाम', 'Full name'], required: true, show: true, identity: true },
         { name: 'mobile', label: ['मोबाइल', 'Mobile'], type: 'tel', required: true, show: true },
-        { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
-        { name: 'citizenship_no', label: ['नागरिकता नं.', 'Citizenship no.'] },
-        { name: 'address', label: ['ठेगाना', 'Address'], type: 'textarea', rows: 2, required: true },
+        { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
+        { name: 'citizenship_no', label: ['नागरिकता नं.', 'Citizenship no.'], identity: true },
+        { name: 'address', label: ['ठेगाना', 'Address'], type: 'textarea', rows: 2, required: true, identity: true },
         { name: 'occupation', label: ['पेशा', 'Occupation'] },
         { name: 'organization_name', label: ['कार्यरत संस्था', 'Employer / business'] },
         { name: 'monthly_income', label: ['मासिक आम्दानी (रु.)', 'Monthly income (Rs.)'], type: 'number' },
@@ -58,8 +63,8 @@ const modules = {
   },
 
   account: {
-    table: 'account_applications', prefix: 'AC', icon: 'wallet', nameCol: 'full_name', phoneCol: 'mobile',
-    title: ['अनलाइन खाता खोल्नुहोस्', 'Open an account online'],
+    table: 'account_applications', prefix: 'AC', icon: 'wallet', nameCol: 'full_name', phoneCol: 'mobile', memberCol: 'member_id',
+    title: ['अनलाइन खाता खोल्नुहोस्', 'Open an account online'], memberGate: { approved: false },
     intro: ['फारम बुझाएपछि शाखामा आएर हस्ताक्षर र प्रमाणीकरण गर्नुहोस्।', 'After submitting, visit a branch to sign and verify.'],
     sections: [
       { title: ['खाता', 'Account'], fields: [
@@ -68,24 +73,25 @@ const modules = {
         { name: 'initial_deposit', label: ['सुरुको जम्मा (रु.)', 'Initial deposit (Rs.)'], type: 'number' },
       ] },
       { title: ['व्यक्तिगत विवरण', 'Personal'], fields: [
-        { name: 'full_name', label: ['नाम (नेपालीमा)', 'Name (Nepali)'], required: true, show: true },
-        { name: 'full_name_en', label: ['नाम (अंग्रेजीमा)', 'Name (English)'] },
-        { name: 'dob_bs', label: ['जन्म मिति (वि.सं.)', 'Date of birth (BS)'], type: 'bsdate', adCol: 'dob_ad' },
-        GENDER,
+        MEMBER_Q, MEMBER_NO,
+        { name: 'full_name', label: ['नाम (नेपालीमा)', 'Name (Nepali)'], required: true, show: true, identity: true },
+        { name: 'full_name_en', label: ['नाम (अंग्रेजीमा)', 'Name (English)'], identity: true },
+        { name: 'dob_bs', label: ['जन्म मिति (वि.सं.)', 'Date of birth (BS)'], type: 'bsdate', adCol: 'dob_ad', identity: true },
+        { ...GENDER, identity: true },
         { name: 'marital_status', label: ['वैवाहिक स्थिति', 'Marital status'], type: 'select', options: [['single', 'अविवाहित', 'Single'], ['married', 'विवाहित', 'Married'], ['other', 'अन्य', 'Other']] },
         { name: 'mobile', label: ['मोबाइल', 'Mobile'], type: 'tel', required: true, show: true },
-        { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
-        { name: 'permanent_address', label: ['स्थायी ठेगाना', 'Permanent address'], type: 'textarea', rows: 2, required: true },
-        { name: 'temporary_address', label: ['अस्थायी ठेगाना', 'Temporary address'], type: 'textarea', rows: 2 },
-        { name: 'father_name', label: ['बुबाको नाम', "Father's name"] },
-        { name: 'mother_name', label: ['आमाको नाम', "Mother's name"] },
+        { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
+        { name: 'permanent_address', label: ['स्थायी ठेगाना', 'Permanent address'], type: 'textarea', rows: 2, required: true, identity: true },
+        { name: 'temporary_address', label: ['अस्थायी ठेगाना', 'Temporary address'], type: 'textarea', rows: 2, identity: true },
+        { name: 'father_name', label: ['बुबाको नाम', "Father's name"], identity: true },
+        { name: 'mother_name', label: ['आमाको नाम', "Mother's name"], identity: true },
         { name: 'occupation', label: ['पेशा', 'Occupation'] },
         { name: 'monthly_income', label: ['मासिक आम्दानी', 'Monthly income'] },
       ] },
       { title: ['नागरिकता र इच्छाएको व्यक्ति', 'Citizenship & nominee'], fields: [
-        { name: 'citizenship_no', label: ['नागरिकता नं.', 'Citizenship no.'], required: true },
-        { name: 'citizenship_issued_date', label: ['जारी मिति', 'Issued date'] },
-        { name: 'citizenship_issued_place', label: ['जारी जिल्ला', 'Issued district'] },
+        { name: 'citizenship_no', label: ['नागरिकता नं.', 'Citizenship no.'], required: true, identity: true },
+        { name: 'citizenship_issued_date', label: ['जारी मिति (वि.सं.)', 'Issued date (BS)'], type: 'bsdate', identity: true },
+        { name: 'citizenship_issued_place', label: ['जारी जिल्ला', 'Issued district'], type: 'select', optionsFrom: 'districts', identity: true },
         { name: 'nominee_name', label: ['इच्छाएको व्यक्ति', 'Nominee'] },
         { name: 'nominee_relation', label: ['नाता', 'Relation'] },
         { name: 'nominee_phone', label: ['फोन', 'Phone'], type: 'tel' },
@@ -215,13 +221,13 @@ const modules = {
 
   grievance: {
     table: 'grievances', prefix: 'GR', icon: 'message', nameCol: 'name', phoneCol: 'phone', memberCol: 'member_id',
-    title: ['गुनासो दर्ता', 'Register a grievance'], remarksCol: 'admin_response',
+    title: ['गुनासो दर्ता', 'Register a grievance'], remarksCol: 'admin_response', memberGate: { approved: true },
     intro: ['तपाईंको गुनासो गोप्य राखिनेछ। ट्र्याकिङ नम्बरबाट स्थिति हेर्न सक्नुहुन्छ।', 'Your grievance is kept confidential. Use the tracking number to follow it.'],
     sections: [{ fields: [
-      { name: 'name', label: ['नाम', 'Name'], required: true, show: true },
-      { name: 'member_id', label: ['सदस्यता नं. (भए)', 'Membership no. (if any)'] },
+      MEMBER_Q, MEMBER_NO,
+      { name: 'name', label: ['नाम', 'Name'], required: true, show: true, identity: true },
       { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
-      { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
+      { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
       { name: 'category', label: ['विषय क्षेत्र', 'Category'], type: 'select', show: true, options: [['service', 'सेवा', 'Service'], ['staff', 'कर्मचारी', 'Staff'], ['loan', 'ऋण', 'Loan'], ['account', 'खाता', 'Account'], ['branch', 'शाखा', 'Branch'], ['other', 'अन्य', 'Other']] },
       { name: 'subject', label: ['शीर्षक', 'Subject'], required: true, show: true },
       { name: 'description', label: ['विवरण', 'Details'], type: 'textarea', rows: 5, required: true },
@@ -232,17 +238,19 @@ const modules = {
 
   appointment: {
     table: 'appointments', prefix: 'AP', icon: 'calendar', nameCol: 'name', phoneCol: 'phone', memberCol: 'member_id',
-    title: ['भेटघाट समय लिनुहोस्', 'Book an appointment'],
+    title: ['भेटघाट समय लिनुहोस्', 'Book an appointment'], memberGate: { approved: true },
     intro: ['भेटघाटको समय निश्चित भएपछि हामी फोन गर्नेछौं।', 'We will call to confirm your time.'],
     sections: [{ fields: [
       { name: 'visit_kind', label: ['भेटघाटको प्रकार', 'Visit type'], type: 'radio', default: 'member', options: [['member', 'सदस्य / व्यक्तिगत भेट', 'Member / personal visit'], ['cooperative', 'सहकारी / संस्थागत भ्रमण', 'Cooperative / organisation visit']] },
-      { name: 'name', label: ['नाम (संस्थागत भ्रमणमा संस्थाको नाम)', 'Name (organisation name for a visit)'], required: true, show: true },
+      { ...MEMBER_Q, showIf: { field: 'visit_kind', ne: 'cooperative' } },
+      MEMBER_NO,
+      { name: 'organization_name', label: ['संस्थाको नाम', 'Organisation name'], showIf: COOP_VISIT, requiredWhenShown: true },
+      { name: 'name', label: ['नाम', 'Name'], required: true, show: true, identity: true },
       { name: 'contact_person', label: ['सम्पर्क व्यक्ति', 'Contact person'], showIf: COOP_VISIT, requiredWhenShown: true },
       { name: 'organization_address', label: ['संस्थाको ठेगाना', 'Organisation address'], showIf: COOP_VISIT, requiredWhenShown: true },
       { name: 'organization_website', label: ['वेबसाइट', 'Website'], type: 'url', showIf: COOP_VISIT },
       { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
-      { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
-      { name: 'member_id', label: ['सदस्यता नं.', 'Membership no.'], showIf: { field: 'visit_kind', ne: 'cooperative' } },
+      { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
       { name: 'purpose', label: ['प्रयोजन', 'Purpose'], type: 'select', show: true, showIf: { field: 'visit_kind', ne: 'cooperative' }, requiredWhenShown: true, options: [['account', 'खाता', 'Account'], ['loan', 'ऋण', 'Loan'], ['membership', 'सदस्यता', 'Membership'], ['meeting', 'व्यवस्थापनसँग भेट', 'Meet management'], ['other', 'अन्य', 'Other']] },
       { name: 'preferred_date', label: ['मिति', 'Date'], type: 'date', required: true, show: true, futureOnly: true },
       { name: 'preferred_time', label: ['समय', 'Time'], type: 'select', required: true, options: [['10:00', '१०:००', '10:00'], ['11:00', '११:००', '11:00'], ['12:00', '१२:००', '12:00'], ['13:00', '१:००', '1:00 PM'], ['14:00', '२:००', '2:00 PM'], ['15:00', '३:००', '3:00 PM'], ['16:00', '४:००', '4:00 PM']] },
@@ -253,12 +261,12 @@ const modules = {
 
   feedback: {
     table: 'member_feedback', prefix: 'FB', icon: 'message', nameCol: 'name', phoneCol: 'phone', memberCol: 'member_id', remarksCol: 'admin_reply',
-    title: ['सुझाव तथा प्रतिक्रिया', 'Feedback & suggestions'],
+    title: ['सुझाव तथा प्रतिक्रिया', 'Feedback & suggestions'], memberGate: { approved: true },
     sections: [{ fields: [
-      { name: 'name', label: ['नाम', 'Name'], required: true, show: true },
-      { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', show: true },
-      { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
-      { name: 'member_id', label: ['सदस्यता नं.', 'Membership no.'] },
+      MEMBER_Q, MEMBER_NO,
+      { name: 'name', label: ['नाम', 'Name'], required: true, show: true, identity: true },
+      { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
+      { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
       { name: 'type', label: ['प्रकार', 'Type'], type: 'select', show: true, options: [['feedback', 'प्रतिक्रिया', 'Feedback'], ['suggestion', 'सुझाव', 'Suggestion'], ['complaint', 'उजुरी', 'Complaint'], ['inquiry', 'जिज्ञासा', 'Inquiry']] },
       { name: 'subject', label: ['विषय', 'Subject'], required: true, show: true },
       { name: 'message', label: ['सन्देश', 'Message'], type: 'textarea', rows: 5, required: true },
@@ -267,13 +275,13 @@ const modules = {
 
   welfare: {
     table: 'member_welfare_claims', prefix: 'WC', icon: 'heart', nameCol: 'member_name', phoneCol: 'phone', memberCol: 'member_id', remarksCol: 'admin_remarks',
-    title: ['सदस्य कल्याण दाबी', 'Member welfare claim'], memberOnly: false,
+    title: ['सदस्य कल्याण दाबी', 'Member welfare claim'], memberOnly: false, memberGate: { approved: true, always: true },
     sections: [{ fields: [
-      { name: 'member_name', label: ['सदस्यको नाम', 'Member name'], required: true, show: true },
-      { name: 'member_id', label: ['सदस्यता नं.', 'Membership no.'], required: true, show: true },
-      { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true },
-      { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
-      { name: 'address', label: ['ठेगाना', 'Address'] },
+      { name: 'member_id', label: ['सदस्यता नं.', 'Member ID'], required: true, show: true },
+      { name: 'phone', label: ['दर्ता भएको मोबाइल', 'Registered mobile'], type: 'tel', required: true },
+      { name: 'member_name', label: ['सदस्यको नाम', 'Member name'], required: true, show: true, identity: true },
+      { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
+      { name: 'address', label: ['ठेगाना', 'Address'], identity: true },
       { name: 'claim_type', label: ['दाबीको प्रकार', 'Claim type'], type: 'select', required: true, show: true, optionsFrom: 'welfareTypes' },
       { name: 'claim_amount', label: ['दाबी रकम (रु.)', 'Amount (Rs.)'], type: 'number', format: 'money', show: true },
       { name: 'claim_date_bs', label: ['घटना मिति (वि.सं.)', 'Event date (BS)'], type: 'bsdate', adCol: 'claim_date_ad' },
@@ -298,15 +306,15 @@ const modules = {
 
   digital: {
     table: 'digital_service_requests', prefix: 'DS', icon: 'phone', nameCol: 'requester_name', phoneCol: 'phone', memberCol: 'member_id', remarksCol: 'admin_remarks',
-    title: ['डिजिटल सेवा अनुरोध', 'Digital service request'],
+    title: ['डिजिटल सेवा अनुरोध', 'Digital service request'], memberGate: { approved: true },
     intro: ['मोबाइल बैंकिङ, स्टेटमेन्ट, QR, कार्ड लगायत सेवाको अनुरोध।', 'Request mobile banking, statements, QR, cards and more.'],
     sections: [{ fields: [
       { name: 'service_type', label: ['सेवा', 'Service'], type: 'select', required: true, show: true, optionsFrom: 'digitalTypes' },
-      { name: 'requester_name', label: ['नाम', 'Name'], required: true, show: true },
-      { name: 'member_id', label: ['सदस्यता नं.', 'Membership no.'] },
+      MEMBER_Q, MEMBER_NO,
+      { name: 'requester_name', label: ['नाम', 'Name'], required: true, show: true, identity: true },
       { name: 'account_number', label: ['खाता नं.', 'Account no.'] },
       { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
-      { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
+      { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
       { name: 'statement_from', label: ['स्टेटमेन्ट देखि', 'Statement from'], type: 'date', showIf: DS(['statement_request', 'statement']) },
       { name: 'statement_to', label: ['स्टेटमेन्ट सम्म', 'Statement to'], type: 'date', showIf: DS(['statement_request', 'statement']) },
       { name: 'biller_name', label: ['बिल/सेवा प्रदायक', 'Biller / service provider'], showIf: DS(['bill_payment']), requiredWhenShown: true },
@@ -367,15 +375,15 @@ const modules = {
 
   honor: {
     table: 'honor_applications', prefix: 'HN', icon: 'award', nameCol: 'applicant_name', phoneCol: 'phone', memberCol: 'member_id', remarksCol: 'admin_remarks', hidden: true,
-    title: ['सम्मान/पुरस्कार आवेदन', 'Honour application'],
+    title: ['सम्मान/पुरस्कार आवेदन', 'Honour application'], memberGate: { approved: true },
     sections: [{ fields: [
       { name: 'program_id', label: ['कार्यक्रम', 'Programme'], type: 'select', required: true, optionsFrom: 'honorPrograms', show: true },
       { name: 'category_id', label: ['विधा', 'Category'], type: 'select', required: true, optionsFrom: 'honorCategories', filterBy: { field: 'program_id', meta: 'programs' } },
-      { name: 'applicant_name', label: ['आवेदकको नाम', 'Applicant'], required: true, show: true },
+      MEMBER_Q, MEMBER_NO,
+      { name: 'applicant_name', label: ['आवेदकको नाम', 'Applicant'], required: true, show: true, identity: true },
       { name: 'phone', label: ['फोन', 'Phone'], type: 'tel', required: true, show: true },
-      { name: 'email', label: ['इमेल', 'Email'], type: 'email' },
-      { name: 'address', label: ['ठेगाना', 'Address'] },
-      { name: 'member_id', label: ['सदस्यता नं.', 'Membership no.'] },
+      { name: 'email', label: ['इमेल', 'Email'], type: 'email', identity: true },
+      { name: 'address', label: ['ठेगाना', 'Address'], identity: true },
       { name: 'nominee_name', label: ['विद्यार्थी/मनोनीतको नाम', 'Nominee / student name'], requiredIf: { field: 'category_id', meta: 'requires_nominee' } },
       { name: 'nominee_relation', label: ['नाता', 'Relation'] },
       { name: 'institution', label: ['शिक्षण संस्था', 'Institution'] },
@@ -452,6 +460,9 @@ const EXTRA = {
 for (const [key, m] of Object.entries(modules)) {
   Object.assign(m, EXTRA[key] || {});
   m.key = key;
+  if (m.memberGate && !m.memberGate.always) {
+    for (const sec of m.sections) sec.fields = sec.fields.map(f => (f.identity && !f.showIf ? { ...f, showIf: { field: 'is_coop_member', ne: 'yes' } } : f));
+  }
   m.fields = m.sections.flatMap(s => s.fields);
   m.fileFields = m.fields.filter(f => f.type === 'file' || f.type === 'image');
   m.wantsAddressData = m.fields.some(f => f.type === 'address');

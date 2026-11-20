@@ -55,6 +55,8 @@ async function memberClient(identifier, password) {
   return c;
 }
 const hash = pw => require('bcryptjs').hash(pw, 4);
+/** Field errors of a 422 form page (for assertion messages). */
+const errs = r => [...String(r.text || '').matchAll(/<label[^>]*>([^<]*)[\s\S]{0,1500}?field-error">([^<]*)/g)].map(m => m[1] + ': ' + m[2]).join(' | ') + (String(r.text || '').match(/alert-error[^>]*>[\s\S]{0,200}?<span>([^<]*)/) || [])[1];
 
 before(async () => {
   await tenants.applyPlatformSchema();
@@ -115,7 +117,7 @@ test('auction bid: open window, minimum price, mobile, 24 h duplicate, BID track
   r = await c.form('/apply/bid', { ...bid, bidder_phone: '014412345', bid_amount: '150000' });
   assert.equal(r.status, 422, 'landline rejected');
   r = await c.form('/apply/bid', { ...bid, bid_amount: '150000' });
-  assert.equal(r.status, 302, r.text.slice(0, 400));
+  assert.equal(r.status, 302, errs(r));
   const row = await inA(() => db.one('SELECT * FROM auction_bids WHERE auction_id = $1', [open.id]));
   assert.match(row.tracking_id, /^BID-/);
   r = await c.form('/apply/bid', { ...bid, bid_amount: '160000' });
@@ -131,4 +133,67 @@ test('tracker shows the Member ID assigned to an approved membership request, wi
   const r = await client().get('/track?id=MB-TEST-AS1&phone=9841222333');
   assert.match(r.text, /M-777/);
   assert.match(r.text, /href="\/apply\/kyc"/);
+});
+
+// ---------------------------------------------------------------- P1-1 member identity on public forms
+async function seedMember(sid, phone, { kycStatus = 'approved', password = null, name = 'Member ' + sid } = {}) {
+  return inA(async () => {
+    const m = await db.one(`INSERT INTO members (name, name_np, phone, email, sadasyata_number, approval_status, is_active, password_hash)
+                            VALUES ($1, $2, $3, $4, $5, 'approved', 1, $6) RETURNING *`, [name, 'सदस्य ' + sid, phone, sid.toLowerCase() + '@example.com', sid, password ? await hash(password) : null]);
+    let k = null;
+    if (kycStatus) {
+      k = await db.one(`INSERT INTO kyc_applications (tracking_id, member_id, full_name, full_name_en, mobile, email, permanent_address, citizenship_no, status)
+                        VALUES ($1, $2, $3, $4, $5, $6, 'Kathmandu-5', '11-22-333', $7) RETURNING *`, ['KY-' + sid, sid, 'केवाइसी ' + sid, 'KYC ' + sid, phone, 'kyc.' + sid.toLowerCase() + '@example.com', kycStatus]);
+      await db.query('UPDATE members SET kyc_application_id = $1 WHERE id = $2', [k.id, m.id]);
+    }
+    return { m, k };
+  });
+}
+
+test('member gate: Member ID + mobile checked against the KYM, identity taken from the KYM', async () => {
+  await seedMember('G-100', '9841500001');
+  await seedMember('G-101', '9841500002', { kycStatus: 'pending' });
+  const c = client();
+  const g = { is_coop_member: 'yes', member_id: 'g-100', phone: '9841500009', name: 'Typed Name', email: 'typed@example.com', subject: 'S', description: 'D', category: 'service' };
+  let r = await c.form('/apply/grievance', g);
+  assert.equal(r.status, 422, 'mobile does not match the Member ID');
+  assert.match(r.text, /मोबाइल नम्बर मिलेन/);
+  r = await c.form('/apply/grievance', { ...g, phone: '9841500001' });
+  assert.equal(r.status, 302, errs(r));
+  const row = await inA(() => db.one("SELECT * FROM grievances WHERE member_id = 'G-100' ORDER BY id DESC LIMIT 1"));
+  assert.equal(row.name, 'केवाइसी G-100', 'name from the KYM, not the POST');
+  assert.equal(row.email, 'kyc.g-100@example.com');
+  // grievance needs an approved KYM; a loan accepts any KYM
+  r = await c.form('/apply/grievance', { ...g, member_id: 'G-101', phone: '9841500002' });
+  assert.equal(r.status, 422);
+  assert.match(r.text, /approved/);
+  const loanType = (await inA(() => forms.optionSources.loanTypes()))[0][0];
+  r = await c.form('/apply/loan', { is_coop_member: 'yes', member_id: 'G-101', mobile: '9841500002', loan_type: loanType, loan_amount: '50000', loan_purpose: 'shop', full_name: 'Someone else' });
+  assert.equal(r.status, 302, errs(r));
+  const loan = await inA(() => db.one("SELECT * FROM loan_applications WHERE member_id = 'G-101'"));
+  assert.equal(loan.full_name, 'केवाइसी G-101');
+  assert.equal(loan.citizenship_no, '11-22-333');
+  // not a member: a typed Member ID is never stored
+  r = await c.form('/apply/grievance', { ...g, is_coop_member: 'no', member_id: 'G-100', phone: '9841500077' });
+  assert.equal(r.status, 302);
+  assert.equal(await inA(() => db.value("SELECT member_id FROM grievances WHERE phone = '9841500077'")), null);
+  // welfare claims always verify the Member ID
+  r = await c.form('/apply/welfare', { member_id: 'G-100', phone: '9841500003', claim_type: 'medical', description: 'x' });
+  assert.equal(r.status, 422);
+});
+
+test('signed-in member: identity fields are read-only and come from the server', async () => {
+  await seedMember('G-200', '9841600001', { password: 'Member@12345' });
+  const c = await memberClient('9841600001', 'Member@12345');
+  const page = await c.get('/apply/grievance');
+  assert.match(page.text, /केवाइसी G-200/);
+  assert.doesNotMatch(page.text, /name="phone"/, 'phone input not rendered for members');
+  const r = await c.form('/apply/grievance', { phone: '9800000000', name: 'Hacker', member_id: 'G-100', subject: 'S', description: 'D', category: 'service' });
+  assert.equal(r.status, 302, errs(r));
+  const row = await inA(() => db.one("SELECT * FROM grievances WHERE subject = 'S' AND member_portal_id IS NOT NULL ORDER BY id DESC LIMIT 1"));
+  assert.equal(row.phone, '9841600001');
+  assert.equal(row.member_id, 'G-200');
+  assert.equal(row.name, 'केवाइसी G-200');
+  const mine = await c.get('/member/requests');
+  assert.match(mine.text, new RegExp(row.tracking_id));
 });

@@ -41,6 +41,7 @@ const hooks = {
       if (!d.purpose_detail) return fail(ctx.lang, ['कृपया भ्रमण विवरण भर्नुहोस्।', 'Please enter visit details.'], 'purpose_detail');
       d.purpose = 'other';
       d.member_id = null;
+      if (d.organization_name) { d.contact_person = d.contact_person || d.name; d.name = d.organization_name; } // appointment.php organization_name → name
     } else if (!ctx.member && !d.email) {
       return fail(ctx.lang, ['इमेल ठेगाना अनिवार्य छ।', 'Email address is required.'], 'email');
     }
@@ -93,12 +94,76 @@ const hooks = {
   },
 };
 
+/** How forms.validate must treat identity fields for this request (see forms.identitySkipped). */
+function identityMode(mod, member, body = {}) {
+  if (!mod.memberGate) return null;
+  if (member) return 'all';
+  if (mod.key === 'appointment' && body.visit_kind === 'cooperative') return null;
+  if (mod.key === 'grievance' && body.is_anonymous) return null;
+  return mod.memberGate.always || body.is_coop_member === 'yes' ? 'personal' : null;
+}
+
+/**
+ * includes/kyc-public-form.php + member-prefill-block.php: a signed-in member, or a visitor who says they are a member,
+ * gets name / Member ID / mobile / email / address / citizenship from the KYM (and the members row) — never from the POST.
+ * Services marked `approved` need an approved KYM. Failed Member ID + mobile checks share the login throttle.
+ */
+async function applyMemberIdentity(ctx) {
+  const { mod, data, body, member } = ctx;
+  const gate = mod.memberGate;
+  if (!gate) return null;
+  if (mod.key === 'appointment' && data.visit_kind === 'cooperative') return null;
+  const anonymous = mod.key === 'grievance' && Number(data.is_anonymous) === 1;
+  let kyc, owner;
+  if (member) {
+    kyc = await kym.loadLinkedKyc(member);
+    owner = member;
+    if (gate.approved && !anonymous && kyc?.status !== 'approved') {
+      return fail(ctx.lang, ['यो सेवा प्रयोग गर्न तपाईंको केवाइएम स्वीकृत (approved) हुनुपर्छ। पहिले केवाइएम भर्नुहोस् वा कार्यालयमा सम्पर्क गर्नुहोस्।', 'Your KYM must be approved before you can use this service. Please fill in the KYM first or contact the office.']);
+    }
+  } else if (!anonymous && (gate.always || body.is_coop_member === 'yes')) {
+    const auth = require('./auth');
+    const id = kym.normalizeId(data[mod.memberCol] || body.member_id);
+    const key = 'kycgate:' + (id || '-');
+    const field = mod.memberCol || '_upload';
+    if (await auth.tooManyAttempts(key, ctx.ip)) return fail(ctx.lang, ['धेरै पटक गलत प्रयास भयो। १५ मिनेटपछि फेरि प्रयास गर्नुहोस्।', 'Too many failed attempts. Try again in 15 minutes.'], field);
+    const v = await kym.verifyForForm(id, data[mod.phoneCol], gate);
+    if (!v.ok) {
+      if (v.mismatch || /No KYC/.test(v.error[1])) await auth.recordFailure(key, ctx.ip);
+      return fail(ctx.lang, v.error, v.mismatch ? mod.phoneCol : field);
+    }
+    await auth.clearFailures(key, ctx.ip);
+    kyc = v.kyc;
+    owner = v.member;
+  } else {
+    if (mod.memberCol) data[mod.memberCol] = null; // unverified Member IDs are never stored
+    return null;
+  }
+  const idn = kym.identityFrom(kyc, owner);
+  if (idn.name) data[mod.nameCol] = idn.name;
+  if (mod.memberCol && idn.member_id) data[mod.memberCol] = idn.member_id;
+  if (idn.phone) data[mod.phoneCol] = idn.phone;
+  if (!data[mod.phoneCol]) return fail(ctx.lang, ['तपाईंको सदस्य विवरणमा मोबाइल नम्बर छैन। कार्यालयमा सम्पर्क गरी अद्यावधिक गराउनुहोस्।', 'Your member record has no mobile number. Please ask the office to update it.']);
+  for (const f of mod.fields) {
+    if (!f.identity || f.name === mod.nameCol) continue;
+    const v = idn[f.name === 'full_name_en' ? 'name_en' : f.name];
+    if (v) {
+      data[f.name] = v;
+      if (f.adCol && idn[f.adCol]) data[f.adCol] = idn[f.adCol];
+    }
+  }
+  ctx.verified = { kyc, member: owner };
+  return null;
+}
+
 /**
  * Validate-and-save for one module. Returns { row, notice, duplicate } or { errors }.
  * The caller has already run forms.validate().
  */
-async function submit(mod, data, { body = {}, member = null, options = {}, lang = 'np', extra = {} } = {}) {
-  const ctx = { mod, data, body, member, options, lang, extra };
+async function submit(mod, data, { body = {}, member = null, options = {}, lang = 'np', extra = {}, ip = '' } = {}) {
+  const ctx = { mod, data, body, member, options, lang, extra, ip };
+  const gated = await applyMemberIdentity(ctx);
+  if (gated) return gated;
   const hook = hooks[mod.key];
   const out = hook ? await hook(ctx) : null;
   if (out && (out.errors || out.row)) return out;
@@ -122,4 +187,4 @@ function details(mod, row, options = {}) {
   return lines;
 }
 
-module.exports = { submit, details, hooks };
+module.exports = { submit, details, hooks, identityMode, applyMemberIdentity };

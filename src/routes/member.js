@@ -10,6 +10,7 @@ const push = require('../lib/push');
 const att = require('../lib/attendance');
 const google = require('../lib/google-oauth');
 const QRCode = require('qrcode');
+const portal = require('../lib/member-portal');
 
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -101,19 +102,22 @@ router.use(require('./member-self')); // profile details / KYC documents / 2FA /
 
 /** All submissions that belong to this member (matched by member number or phone). */
 async function myRequests(member) {
-  const keys = [member.sadasyata_number, member.member_card_no].filter(Boolean);
+  const keys = [member.sadasyata_number, member.member_card_no].filter(Boolean).flatMap(portal.idVariants);
   const out = [];
   for (const m of Object.values(modules)) {
     if (m.key === 'contact') continue;
     const cols = await db.columns(m.table);
     const conds = [], params = [];
-    if (member.phone && cols.has(m.phoneCol)) { params.push(member.phone); conds.push(`${m.phoneCol} = $${params.length}`); }
+    const phone = portal.normalizeMobile(member.phone);
+    const phoneOk = phone.length >= 10 && cols.has(m.phoneCol);
+    if (phoneOk) { params.push(phone.slice(-10)); conds.push(`${portal.phoneDigitsSql(m.phoneCol)} = $${params.length}`); }
     // member numbers typed into public forms are not verified — only match them together with the member's phone
-    if (m.memberCol && cols.has(m.memberCol) && keys.length && member.phone && cols.has(m.phoneCol)) {
-      params.push(keys); params.push(member.phone);
-      conds.push(`(${m.memberCol} = ANY($${params.length - 1}) AND ${m.phoneCol} = $${params.length})`);
+    if (m.memberCol && cols.has(m.memberCol) && keys.length && phoneOk) {
+      params.push(keys); params.push(phone.slice(-10));
+      conds.push(`(upper(trim(${m.memberCol})) = ANY($${params.length - 1}) AND ${portal.phoneDigitsSql(m.phoneCol)} = $${params.length})`);
     }
-    if (m.key === 'honor') { params.push(member.id); conds.push(`member_portal_id = $${params.length}`); }
+    // filed while signed in: stays linked when the phone changes later
+    if (cols.has('member_portal_id')) { params.push(member.id); conds.push(`member_portal_id = $${params.length}`); }
     if (!conds.length) continue;
     const rows = await db.many(`SELECT * FROM ${m.table} WHERE (${conds.join(' OR ')}) ${cols.has('deleted_at') ? 'AND deleted_at IS NULL' : ''} ORDER BY created_at DESC LIMIT 20`, params);
     rows.forEach(row => out.push({ mod: m, row }));
