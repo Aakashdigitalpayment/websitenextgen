@@ -2,3 +2,7 @@
 <div class="turnstile-wrap"><div class="cf-turnstile" data-sitekey="<%= settings.turnstile_site_key %>" data-language="<%= lang === 'en' ? 'en' : 'ne' %>"></div></div>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <% } %>
+<% if (locals.mathPrompt) { %>
+<div class="field math-check"><label for="math_answer"><%= t('साधारण जाँच: ', 'Quick check: ') %><%= num(mathPrompt.a) %> + <%= num(mathPrompt.b) %> = ?<span class="req">*</span></label>
+  <input class="input" id="math_answer" name="math_answer" inputmode="numeric" autocomplete="off" maxlength="3" required style="max-width:120px"></div>
+<% } %>

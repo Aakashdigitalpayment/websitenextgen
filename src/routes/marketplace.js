@@ -40,6 +40,17 @@ function readListing(body) {
   if (price && !Number.isFinite(data.price)) errors.price = 'number';
   const exp = nd.toLatinDigits(s('experience_years'));
   data.experience_years = exp ? Math.min(80, Math.max(0, parseInt(exp, 10) || 0)) : null;
+  // availability (member/marketplace.php:121-125): from / until dates (B.S. or A.D.), until time, daily hours
+  const normDate = require('../lib/forms').normalizeAdDate;
+  const hhmm = v => (/^([01]\d|2[0-3]):[0-5]\d$/.test(nd.toLatinDigits(String(v || '').trim())) ? nd.toLatinDigits(String(v).trim()) : null);
+  data.available_from = normDate(body.available_from);
+  const until = normDate(body.available_until);
+  data.available_until = until ? `${until} ${hhmm(body.available_until_time) || '23:59'}:00` : null;
+  data.available_time_from = hhmm(body.available_time_from);
+  data.available_time_to = hhmm(body.available_time_to);
+  if (body.available_from && !data.available_from) errors.available_from = 'date';
+  if (body.available_until && !until) errors.available_until = 'date';
+  if (data.available_from && until && until < data.available_from) errors.available_until = 'date';
   if (!data.title) errors.title = 'required';
   if (!data.description) errors.description = 'required';
   if (data.contact_phone && !util.isPhone(data.contact_phone)) errors.contact_phone = 'phone';
@@ -64,7 +75,11 @@ member.get('/new', (req, res) => res.render('member/marketplace-form', { title: 
 member.get('/:id/edit', ah(async (req, res, next) => {
   const item = await db.one('SELECT * FROM member_marketplace_listings WHERE id = $1 AND member_id = $2', [util.int(req.params.id), req.member.id]);
   if (!item) return next();
-  res.render('member/marketplace-form', { title: res.locals.t('सूची सम्पादन', 'Edit listing'), item, values: item, errors: {}, CATEGORIES });
+  const day = v => (v ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60_000).toISOString().slice(0, 10) : '');
+  const values = { ...item, available_from: day(item.available_from), available_until: day(item.available_until),
+    available_until_time: item.available_until ? new Date(item.available_until).toTimeString().slice(0, 5) : '',
+    available_time_from: String(item.available_time_from || '').slice(0, 5), available_time_to: String(item.available_time_to || '').slice(0, 5) };
+  res.render('member/marketplace-form', { title: res.locals.t('सूची सम्पादन', 'Edit listing'), item, values, errors: {}, CATEGORIES });
 }));
 
 const imageUpload = (req, res, next) => {
@@ -104,12 +119,21 @@ admin.use(auth.requireAdmin('staff'));
 
 admin.get('/', ah(async (req, res) => {
   await expireStale();
-  const status = ['pending', 'approved', 'rejected', 'withdrawn', 'expired'].includes(req.query.status) ? req.query.status : 'pending';
+  const status = ['pending', 'approved', 'rejected', 'withdrawn', 'expired', 'all'].includes(req.query.status) ? req.query.status : 'pending';
   const rows = await db.many(`SELECT l.*, m.name AS member_name, m.name_np AS member_name_np, m.sadasyata_number,
       (SELECT count(*) FROM member_marketplace_inquiries i WHERE i.listing_id = l.id) AS inquiries
-    FROM member_marketplace_listings l LEFT JOIN members m ON m.id = l.member_id WHERE l.status = $1 ORDER BY l.id DESC LIMIT 200`, [status]);
+    FROM member_marketplace_listings l LEFT JOIN members m ON m.id = l.member_id ${status === 'all' ? '' : 'WHERE l.status = $1'} ORDER BY l.id DESC LIMIT 200`, status === 'all' ? [] : [status]);
   const counts = Object.fromEntries((await db.many('SELECT status, count(*) AS n FROM member_marketplace_listings GROUP BY status')).map(r => [r.status, r.n]));
   res.render('admin/marketplace', { title: res.locals.t('सदस्य बजार', 'Member marketplace'), rows, status, counts, catLabel: c => catLabel(c, req.lang) });
+}));
+
+// one listing with every field and its latest inquiries (legacy member-marketplace.php ?view=id)
+admin.get('/:id', ah(async (req, res, next) => {
+  const l = await db.one(`SELECT l.*, m.name AS member_name, m.name_np AS member_name_np, m.sadasyata_number, m.phone AS member_phone
+                          FROM member_marketplace_listings l LEFT JOIN members m ON m.id = l.member_id WHERE l.id = $1`, [util.int(req.params.id)]);
+  if (!l) return next();
+  const inquiries = await db.many('SELECT * FROM member_marketplace_inquiries WHERE listing_id = $1 ORDER BY id DESC LIMIT 50', [l.id]);
+  res.render('admin/marketplace-view', { title: l.title, l, inquiries, status: 'view', catLabel: c => catLabel(c, req.lang) });
 }));
 
 admin.post('/:id', ah(async (req, res) => {
@@ -131,7 +155,7 @@ admin.post('/:id', ah(async (req, res) => {
     const until = new Date(`${date}T${time}:00`);
     if (Number.isNaN(until.getTime()) || until <= new Date()) {
       flash(req, 'error', res.locals.t('नयाँ उपलब्ध मिति अहिलेभन्दा पछाडि हुनुपर्छ।', 'The new date must be in the future.'));
-      return res.redirect('/admin/marketplace?status=' + encodeURIComponent(req.query.back || l.status));
+      return res.redirect(req.query.back === 'view' ? '/admin/marketplace/' + l.id : '/admin/marketplace?status=' + encodeURIComponent(req.query.back || l.status));
     }
     await db.query("UPDATE member_marketplace_listings SET available_until = $1, status = CASE WHEN status = 'expired' THEN 'pending' ELSE status END, updated_at = now() WHERE id = $2", [until, l.id]);
     flash(req, 'success', res.locals.t('उपलब्ध मिति अपडेट भयो।', 'Availability date updated.'));
@@ -140,7 +164,8 @@ admin.post('/:id', ah(async (req, res) => {
     await notify.notifyMember(l.member_id, `${l.title}: ${action === 'approve' ? res.locals.t('बजारमा स्वीकृत', 'approved') : res.locals.t('अस्वीकृत', 'rejected')}`, note || null, '/member/marketplace');
   }
   await auth.audit(req, 'marketplace_' + action, 'member_marketplace_listings', l.id, l.title);
-  res.redirect('/admin/marketplace?status=' + encodeURIComponent(req.query.back || l.status));
+  if (req.query.back === 'view' && action !== 'delete') return res.redirect('/admin/marketplace/' + l.id);
+  res.redirect('/admin/marketplace?status=' + encodeURIComponent(req.query.back && req.query.back !== 'view' ? req.query.back : l.status));
 }));
 
 // ================================================================ public

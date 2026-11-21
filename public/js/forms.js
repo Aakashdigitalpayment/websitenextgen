@@ -134,6 +134,8 @@
     const els = $$(`[name="${name}"]`, form);
     let el = els.find(e => (e.type === 'radio' || e.type === 'checkbox') ? e.checked : true);
     if (!el) return '';
+    const box = el.closest('.field');
+    if (box && box.hidden && box.hasAttribute('data-show-field')) return ''; // a hidden controlling field counts as empty (same rule as the server)
     if (el.type === 'checkbox') return el.checked ? el.value : '';
     if (meta && el.tagName === 'SELECT') {
       const o = el.selectedOptions[0];
@@ -142,7 +144,8 @@
     }
     return el.value;
   };
-  function refresh() {
+  function refresh() { showHide(); showHide(); rest(); } // twice: chained conditions settle (visit type → member? → Member ID)
+  function showHide() {
     $$('[data-show-field]', form || document).forEach(box => {
       const v = String(controlValue(box.dataset.showField, box.dataset.showMeta) ?? '');
       let show;
@@ -152,6 +155,8 @@
       else show = !!v;
       box.hidden = !show;
     });
+  }
+  function rest() {
     $$('[data-req-field]', form || document).forEach(box => {
       const star = box.querySelector('[data-req-star]');
       if (star) star.hidden = !controlValue(box.dataset.reqField, box.dataset.reqMeta);
@@ -233,4 +238,129 @@
   }));
 
   window.CoopDate = { bsToAd, adToBs, todayBs, openPicker };
+})();
+
+/* Multi-step wizard (loan / account / KYM: loan-apply.php showStep, online-kyc.php kym_form_step_v2) and a draft kept on this device
+   (kym_form_draft_v2). Progressive enhancement: without JavaScript the form is one long page and posts the same. */
+(function () {
+  'use strict';
+  const form = document.querySelector('form[data-app-form]');
+  if (!form) return;
+  const np = (form.dataset.lang || '') !== 'en';
+  const T = (a, b) => (np ? a : b);
+  const toNp = s => String(s).replace(/[0-9]/g, d => '०१२३४५६७८९'[d]);
+  const store = (() => { try { const k = '__t'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return localStorage; } catch (e) { return null; } })();
+
+  // ------------------------------------------------------------ draft autosave (never files, tokens or ID numbers)
+  const key = form.dataset.draftKey;
+  const SKIP = /^(_csrf|website|ct_hp|acp_hp|company_url|fax_number|math_answer|cf-turnstile-response|citizenship_no|national_id_number|passport_no|nominee_citizenship_no|pan_no|driving_license_no|voter_id_card_no|declaration|passport_face_confirm)$/;
+  const fields = () => Array.from(form.elements).filter(el => el.name && !SKIP.test(el.name) && el.type !== 'file' && el.type !== 'hidden' && el.type !== 'password' && !el.disabled);
+  function save() {
+    if (!store || !key) return;
+    const data = {};
+    fields().forEach(el => {
+      if (el.type === 'radio') { if (el.checked) data[el.name] = el.value; return; }
+      if (el.type === 'checkbox') { data[el.name] = el.checked ? el.value : ''; return; }
+      (data[el.name] = data[el.name] || []).push(el.value);
+    });
+    try { store.setItem(key, JSON.stringify({ at: Date.now(), data })); } catch (e) { /* quota */ }
+  }
+  function restore() {
+    if (!store || !key || form.dataset.hasValues === '1') return false;
+    let saved;
+    try { saved = JSON.parse(store.getItem(key) || 'null'); } catch (e) { saved = null; }
+    if (!saved || !saved.data || Date.now() - saved.at > 30 * 864e5) return false;
+    const seen = {};
+    fields().forEach(el => {
+      const v = saved.data[el.name];
+      if (v === undefined) return;
+      if (el.type === 'radio') el.checked = el.value === v;
+      else if (el.type === 'checkbox') el.checked = !!v && v === el.value;
+      else {
+        const i = seen[el.name] = (seen[el.name] || 0); seen[el.name]++;
+        if (Array.isArray(v) && v[i] !== undefined) el.value = v[i];
+        // DOM order: province → district → municipality → ward, each change fills the next list
+        if (el.tagName === 'SELECT') el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    form.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+  if (key && store) {
+    const restored = restore();
+    if (restored) {
+      const note = document.createElement('div');
+      note.className = 'alert alert-info';
+      note.innerHTML = '<span class="grow"></span><button type="button" class="btn btn-ghost btn-sm"></button>';
+      note.firstChild.textContent = T('यो उपकरणमा सुरक्षित गरिएको अधुरो फारम फेरि भरियो।', 'Your unfinished form saved on this device was restored.');
+      note.lastChild.textContent = T('खाली गर्नुहोस्', 'Clear');
+      note.lastChild.addEventListener('click', () => { try { store.removeItem(key); } catch (e) { /* ignore */ } location.reload(); });
+      form.insertAdjacentElement('beforebegin', note);
+    }
+    let timer = null;
+    form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(save, 500); });
+    form.addEventListener('change', () => { clearTimeout(timer); timer = setTimeout(save, 500); });
+  }
+
+  // ------------------------------------------------------------ wizard
+  // Enter in a text field never submits a long form (online-kyc.php)
+  form.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.tagName === 'INPUT' && ev.target.type !== 'submit') ev.preventDefault(); });
+  if (!form.hasAttribute('data-wizard')) return;
+  const steps = Array.from(form.querySelectorAll('.form-section')).filter(s => s.querySelector('.field'));
+  if (steps.length < 2) return;
+  const actions = form.querySelector('.form-actions');
+  const extras = Array.from(form.children).filter(el => !el.classList.contains('form-section') && el !== actions && !el.matches('input[type=hidden],.hp'));
+  const toc = document.querySelector('.form-toc');
+  if (toc) toc.hidden = true; // the step list replaces the section links
+  const titles = steps.map((s, i) => { const h = s.querySelector('.form-section-title'); return h ? h.textContent.trim() : T('चरण ', 'Step ') + (i + 1); });
+  const nav = document.createElement('div');
+  nav.className = 'wizard-nav';
+  nav.innerHTML = '<div class="wizard-count"></div><div class="wizard-bar"><span></span></div><ol class="wizard-steps"></ol>';
+  const list = nav.querySelector('ol');
+  titles.forEach((tt, i) => { const li = document.createElement('li'); const b = document.createElement('button'); b.type = 'button'; b.textContent = (np ? toNp(i + 1) : i + 1) + '. ' + tt; b.dataset.step = i; li.appendChild(b); list.appendChild(li); });
+  form.insertBefore(nav, steps[0]);
+  const btns = document.createElement('div');
+  btns.className = 'wizard-buttons';
+  btns.innerHTML = '<button type="button" class="btn btn-outline" data-prev></button><button type="button" class="btn btn-primary" data-next></button>';
+  btns.querySelector('[data-prev]').textContent = T('‹ अघिल्लो', '‹ Back');
+  btns.querySelector('[data-next]').textContent = T('सुरक्षित गरी अगाडि ›', 'Save & next ›');
+  actions.insertAdjacentElement('beforebegin', btns);
+  const stepMem = key ? key + ':step' : null;
+  let cur = 0;
+  const visited = new Set();
+  const visibleInputs = s => Array.from(s.querySelectorAll('input,select,textarea')).filter(el => !el.closest('[hidden]') && el.type !== 'hidden');
+  const filled = s => visibleInputs(s).every(el => el.checkValidity());
+  function show(i) {
+    cur = Math.max(0, Math.min(steps.length - 1, i));
+    visited.add(cur);
+    steps.forEach((s, k) => { s.hidden = k !== cur; });
+    const last = cur === steps.length - 1;
+    extras.forEach(el => { el.hidden = !last; });
+    actions.hidden = !last;
+    btns.querySelector('[data-prev]').hidden = cur === 0;
+    btns.querySelector('[data-next]').hidden = last;
+    nav.querySelector('.wizard-count').textContent = T(`चरण ${toNp(cur + 1)} / ${toNp(steps.length)}`, `Step ${cur + 1} of ${steps.length}`) + ' — ' + titles[cur];
+    nav.querySelector('.wizard-bar span').style.width = Math.round(((cur + 1) / steps.length) * 100) + '%';
+    list.querySelectorAll('button').forEach((b, k) => {
+      b.classList.toggle('is-current', k === cur);
+      b.classList.toggle('is-done', k !== cur && visited.has(k) && filled(steps[k]));
+      b.classList.toggle('is-incomplete', k !== cur && visited.has(k) && !filled(steps[k]));
+      b.setAttribute('aria-current', k === cur ? 'step' : 'false');
+    });
+    if (stepMem && store) try { store.setItem(stepMem, String(cur)); } catch (e) { /* ignore */ }
+  }
+  function validStep() {
+    const bad = visibleInputs(steps[cur]).find(el => !el.checkValidity());
+    if (bad) { bad.reportValidity(); bad.focus(); return false; }
+    return true;
+  }
+  btns.querySelector('[data-next]').addEventListener('click', () => { if (validStep()) { save(); show(cur + 1); nav.scrollIntoView({ block: 'start', behavior: 'smooth' }); } });
+  btns.querySelector('[data-prev]').addEventListener('click', () => { show(cur - 1); nav.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+  list.addEventListener('click', ev => { const b = ev.target.closest('[data-step]'); if (b) show(Number(b.dataset.step)); });
+  // a 422 from the server opens the first step with an error; otherwise the remembered step
+  const errStep = steps.findIndex(s => s.querySelector('.has-error'));
+  let start = errStep >= 0 ? errStep : 0;
+  if (errStep < 0 && stepMem && store && form.dataset.hasValues !== '1') { const n = Number(store.getItem(stepMem)); if (Number.isFinite(n)) start = n; }
+  for (let k = 0; k < start; k++) visited.add(k);
+  show(start);
 })();

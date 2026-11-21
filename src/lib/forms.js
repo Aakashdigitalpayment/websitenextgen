@@ -29,6 +29,9 @@ function normalizeAdDate(raw) {
   return Number.isNaN(Date.parse(v)) ? null : v;
 }
 
+/** A CSS colour from the type masters, or null (hex / rgb() / hsl() / var(--x) / named only: rendered into a style attribute). */
+const safeColor = c => (/^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([\d\s.,%]+\)|var\(--[a-z0-9-]+\)|[a-z]{3,20})$/i.test(String(c || '').trim()) ? String(c).trim() : null);
+
 /** Dynamic option lists (value, label_np, label_en) loaded per tenant. */
 const optionSources = {
   async branches() {
@@ -36,8 +39,10 @@ const optionSources = {
     return rows.map(r => [r.name_np || r.name, r.name_np || r.name, r.name || r.name_np]);
   },
   async loanTypes() {
-    const rows = await db.many(`SELECT name, name_np FROM interest_rates WHERE category = 'loan' AND is_active = 1 ORDER BY display_order, id`);
-    return rows.length ? rows.map(r => [r.name, r.name_np || r.name, r.name]) :
+    const rows = await db.many(`SELECT * FROM interest_rates WHERE category = 'loan' AND is_active = 1 ORDER BY display_order, id`);
+    // the rate next to each type (loan-apply.php "(x.xx%)")
+    const rate = r => { const v = Number(r.rate ?? r.interest_rate); return Number.isFinite(v) && v > 0 ? ` (${v.toFixed(2)}%)` : ''; };
+    return rows.length ? rows.map(r => [r.name, (r.name_np || r.name) + nd.toNepaliDigits(rate(r)), r.name + rate(r)]) :
       [['business', 'व्यवसाय ऋण', 'Business loan'], ['home', 'घर ऋण', 'Home loan'], ['education', 'शैक्षिक ऋण', 'Education loan'], ['agriculture', 'कृषि ऋण', 'Agriculture loan'], ['vehicle', 'सवारी ऋण', 'Vehicle loan'], ['personal', 'व्यक्तिगत ऋण', 'Personal loan']];
   },
   async savingTypes() {
@@ -45,55 +50,91 @@ const optionSources = {
     return rows.length ? rows.map(r => [r.name, r.name_np || r.name, r.name]) :
       [['regular', 'नियमित बचत', 'Regular saving'], ['fixed', 'मुद्दती बचत', 'Fixed deposit'], ['child', 'बाल बचत', 'Child saving'], ['women', 'महिला बचत', 'Women saving']];
   },
-  async welfareTypes() {
-    const rows = await db.many('SELECT slug, name_np, name_en, form_profile, requires_document FROM welfare_claim_types WHERE is_active = 1 ORDER BY display_order, id');
-    return rows.length ? rows.map(r => [r.slug, r.name_np, r.name_en || r.name_np, { profile: r.form_profile || r.slug, requires_document: !!Number(r.requires_document) }]) :
+  // { admin: true }: every row (inactive / closed too) so the inbox, print and CSV show labels for old submissions
+  async welfareTypes({ admin } = {}) {
+    const rows = await db.many(`SELECT slug, name_np, name_en, form_profile, requires_document, color FROM welfare_claim_types ${admin ? '' : 'WHERE is_active = 1'} ORDER BY display_order, id`);
+    return rows.length ? rows.map(r => [r.slug, r.name_np, r.name_en || r.name_np, { profile: r.form_profile || r.slug, requires_document: !!Number(r.requires_document), color: safeColor(r.color) }]) :
       [['medical', 'उपचार सहयोग', 'Medical'], ['death', 'मृत्यु सहयोग', 'Death'], ['maternity', 'सुत्केरी सहयोग', 'Maternity'], ['insurance', 'बीमा दाबी', 'Insurance'], ['disaster', 'प्राकृतिक प्रकोप', 'Disaster'], ['other', 'अन्य', 'Other']].map(o => [...o, { profile: o[0] }]);
   },
-  async digitalTypes() {
-    const rows = await db.many('SELECT slug, name_np, name_en, requires_document FROM digital_service_types WHERE is_active = 1 ORDER BY display_order, id');
+  async digitalTypes({ admin } = {}) {
+    const rows = await db.many(`SELECT slug, name_np, name_en, requires_document FROM digital_service_types ${admin ? '' : 'WHERE is_active = 1'} ORDER BY display_order, id`);
     return rows.length ? rows.map(r => [r.slug, r.name_np, r.name_en || r.name_np, { requires_document: !!Number(r.requires_document) }]) :
-      [['mobile_banking', 'मोबाइल बैंकिङ', 'Mobile banking'], ['statement', 'बैंक स्टेटमेन्ट', 'Statement'], ['qr', 'QR भुक्तानी', 'QR payment'], ['sms', 'SMS अलर्ट', 'SMS alert'], ['other', 'अन्य', 'Other']];
+      // includes/digital-service-types.php slugs, so rows imported from PHP show the same labels
+      [['statement_request', 'स्टेटमेन्ट अनुरोध', 'Statement request'], ['bill_payment', 'बिल भुक्तानी सहयोग', 'Bill payment support'], ['mobile_recharge', 'मोबाइल रिचार्ज अनुरोध', 'Mobile recharge request'],
+        ['internet_banking', 'इन्टरनेट/मोबाइल बैंकिङ', 'Internet / mobile banking'], ['missed_call_banking', 'मिस्ड कल बैंकिङ', 'Missed call banking'], ['sms_alert', 'SMS अलर्ट सेवा', 'SMS alert service'],
+        ['card_service', 'कार्ड सेवा', 'Card service'], ['qr_payment', 'QR/डिजिटल भुक्तानी', 'QR / digital payment'], ['share_refund', 'शेयर फिर्ता (Refund)', 'Share refund'],
+        ['share_increase', 'शेयर वृद्धि (Increase)', 'Share increase'], ['other', 'अन्य डिजिटल सेवा', 'Other digital service']];
   },
-  async honorPrograms() {
-    const rows = await db.many(`SELECT id, title_np, title_en FROM honor_programs WHERE is_active = 1
+  async honorPrograms({ admin } = {}) {
+    const rows = await db.many(admin ? 'SELECT id, title_np, title_en FROM honor_programs ORDER BY id DESC' : `SELECT id, title_np, title_en FROM honor_programs WHERE is_active = 1
                                 AND (opens_at IS NULL OR opens_at <= now()) AND (closes_at IS NULL OR closes_at >= now()) ORDER BY id DESC`);
     return rows.map(r => [String(r.id), r.title_np, r.title_en || r.title_np]);
   },
-  async honorCategories() {
+  async honorCategories({ admin } = {}) {
     // per-programme categories (honor_program_categories): meta.programs lists the programmes that offer it
     const rows = await db.many(`SELECT c.id, c.name_np, c.name_en, c.requires_nominee, c.requires_document,
                                        COALESCE(array_agg(pc.program_id) FILTER (WHERE pc.program_id IS NOT NULL), '{}') AS programs
                                 FROM honor_categories c LEFT JOIN honor_program_categories pc ON pc.category_id = c.id
-                                WHERE c.is_active = 1 GROUP BY c.id ORDER BY c.display_order, c.id`);
+                                ${admin ? '' : 'WHERE c.is_active = 1'} GROUP BY c.id ORDER BY c.display_order, c.id`);
     return rows.map(r => [String(r.id), r.name_np, r.name_en || r.name_np, { requires_nominee: !!Number(r.requires_nominee), requires_document: !!Number(r.requires_document), programs: r.programs.map(String) }]);
   },
-  async careers() {
-    const rows = await db.many(`SELECT id, title, title_np FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND (deadline IS NULL OR deadline >= CURRENT_DATE) ORDER BY id DESC`);
-    return rows.map(r => [String(r.id), r.title_np || r.title, r.title || r.title_np]);
+  async careers({ admin } = {}) {
+    const rows = await db.many(admin ? 'SELECT id, title, title_np FROM careers ORDER BY id DESC LIMIT 500' : `SELECT id, title, title_np, deadline FROM careers WHERE is_active = 1 AND deleted_at IS NULL AND COALESCE(allow_online_apply, 1) = 1
+                                ORDER BY id DESC`);
+    // open = no deadline or deadline today or later; a BS date typed into the DATE column counts as BS (nd.daysUntil)
+    return rows.filter(r => admin || (d => d === null || d >= 0)(nd.daysUntil(r.deadline))).map(r => [String(r.id), r.title_np || r.title, r.title || r.title_np]);
   },
   async districts() { return DISTRICTS.map(d => [d, d, d]); },
-  async auctions() {
-    const rows = await db.many(`SELECT id, title, title_en FROM auction_notices WHERE is_active = 1 AND status IN ('upcoming','ongoing') ORDER BY auction_date NULLS LAST, id DESC`);
-    return rows.map(r => [String(r.id), r.title, r.title_en || r.title]);
+  /** getOfficeTimeOptions(): office_time_start … office_time_end every 30 minutes, values like PHP ('10:00 AM'). */
+  async officeTimes() {
+    const s = await require('./settings').all();
+    const parse = (v, d) => { const m = String(v || '').trim().match(/^(\d{1,2}):(\d{2})/); return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? Number(m[1]) * 60 + Number(m[2]) : d; };
+    let a = parse(s.office_time_start, 600), b = parse(s.office_time_end, 1020);
+    if (a > b) [a, b] = [b, a];
+    const out = [];
+    for (let t = a; t <= b && out.length < 96; t += 30) {
+      const h = Math.floor(t / 60), m = t % 60, h12 = h % 12 || 12, ampm = h < 12 ? 'AM' : 'PM';
+      const v = `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+      out.push([v, nd.toNepaliDigits(`${h12}:${String(m).padStart(2, '0')}`) + (h < 12 ? ' बिहान' : h < 16 ? ' दिउँसो' : ' बेलुकी'), v]);
+    }
+    return out;
+  },
+  // public form: open auctions only; admin: all of them, so bids on completed/cancelled auctions keep their title
+  async auctions({ admin } = {}) {
+    if (admin) {
+      const all = await db.many('SELECT id, title, title_en FROM auction_notices ORDER BY id DESC LIMIT 1000');
+      return all.map(r => [String(r.id), r.title, r.title_en || r.title]);
+    }
+    const rows = await db.many(`SELECT id, title, title_en, status, is_active, auction_date, auction_time, minimum_price FROM auction_notices
+                                WHERE is_active = 1 AND status IN ('upcoming','ongoing') ORDER BY auction_date NULLS LAST, id DESC`);
+    const { isOpen } = require('./auctions');
+    return rows.filter(r => isOpen(r)).map(r => [String(r.id), r.title, r.title_en || r.title, { minimum_price: Number(r.minimum_price) || 0 }]);
   },
 };
 
 /** Resolve select/radio options for every field of a module. */
-async function resolveOptions(mod) {
+async function resolveOptions(mod, { admin = false } = {}) {
   const out = {};
   for (const f of mod.fields) {
     if (f.options) out[f.name] = f.options;
-    else if (f.optionsFrom) out[f.name] = await optionSources[f.optionsFrom]();
+    else if (f.optionsFrom) out[f.name] = await optionSources[f.optionsFrom]({ admin });
   }
   return out;
 }
 
+/** Fields whose values come from the member / KYM instead of the POST ('all' = signed-in member, 'personal' = verified Member ID). */
+function identitySkipped(mod, f, skip) {
+  if (!skip || !mod.memberGate) return false;
+  if (f.identity) return true;
+  return skip === 'all' && [mod.phoneCol, mod.memberCol, 'is_coop_member'].includes(f.name);
+}
+
 /**
  * Validate a submission.
+ * @param {{skipIdentity?: 'all'|'personal'|null}} [opts]
  * @returns {{data:object, errors:object}} errors keyed by field name (bilingual messages)
  */
-function validate(mod, body, uploaded, options, lang = 'np') {
+function validate(mod, body, uploaded, options, lang = 'np', opts = {}) {
   const data = {}, errors = {};
   const msg = (np, en) => (lang === 'en' ? en : np);
   const aml = {};
@@ -102,18 +143,22 @@ function validate(mod, body, uploaded, options, lang = 'np') {
     const o = (options[field] || []).find(x => String(x[0]) === cur);
     return o && o[3] ? o[3][key] : undefined;
   };
-  const shown = f => {
+  const byName = new Map(mod.fields.map(f => [f.name, f]));
+  const shown = (f, depth = 0) => {
     if (!f.showIf) return true;
     const c = f.showIf;
-    let cur = String(body[c.field] ?? '').trim();
+    const ctl = byName.get(c.field);
+    // a hidden controlling field counts as empty (appointment: cooperative visit hides "are you a member?")
+    let cur = ctl && depth < 5 && !shown(ctl, depth + 1) ? '' : String(body[c.field] ?? '').trim();
     if (c.meta) cur = metaOf(c.field, c.meta) ?? cur;
     if (c.in) return c.in.includes(cur);
     return c.eq !== undefined ? cur === c.eq : c.ne !== undefined ? cur !== c.ne : !!cur;
   };
-  const isRequired = f => !!(f.required || (f.requiredWhenShown && f.showIf) || (f.requiredIf && metaOf(f.requiredIf.field, f.requiredIf.meta)));
+  const isRequired = f => !!((f.required && !(f.requiredUnless && body[f.requiredUnless])) || (f.requiredWhenShown && f.showIf) || (f.requiredIf && metaOf(f.requiredIf.field, f.requiredIf.meta)));
   for (const f of mod.fields) {
     const label = lang === 'en' ? f.label[1] : f.label[0];
     if (f.type === 'heading') continue;
+    if (identitySkipped(mod, f, opts.skipIdentity)) continue; // overwritten from the KYM / member on the server
     if (!shown(f)) continue; // hidden branch (e.g. business-only fields): value is dropped, as in the PHP form
     if (f.type === 'address') {
       const p = f.prefix;
@@ -173,7 +218,8 @@ function validate(mod, body, uploaded, options, lang = 'np') {
       continue;
     }
     if (f.type === 'file' || f.type === 'image') {
-      const v = uploaded?.[f.name];
+      let v = uploaded?.[f.name];
+      if (Array.isArray(v)) v = v.filter(Boolean).join(','); // several files: comma-joined, as PHP stored documents[]
       if (v) data[f.name] = v;
       else if (isRequired(f)) errors[f.name] = msg(`${label} आवश्यक छ`, `${label} is required`);
       continue;
@@ -197,7 +243,13 @@ function validate(mod, body, uploaded, options, lang = 'np') {
         if (!isEmail(v)) errors[f.name] = msg('इमेल मिलेन', 'Invalid email');
         break;
       case 'tel':
-        if (!isPhone(v)) errors[f.name] = msg('फोन नम्बर मिलेन', 'Invalid phone number');
+        if (mod.mobile10 && f.name === mod.phoneCol) {
+          // loan / account / grievance / welfare / digital / job / bid: a 10-digit mobile, stored normalised
+          let d = v.replace(/\D+/g, '');
+          if (d.length > 10 && d.startsWith('977')) d = d.slice(-10);
+          if (!(mod.mobile10 === 'strict' ? /^9\d{9}$/ : /^\d{10}$/).test(d)) errors[f.name] = msg('कृपया १० अंकको मोबाइल नम्बर राख्नुहोस्।', 'Please enter a valid 10-digit mobile number.');
+          else v = d;
+        } else if (!isPhone(v)) errors[f.name] = msg('फोन नम्बर मिलेन', 'Invalid phone number');
         break;
       case 'number': case 'rating': {
         const n = Number(v.replace(/,/g, ''));
@@ -243,7 +295,7 @@ function validate(mod, body, uploaded, options, lang = 'np') {
     }
     if (f.pattern && !errors[f.name] && !f.pattern.test(String(v))) errors[f.name] = msg(`${label} मिलेन`, `Invalid ${label.toLowerCase()}`);
     if (!errors[f.name]) {
-      if (f.store === 'aml') aml[f.name] = v; else data[f.name] = v;
+      if (f.store === 'aml') aml[f.name] = v; else if (f.store !== 'none') data[f.name] = v;
     }
   }
   if (mod.amlCol) {
@@ -312,7 +364,7 @@ async function statusesFor(table) {
 }
 
 const STATUS_LABELS = {
-  pending: ['प्रक्रियामा पर्खँदै', 'Pending'], processing: ['प्रक्रियामा', 'Processing'], in_progress: ['काम हुँदै', 'In progress'],
+  pending: ['प्रक्रियामा पर्खँदै', 'Pending'], paid: ['भुक्तानी भयो', 'Paid'], processing: ['प्रक्रियामा', 'Processing'], in_progress: ['काम हुँदै', 'In progress'],
   approved: ['स्वीकृत', 'Approved'], rejected: ['अस्वीकृत', 'Rejected'], completed: ['सम्पन्न', 'Completed'], disbursed: ['ऋण प्रवाह', 'Disbursed'],
   confirmed: ['निश्चित', 'Confirmed'], cancelled: ['रद्द', 'Cancelled'], resolved: ['समाधान', 'Resolved'], closed: ['बन्द', 'Closed'],
   reviewed: ['हेरियो', 'Reviewed'], shortlisted: ['छनोट सूचीमा', 'Shortlisted'], interviewed: ['अन्तर्वार्ता', 'Interviewed'],
@@ -321,4 +373,4 @@ const STATUS_LABELS = {
 };
 const statusLabel = (s, lang = 'np') => (STATUS_LABELS[s] ? STATUS_LABELS[s][lang === 'en' ? 1 : 0] : s);
 
-module.exports = { resolveOptions, validate, insertSubmission, statusesFor, statusLabel, optionSources, rowToValues, displayData, composeAddress, addressValid, normalizeAdDate, DISTRICTS };
+module.exports = { safeColor, identitySkipped, resolveOptions, validate, insertSubmission, statusesFor, statusLabel, optionSources, rowToValues, displayData, composeAddress, addressValid, normalizeAdDate, DISTRICTS };

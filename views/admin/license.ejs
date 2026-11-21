@@ -7,6 +7,12 @@
       <div class="kv"><div><%= t('म्याद', 'Valid until') %></div><div><%= nd.formatBs(license.untilBs, lang) %> <span class="faint small">(<%= license.until %>)</span></div>
         <div><%= t('बाँकी', 'Remaining') %></div><div><span class="badge <%= license.expired ? 'badge-bad' : license.daysLeft <= 30 ? 'badge-warn' : 'badge-ok' %>"><%= license.expired ? t('म्याद सकियो', 'Expired') : num(license.daysLeft) + ' ' + t('दिन', 'days') %></span></div></div>
     <% } %>
+<% if (locals.pay && (pay.amount || pay.esewa || pay.khalti || pay.bank)) { %><div class="kv mt-2">
+  <% if (pay.amount) { %><div><%= t('नवीकरण रकम', 'Renewal amount') %></div><div>रु. <%= pay.amount %></div><% } %>
+  <% if (pay.esewa) { %><div>eSewa ID</div><div><code><%= pay.esewa %></code></div><% } %>
+  <% if (pay.khalti) { %><div>Khalti ID</div><div><code><%= pay.khalti %></code></div><% } %>
+  <% if (pay.bank) { %><div><%= t('बैंक', 'Bank') %></div><div><%= pay.bank %></div><% } %>
+</div><% } %>
   </div>
   <form class="form-card" method="post" action="/admin/license">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -17,8 +23,8 @@
       <div class="field span-2"><label><%= t('कारोबार नं. / भौचर नं.', 'Transaction / voucher no.') %></label><input class="input" name="txn_reference" required></div>
       <div class="field span-2"><label><%= t('टिप्पणी', 'Note') %></label><textarea class="textarea" name="note" rows="2"></textarea></div>
     </div>
-    <button class="btn btn-primary mt-2"><%= t('पठाउनुहोस्', 'Send') %></button>
+    <button type="submit" class="btn btn-primary mt-2"><%= t('पठाउनुहोस्', 'Send') %></button>
   </form>
 </div>
 <% if (notices.length) { %><h2 class="mt-4"><%= t('पठाइएका सूचना', 'Notices sent') %></h2>
-<div class="table-wrap mt-2"><table class="table"><tbody><% notices.forEach(n => { %><tr><td class="small"><%= bsDate(n.created_at) %></td><td><%= n.gateway %></td><td><code><%= n.txn_reference %></code></td><td><%= n.amount_reported %></td><td><span class="badge <%= n.status === 'cleared' ? 'badge-ok' : n.status === 'cancelled' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(n.status) %></span></td></tr><% }) %></tbody></table></div><% } %>
+<div class="table-wrap mt-2"><table class="table"><tbody><% notices.forEach(n => { %><tr><td class="small"><%= bsDate(n.created_at) %></td><td><%= n.gateway %></td><td><code><%= n.txn_reference %></code></td><td><%= n.amount_reported %></td><td><span class="badge <%= n.status === 'cleared' ? 'badge-ok' : n.status === 'cancelled' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(n.status) %></span></td><td><% if (n.status === 'pending') { %><form method="post" action="/admin/license/cancel"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="id" value="<%= n.id %>"><button type="submit" class="btn btn-ghost btn-sm" data-confirm="<%= t('यो सूचना रद्द गर्ने?', 'Withdraw this notice?') %>"><%= t('रद्द', 'Withdraw') %></button></form><% } %></td></tr><% }) %></tbody></table></div><% } %>

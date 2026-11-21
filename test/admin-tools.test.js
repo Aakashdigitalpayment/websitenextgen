@@ -56,6 +56,7 @@ async function adminUser(username, role, customRoleId = null) {
 before(async () => {
   await tenants.applyPlatformSchema();
   await tenants.createTenant({ slug: SLUG, name: 'Tools Tenant', domains: [HOST], adminPassword: PW });
+  await inTenant(() => require('../src/lib/settings').set('spam_math_captcha', '0')); // forms are posted without solving the math check
   app = require('http').createServer(createApp());
   await new Promise(r => app.listen(0, '127.0.0.1', r));
 });
@@ -77,7 +78,8 @@ test('permission matrix: normalize, resolve, action flags', () => {
   assert.equal(perms.resolve('/r/notices_x'), null);
   assert.equal(perms.resolve('/inbox/loan/3').section, 'inbox:loan');
   assert.equal(perms.resolve('/information-room/logs').section, 'r:information_room_items');
-  assert.ok(perms.resolve('/users').superOnly);
+  assert.ok(perms.resolve('/roles').superOnly);
+  assert.equal(perms.resolve('/users').section, 'admin_users'); // admins manage non-super users (legacy manage-admins.php)
   assert.ok(perms.resolve('/').always);
   const flag = (method, p, body = {}) => perms.actionFlag({ method, path: p, body }, perms.resolve(p));
   assert.equal(flag('GET', '/r/news'), 'v');

@@ -1,19 +1,54 @@
-<%- include('../partials/page-head', { lead: t('परिचयपत्रमा भएको प्रमाणीकरण कोड र ४ अंकको CVV राख्नुहोस्।', 'Enter the verification code and 4-digit CVV printed on the card.') }) %>
+<%- include('../partials/page-head', { lead: t('परिचयपत्रमा लेखिएको नाम, सदस्यता नम्बर र मोबाइल, वा प्रमाणीकरण कोड र कार्डमा लेखिएको CVV राख्नुहोस्।', 'Enter the name, Member ID and mobile on the card, or the verification code and the CVV printed on the card.') }) %>
+<% const m0 = locals.mode === 'code' ? 'code' : 'name'; const fv = locals.form || {}; %>
 <section class="section"><div class="container maxw-sm" style="margin-left:0">
+  <div class="tabs" role="tablist">
+    <a class="tab <%= m0 === 'name' ? 'active' : '' %>" href="/verify<%= partnerPref ? '?partner_id=' + partnerPref : '' %>" data-verify-tab="name"><%= t('नाम + सदस्यता नं. + मोबाइल', 'Name + Member ID + mobile') %></a>
+    <a class="tab <%= m0 === 'code' ? 'active' : '' %>" href="/verify?mode=code<%= partnerPref ? '&partner_id=' + partnerPref : '' %>" data-verify-tab="code"><%= t('कोड + CVV', 'Code + CVV') %></a>
+  </div>
+  <% if (m0 === 'name') { %>
   <form class="form-card" method="post" action="/verify">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="mode" value="name"><input type="hidden" name="partner_pref" value="<%= partnerPref %>">
+    <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
     <div class="form-grid">
-      <div class="field"><label for="code"><%= t('प्रमाणीकरण कोड', 'Verification code') %></label><input class="input" id="code" name="code" value="<%= code %>" placeholder="AKS-9F7K-2X4M" required></div>
-      <div class="field"><label for="cvv">CVV</label><input class="input" id="cvv" name="cvv" inputmode="numeric" maxlength="4" required></div>
+      <div class="field span-2"><label for="v_name"><%= t('सदस्यको नाम', "Member's name") %></label><input class="input" id="v_name" name="name" value="<%= fv.name || '' %>" required autocomplete="off"></div>
+      <div class="field"><label for="v_member"><%= t('सदस्यता नं.', 'Member ID') %></label><input class="input" id="v_member" name="member_no" value="<%= fv.member_no || '' %>" required autocomplete="off"></div>
+      <div class="field"><label for="v_mobile"><%= t('मोबाइल', 'Mobile') %></label><input class="input" id="v_mobile" name="mobile" type="tel" value="<%= fv.mobile || '' %>" required inputmode="numeric"></div>
+      <div class="field"><label for="v_cvv">CVV <span class="small faint"><%= t('(ऐच्छिक)', '(optional)') %></span></label><input class="input" id="v_cvv" name="cvv" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"></div>
     </div>
     <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button></div>
   </form>
+  <% } else { %>
+  <form class="form-card" method="post" action="/verify">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="partner_pref" value="<%= partnerPref %>">
+    <div class="form-grid">
+      <div class="field"><label for="code"><%= t('प्रमाणीकरण कोड वा कार्ड नम्बर', 'Verification code or card number') %></label><input class="input" id="code" name="code" value="<%= code %>" placeholder="AKS-9F7K-2X4M" maxlength="40" autocapitalize="characters" spellcheck="false" required></div>
+      <div class="field"><label for="cvv">CVV</label><input class="input" id="cvv" name="cvv" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" required></div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary"><%- icon('shield') %><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button></div>
+  </form>
+  <% } %>
   <% if (result === false) { %><div class="alert alert-error mt-3"><%= locals.message || t('परिचयपत्र प्रमाणित हुन सकेन।', 'Card could not be verified.') %></div><% } %>
-  <% if (result) { const c = result.card, m = result.member; %>
-    <div class="card mt-3"><div class="flex gap-2 items-center">
-      <span class="icon-tile" style="margin:0;background:<%= c.status === 'active' ? 'var(--ok-soft)' : 'var(--bad-soft)' %>;color:<%= c.status === 'active' ? 'var(--ok)' : 'var(--bad)' %>"><%- icon(c.status === 'active' ? 'check' : 'alert') %></span>
-      <div><h3 class="mb-0"><%= m ? (m.name_np || m.name) : c.member_id %></h3><div class="small muted"><%= t('कार्ड नं. ', 'Card no. ') %><%= c.card_no %> · <%= c.status === 'active' ? t('मान्य', 'Valid') : c.status %></div></div></div>
-      <div class="kv mt-2"><div><%= t('जारी मिति', 'Issued') %></div><div><%= bsDate(c.issued_date) %></div><% if (c.expiry_date) { %><div><%= t('म्याद', 'Expires') %></div><div><%= bsDate(c.expiry_date) %></div><% } %></div>
+  <% if (result) { const c = result.card, m = result.member, k = result.kyc || {}; const ok = result.valid !== false && (!c || c.status === 'active');
+       const st = !m ? '' : m.approval_status === 'renewal_pending' ? t('नवीकरण बाँकी', 'Renewal pending') : m.approval_status !== 'approved' ? t('सक्रिय छैन', 'Not active') : c && c.status !== 'active' ? (c.status === 'expired' ? t('म्याद सकियो', 'Expired') : c.status) : t('मान्य', 'Valid'); %>
+    <div class="card mt-3 verify-result">
+      <div class="flex gap-2 items-center">
+        <% if (m && result.hasPhoto && ok) { %><img class="verify-photo" style="width:84px;height:100px;object-fit:cover;border-radius:10px;border:1px solid var(--line)" src="/verify/photo/<%= m.id %>" alt="<%= t('सदस्यको फोटो', 'Member photo') %>"><% } else { %>
+        <span class="icon-tile" style="margin:0;background:<%= ok ? 'var(--ok-soft)' : 'var(--bad-soft)' %>;color:<%= ok ? 'var(--ok)' : 'var(--bad)' %>"><%- icon(ok ? 'check' : 'alert') %></span><% } %>
+        <div class="grow"><h3 class="mb-0"><%= m ? (m.name_np || k.full_name || m.name) : c.member_id %></h3>
+          <% if (m && (k.full_name_en || m.name) && (k.full_name_en || m.name) !== (m.name_np || m.name)) { %><div class="small muted"><%= k.full_name_en || m.name %></div><% } %>
+          <span class="badge <%= ok ? 'badge-ok' : 'badge-bad' %> mt-1"><%= st %></span></div>
+      </div>
+      <div class="kv mt-2">
+        <% if (m) { %><div><%= t('सदस्यता नं.', 'Member ID') %></div><div><%= m.sadasyata_number || m.member_card_no || '—' %></div><% } %>
+        <% if (k.father_name) { %><div><%= t('बुबाको नाम', "Father's name") %></div><div><%= k.father_name %></div><% } %>
+        <% if (k.dob_bs) { %><div><%= t('जन्म मिति (वि.सं.)', 'Date of birth (BS)') %></div><div><%= k.dob_bs %></div><% } %>
+        <% if (m && (m.approved_at || m.created_at)) { %><div><%= t('सदस्य देखि', 'Member since') %></div><div><%= bsDate(m.approved_at || m.created_at) %></div><% } %>
+        <% if (c) { %><div><%= t('कार्ड नं.', 'Card no.') %></div><div><%= c.card_no %></div>
+          <div><%= t('जारी मिति', 'Issued') %></div><div><%= bsDate(c.issued_date) %></div>
+          <% if (c.expiry_date) { %><div><%= t('म्याद', 'Valid until') %></div><div><%= bsDate(c.expiry_date) %></div><% } %>
+          <div><%= t('प्रमाणीकरण संख्या', 'Times verified') %></div><div><%= num(c.verify_count || 0) %></div>
+        <% } else { %><div><%= t('परिचयपत्र', 'ID card') %></div><div><%= t('अझै जारी भएको छैन', 'Not issued yet') %></div><% } %>
+      </div>
     </div>
   <% } %>
   <% if (locals.log) { %><div class="alert <%= log.ok ? 'alert-success' : 'alert-error' %> mt-3"><%- icon(log.ok ? 'check' : 'alert') %><span><%= log.text %></span></div><% } %>
@@ -23,7 +58,7 @@
       <h3 class="mb-1"><%= t('साझेदार डेस्क: सेवा लग', 'Partner desk: log a service') %></h3>
       <p class="small muted"><%= t('यो सदस्यले तपाईंको संस्थामा लिएको सेवा/छुट दर्ता गर्नुहोस्।', 'Record the service or discount this member used at your organisation.') %></p>
       <div class="form-grid">
-        <div class="field"><label for="ps_partner"><%= t('साझेदार संस्था', 'Partner organisation') %></label><select class="select" id="ps_partner" name="partner_id" required><option value="">—</option><% partners.forEach(p => { %><option value="<%= p.id %>"><%= lang === 'en' && p.partner_name_en ? p.partner_name_en : p.partner_name %></option><% }) %></select></div>
+        <div class="field"><label for="ps_partner"><%= t('साझेदार संस्था', 'Partner organisation') %></label><select class="select" id="ps_partner" name="partner_id" required><option value="">—</option><% partners.forEach(p => { %><option value="<%= p.id %>" <%= String(p.id) === String(partnerPref) ? 'selected' : '' %>><%= lang === 'en' && p.partner_name_en ? p.partner_name_en : p.partner_name %></option><% }) %></select></div>
         <div class="field"><label for="ps_pin"><%= t('डेस्क PIN', 'Desk PIN') %></label><input class="input" id="ps_pin" name="partner_pin" type="password" autocomplete="off" inputmode="numeric"><div class="field-hint"><%= t('कार्यालयले दिएको PIN (सेट भएमा)।', 'The PIN issued by the office (if set).') %></div></div>
         <div class="field"><label for="ps_service"><%= t('सेवा', 'Service') %></label><input class="input" id="ps_service" name="service_name" maxlength="255" placeholder="<%= t('उदा. स्वास्थ्य जाँच', 'e.g. health check-up') %>"></div>
         <div class="field"><label for="ps_taken"><%= t('सेवा लिइयो?', 'Service taken?') %></label><select class="select" id="ps_taken" name="service_taken"><option value="yes"><%= t('हो', 'Yes') %></option><option value="no"><%= t('भ्रमण मात्र', 'Visit only') %></option></select></div>

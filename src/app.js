@@ -41,7 +41,7 @@ function createApp() {
         'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
         'img-src': ["'self'", 'data:', 'https:'],
-        'frame-src': ['https://www.google.com', 'https://maps.google.com', 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://www.facebook.com', 'https://challenges.cloudflare.com'],
+        'frame-src': ["'self'", 'https://www.google.com', 'https://maps.google.com', 'https://www.youtube.com', 'https://www.youtube-nocookie.com', 'https://www.facebook.com', 'https://challenges.cloudflare.com'],
         'form-action': ["'self'"],
         'upgrade-insecure-requests': config.isProd ? [] : null,
       },
@@ -103,7 +103,7 @@ function createApp() {
       },
       num: v => (lang === 'np' ? nd.toNepaliDigits(v) : String(v ?? '')),
       money: v => util.money(v, lang),
-      bsDate: ad => (ad ? nd.formatBs(nd.adToBs(ad instanceof Date ? ad : String(ad).slice(0, 10)), lang) : ''),
+      bsDate: ad => (ad ? nd.formatBs(nd.toBs(ad), lang) : ''), // BS values typed into DATE columns stay BS
     });
   };
   app.use((req, res, next) => {
@@ -164,6 +164,8 @@ function createApp() {
     let rel;
     try { rel = path.posix.normalize('/' + decodeURIComponent(req.path)).replace(/^\/+/, ''); } catch { return res.status(400).end(); }
     if (/^_private(\/|$)/i.test(rel) || /(^|\/)_private(\/|$)/i.test(decodeURIComponent(req.path))) return res.status(404).end();
+    // folders the PHP upload gate protected (KYC, loan, welfare …): never public, even if a file was left there
+    if (require('./lib/uploads').isGated(rel)) return res.status(404).end();
     express.static(tenantDir(req), { maxAge: config.isProd ? '30d' : 0, dotfiles: 'deny', index: false,
       setHeaders: r => r.set('X-Content-Type-Options', 'nosniff').set('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'") })(req, res, next);
   });
@@ -255,6 +257,18 @@ function createApp() {
     res.set('Cache-Control', 'private, max-age=600').set('Vary', 'Cookie').type('image/svg+xml').send(svg);
   });
 
+  // legacy PHP upload URLs (/assets/uploads/<folder>/<file>) embedded in migrated pages and shared links
+  app.get('/assets/uploads/*rest', (req, res) => {
+    const up = require('./lib/uploads');
+    const rel = path.posix.normalize('/' + [].concat(req.params.rest || []).join('/')).replace(/^\/+/, '');
+    if (!rel || /(^|\/)_private(\/|$)/i.test(rel) || rel.split('/').some(p => p.startsWith('.'))) return res.status(404).end();
+    const q = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+    const enc = rel.split('/').map(encodeURIComponent).join('/');
+    // personal documents: staff only (the private file route checks the role); never a public redirect
+    if (up.isGated(rel)) return req.admin ? res.redirect(302, '/admin/files/_private/' + enc) : res.status(404).end();
+    res.redirect(301, '/uploads/' + enc + q);
+  });
+
   app.use('/admin', require('./routes/admin'));
   app.use('/member', require('./routes/member'));
   const navByPlan = (req, res, next) => {
@@ -268,7 +282,7 @@ function createApp() {
   // 404
   app.use((req, res) => {
     res.status(404).render(req.path.startsWith('/admin') && req.admin ? 'admin/error' : 'public/error',
-      { title: 'Not found', code: 404, message: res.locals.t('तपाईंले खोजेको पृष्ठ भेटिएन।', 'The page you are looking for was not found.') });
+      { title: res.locals.t ? res.locals.t('पृष्ठ भेटिएन', 'Page not found') : 'Not found', code: 404, message: res.locals.t('तपाईंले खोजेको पृष्ठ भेटिएन।', 'The page you are looking for was not found.') });
   });
 
   // errors

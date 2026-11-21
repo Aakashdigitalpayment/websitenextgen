@@ -1,24 +1,46 @@
 <div class="content-head no-print"><h1><%= title %></h1><% if (card && !card.locked_at) { %><button class="btn btn-outline btn-sm" data-print type="button"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button><% } %></div>
+<% if (locals.daysLeft !== null && locals.daysLeft !== undefined) { %>
+  <% if (daysLeft < 0) { %><div class="alert alert-error no-print maxw-md"><%- icon('alert') %><span><%= t('तपाईंको सदस्य परिचयपत्रको म्याद सकिएको छ। नवीकरणका लागि कार्यालयमा सम्पर्क गर्नुहोस्।', 'Your member card has expired. Please contact the office to renew it.') %></span></div>
+  <% } else if (daysLeft <= 60) { %><div class="alert alert-warn no-print maxw-md"><%- icon('alert') %><span><%= t(`कार्ड म्याद ${num(daysLeft)} दिनमा सकिँदैछ। समयमै नवीकरण गर्नुहोस्।`, `Your card expires in ${daysLeft} day(s). Please renew it in time.`) %></span></div><% } %>
+<% } %>
 <% if (!card) { %><div class="empty"><%= t('तपाईंको परिचयपत्र जारी भएको छैन। कार्यालयमा सम्पर्क गर्नुहोस्।', 'No ID card issued yet. Please contact the office.') %></div><% } else { %>
 <% if (card.locked_at) { %>
   <div class="alert alert-error no-print maxw-md"><%- icon('alert') %><span><%= t('गलत CVV धेरै पटक प्रयास भएकाले यो कार्ड LOCK भएको छ। प्रमाणीकरण गर्न कार्यालयबाट unlock गराउनुहोस्।', 'This card is locked after too many wrong CVV attempts. Ask the office to unlock it before it can be verified.') %>
   <% if (Number(card.unlock_requested)) { %><br><strong><%= t('Unlock अनुरोध पठाइएको छ।', 'Unlock request sent.') %></strong><% } %></span></div>
   <% if (!Number(card.unlock_requested)) { %><form method="post" action="/member/id-card/unlock-request" class="no-print mb-3"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary btn-sm"><%= t('Unlock अनुरोध पठाउनुहोस्', 'Request unlock') %></button></form><% } %>
 <% } %>
-<div style="max-width:420px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-lg)">
+<% const exp = card.expiry_date ? String(card.expiry_date).slice(0, 10) : ''; const mmyy = exp ? exp.slice(5, 7) + '/' + exp.slice(2, 4) : '—'; %>
+<div class="id-cards" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<div class="id-card" style="max-width:420px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-lg)">
   <div style="background:var(--brand);color:var(--brand-ink);padding:16px 20px;display:flex;gap:12px;align-items:center">
     <span class="brand-mark" style="background:var(--brand-ink);color:var(--brand)"><%= (siteName || 'C').trim().charAt(0) %></span>
     <div><div style="font-weight:600"><%= siteName %></div><div class="small" style="opacity:.85"><%= t('सदस्य परिचयपत्र', 'Member ID card') %></div></div>
   </div>
   <div style="padding:20px;display:flex;gap:16px">
-    <div class="person-photo" style="width:88px;height:104px;border-radius:10px;margin:0"><% if (member.avatar_url) { %><img src="<%= mediaUrl(member.avatar_url) %>" alt=""><% } else { %><%- icon('user', 'icon-lg') %><% } %></div>
+    <div class="person-photo" style="width:88px;height:104px;border-radius:10px;margin:0"><% if (locals.kycPhoto) { %><img src="/member/profile/kyc-file/photo" alt=""><% } else if (member.avatar_url) { %><img src="<%= mediaUrl(member.avatar_url) %>" alt=""><% } else { %><%- icon('user', 'icon-lg') %><% } %></div>
     <div class="grow">
       <div style="font-weight:600;font-size:1.1rem"><%= member.name_np || member.name %></div>
       <div class="small muted"><%= member.name %></div>
       <div class="kv mt-1 small" style="grid-template-columns:90px 1fr"><div><%= t('सदस्यता', 'Member') %></div><div><%= member.sadasyata_number || '—' %></div><div><%= t('कार्ड', 'Card') %></div><div><%= card.card_no %></div><div><%= t('म्याद', 'Valid to') %></div><div><%= card.expiry_date ? bsDate(card.expiry_date) : '—' %></div></div>
+      <% if (locals.stars) { %><div class="small mt-1" title="<%= t(`${stars.attended}/${stars.held} कार्यक्रममा उपस्थिति`, `Attended ${stars.attended} of ${stars.held} programmes`) %>" aria-label="<%= t('कार्यक्रम उपस्थिति', 'Programme attendance') %>: <%= stars.stars %>/5"><span style="color:var(--warn)"><%= '★'.repeat(stars.stars) %></span><span class="faint"><%= '☆'.repeat(5 - stars.stars) %></span></div><% } %>
     </div>
   </div>
   <div style="padding:12px 20px;border-top:1px dashed var(--line-strong);display:flex;justify-content:space-between;font-family:ui-monospace,monospace;font-size:.9rem"><span><%= card.verification_code %></span><span>CVV <%= card.cvv %></span></div>
+</div>
+<div class="id-card id-card-back" style="max-width:420px;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-lg);padding:18px 20px">
+  <div class="kv small" style="grid-template-columns:110px 1fr">
+    <div><%= t('सदस्यता नं.', 'Member ID') %></div><div style="font-weight:600"><%= member.sadasyata_number || member.member_card_no || '—' %></div>
+    <div><%= t('मोबाइल', 'Mobile') %></div><div><%= member.phone || '—' %></div>
+    <div><%= t('मान्य', 'Valid thru') %></div><div style="font-family:ui-monospace,monospace"><%= mmyy %></div>
+  </div>
+  <hr style="border:0;border-top:1px dashed var(--line-strong);margin:12px 0">
+  <div class="small"><strong><%= siteName %></strong>
+    <% if (settings.address) { %><div class="muted"><%= settings.address %></div><% } %>
+    <div class="muted"><%= [settings.phone, settings.email].filter(Boolean).join(' · ') %></div>
+  </div>
+  <div class="small mt-1"><%= t('प्रमाणीकरण: ', 'Verify: ') %><span style="font-family:ui-monospace,monospace"><%= locals.verifyUrl || '/verify' %></span></div>
+  <div class="small faint"><%= t('नाम + सदस्यता नं. + मोबाइल, वा कोड + CVV', 'name + Member ID + mobile, or code + CVV') %></div>
+</div>
 </div>
 <p class="small faint mt-2 no-print"><%= t('कोड र CVV बाट जो कोहीले ', 'Anyone can verify this card at ') %><a href="/verify">/verify</a><%= t(' मा प्रमाणित गर्न सक्छ।', ' using the code and CVV.') %></p>
 <% } %>

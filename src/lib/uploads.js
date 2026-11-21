@@ -17,6 +17,17 @@ const IMAGE = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
 const DOCS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'];
 const MIME_OK = /^(image\/(jpeg|png|webp|gif)|application\/(pdf|msword|vnd\.openxmlformats-officedocument\..+|vnd\.ms-excel|vnd\.ms-powerpoint|octet-stream)|text\/(plain|csv))$/;
 const FOLDER_RE = /^[a-z0-9_-]{1,40}$/;
+/**
+ * PHP upload gate (includes/upload-gate.php): folders under assets/uploads/ that hold personal documents.
+ * Migrated files in these folders live under _private/<folder>/ and are never served by the public /uploads route.
+ */
+const GATED_FOLDERS = ['kyc', 'loan', 'accounts', 'welfare_claims', 'grievances', 'digital_services',
+  'honor_applications', 'appointments', 'admin-replies', 'job-applications', 'hrm'];
+const GATED_RE = new RegExp('^(' + GATED_FOLDERS.map(f => f.replace(/[-_]/g, m => '\\' + m)).join('|') + ')/', 'i');
+/** Stored/relative path → path relative to the tenant folder ("assets/uploads/x" and "/uploads/x" → "x"). */
+const relOf = stored => String(stored || '').trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
+/** True for a legacy path inside one of the PHP-gated folders (e.g. "kyc/x.jpg"). */
+const isGated = stored => GATED_RE.test(relOf(stored));
 
 function tenantDir(req) {
   return path.join(config.uploadDir, req.tenant.slug);
@@ -44,7 +55,7 @@ function contentLooksRight(file, ext) {
  *   upload('news', [{ name: 'image', kind: 'image' }])
  * After it runs, req.uploaded[field] = "news/<file>" for each accepted file.
  */
-function upload(folder, fields, { maxMb, private: isPrivate = false } = {}) {
+function upload(folder, fields, { maxMb, private: isPrivate = false, fieldSizeMb = 0 } = {}) {
   // documents keep the normal limit; image fields may be up to MAX_IMAGE_MB so full 8K UHD photos are accepted
   const docMb = maxMb || config.maxUploadMb;
   const imgMb = maxMb || Math.max(config.maxImageMb, config.maxUploadMb);
@@ -66,7 +77,7 @@ function upload(folder, fields, { maxMb, private: isPrivate = false } = {}) {
   });
   const mw = multer({
     storage,
-    limits: { fileSize: maxMb * 1024 * 1024, files: fields.reduce((a, f) => a + (f.maxCount || 1), 0) },
+    limits: { fileSize: maxMb * 1024 * 1024, files: fields.reduce((a, f) => a + (f.maxCount || 1), 0), ...(fieldSizeMb ? { fieldSize: fieldSizeMb * 1024 * 1024, fields: 400 } : {}) },
     fileFilter(req, file, cb) {
       const ext = path.extname(file.originalname).toLowerCase();
       const kind = kinds[file.fieldname];
@@ -101,15 +112,38 @@ function upload(folder, fields, { maxMb, private: isPrivate = false } = {}) {
   ];
 }
 
+/**
+ * Camera / signature-pad image posted as a data: URL (includes/kyc-capture-helpers.php saveBase64Image): JPEG / PNG / WebP only,
+ * size-limited, the same magic-byte check as uploaded files, random name. Returns the stored path or { error }.
+ */
+function saveDataUrl(req, folder, dataUrl, { private: isPrivate = true, maxMb = 5 } = {}) {
+  if (!FOLDER_RE.test(folder)) throw new Error('bad upload folder');
+  const m = /^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/.exec(String(dataUrl || '').slice(0, Math.ceil(maxMb * 1024 * 1024 * 1.4) + 64));
+  if (!m) return { error: 'चित्रको ढाँचा मिलेन (JPG/PNG/WEBP मात्र)' };
+  const buf = Buffer.from(m[2].replace(/\s+/g, ''), 'base64');
+  if (!buf.length || buf.length > maxMb * 1024 * 1024) return { error: `फोटो ${maxMb}MB भन्दा ठूलो भयो` };
+  const ext = m[1] === 'jpg' ? '.jpeg' : '.' + m[1];
+  const ok = { '.jpeg': 'ffd8ff', '.png': '89504e47', '.webp': '52494646' }[ext];
+  if (!buf.subarray(0, 4).toString('hex').startsWith(ok)) return { error: 'फाइलको सामग्री मिलेन' };
+  const base = isPrivate ? '_private/' + folder : folder;
+  const dir = path.join(tenantDir(req), base);
+  fs.mkdirSync(dir, { recursive: true });
+  const name = crypto.randomBytes(16).toString('hex') + (ext === '.jpeg' ? '.jpg' : ext);
+  fs.writeFileSync(path.join(dir, name), buf, { mode: 0o640 });
+  return `${base}/${name}`;
+}
+
 /** Public URL for a stored path (handles legacy PHP paths and absolute URLs). */
 function mediaUrl(stored) {
   if (!stored) return '';
   const s = String(stored).trim().replace(/\\/g, '/');
   if (/^https?:\/\//i.test(s)) return s;
   if (/^starter:[a-z]+$/.test(s)) return '/starter-art/' + s.slice(8) + '.svg';
+  if (/^\/?assets\/(images|img)\//i.test(s)) return ''; // PHP theme defaults (assets/images/logo.png) are not migrated
   const rel = s.replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
   if (rel.includes('..')) return '';
   if (rel.startsWith('_private/')) return '/admin/files/' + rel.split('/').map(encodeURIComponent).join('/'); // staff-only route
+  if (isGated(rel)) return '/admin/files/_private/' + rel.split('/').map(encodeURIComponent).join('/'); // PHP-gated folder → private
   return '/uploads/' + rel.split('/').map(encodeURIComponent).join('/');
 }
 
@@ -127,20 +161,27 @@ function resolveStored(req, stored) {
   const base = path.resolve(tenantDir(req));
   const rel = String(stored || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/^assets\/uploads\//, '').replace(/^uploads\//, '');
   const file = path.resolve(base, rel);
-  return file.startsWith(base + path.sep) ? file : null;
+  if (!file.startsWith(base + path.sep)) return null;
+  // a legacy path into a PHP-gated folder whose file was moved to private storage by the site migration
+  if (isGated(rel) && !fs.existsSync(file)) {
+    const priv = path.resolve(base, '_private', rel);
+    if (priv.startsWith(base + path.sep) && fs.existsSync(priv)) return priv;
+  }
+  return file;
 }
 
 /** Send a stored file with safe headers (images inline, everything else as a download). */
-function sendStored(req, res, next, stored) {
+function sendStored(req, res, next, stored, { viewOnly = false, download = false } = {}) {
   const file = resolveStored(req, stored);
   if (!file || !fs.existsSync(file)) return next();
-  const inline = /\.(jpe?g|png|webp|gif|pdf)$/i.test(file);
+  const inline = viewOnly || (!download && /\.(jpe?g|png|webp|gif|pdf)$/i.test(file)); // download: ?dl=1 asks for an attachment
   res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; plugin-types application/pdf" });
   // serve relative to the tenant folder so the dotfile check applies to the stored path only, not to an install
   // directory that happens to contain a dot segment (e.g. /home/x/.apps/site)
   const opts = { root: path.resolve(tenantDir(req)) };
   const rel = path.relative(opts.root, file);
   if (!inline) return res.download(rel, path.basename(file), opts);
+  if (viewOnly) res.set('Content-Disposition', 'inline'); // "view only" publications are never offered as a download
   res.sendFile(rel, opts);
 }
 
@@ -157,4 +198,4 @@ function srcsetAttr(req, stored, sizes = '100vw') {
   return set ? ` srcset="${esc(set)}" sizes="${esc(sizes)}"` : '';
 }
 
-module.exports = { upload, mediaUrl, remove, tenantDir, resolveStored, sendStored, srcsetAttr };
+module.exports = { upload, saveDataUrl, mediaUrl, remove, tenantDir, resolveStored, sendStored, srcsetAttr, GATED_FOLDERS, isGated, relOf };

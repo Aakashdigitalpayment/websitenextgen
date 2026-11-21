@@ -33,13 +33,19 @@ async function sendTo(subs, payload, notifId = null) {
   return { sent, failed };
 }
 
-async function sendToMember(memberId, payload) {
+async function sendToMember(memberId, payload, notifId = null) {
   const subs = await db.many('SELECT * FROM member_push_subscriptions WHERE member_id = $1', [memberId]);
-  return sendTo(subs, payload);
+  return sendTo(subs, payload, notifId);
 }
 
 async function sendToAll(payload) {
   const subs = await db.many('SELECT s.* FROM member_push_subscriptions s JOIN members m ON m.id = s.member_id WHERE m.is_active = 1 AND m.deleted_at IS NULL');
+  return sendTo(subs, payload);
+}
+
+async function sendToMembers(memberIds, payload) {
+  if (!memberIds.length) return { sent: 0, failed: 0 };
+  const subs = await db.many('SELECT * FROM member_push_subscriptions WHERE member_id = ANY($1::int[])', [memberIds]);
   return sendTo(subs, payload);
 }
 
@@ -71,4 +77,4 @@ async function unsubscribe(memberId, endpoint) {
   await db.query('DELETE FROM member_push_subscriptions WHERE member_id = $1 AND endpoint = $2', [memberId, String(endpoint || '')]);
 }
 
-module.exports = { allowedEndpoint, keys, sendToMember, sendToAll, subscribe, unsubscribe };
+module.exports = { allowedEndpoint, keys, sendToMember, sendToMembers, sendToAll, subscribe, unsubscribe };

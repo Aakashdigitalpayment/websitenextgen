@@ -14,12 +14,25 @@
   <a class="tab <%= view === 'live' ? 'active' : '' %>" href="/admin/members"><%= t('सक्रिय सूची', 'Members') %> (<%= num(counts.live) %>)</a>
   <a class="tab <%= view === 'arch' ? 'active' : '' %>" href="/admin/members?view=arch"><%= t('अभिलेख (हटाइएका)', 'Archive (removed)') %> (<%= num(counts.arch) %>)</a>
 </div>
+<% if (view === 'live' && locals.stats) { const chip = (href, np, en, n, on) => ({ href, np, en, n, on }); %>
+<div class="tabs" aria-label="<%= t('सदस्य तथ्याङ्क', 'Member stats') %>">
+  <% [chip('/admin/members', 'जम्मा', 'Total', stats.total, !st && !kyc && !locals.qs),
+      chip('/admin/members?active=1', 'सक्रिय', 'Active', stats.active, false),
+      chip('/admin/members?status=pending', 'स्वीकृति बाँकी', 'Pending', stats.pending, st === 'pending'),
+      chip('/admin/members?status=renewal_pending', 'नवीकरण बाँकी', 'Renewal pending', stats.renewal_pending, st === 'renewal_pending'),
+      chip('/admin/members?kyc=linked', 'KYM लिंक', 'KYM linked', stats.kyc_linked, kyc === 'linked'),
+      chip('', 'Google', 'Google', stats.google, false), chip('', 'Facebook', 'Facebook', stats.facebook, false)].forEach(c => { if (!c.href && !c.n) return; %>
+    <% if (c.href) { %><a class="tab <%= c.on ? 'active' : '' %>" href="<%= c.href %>"><%= t(c.np, c.en) %> <b><%= num(c.n) %></b></a><% } else { %><span class="tab" style="cursor:default"><%= t(c.np, c.en) %> <b><%= num(c.n) %></b></span><% } %>
+  <% }) %>
+</div>
+<% } %>
 <form class="toolbar" method="get">
   <% if (view === 'arch') { %><input type="hidden" name="view" value="arch"><% } %>
   <input class="input" name="q" value="<%= q %>" placeholder="<%= t('नाम, फोन, सदस्यता नं…', 'Name, phone, member no…') %>">
-  <select class="select" name="status" data-autosubmit aria-label="<%= t('स्वीकृति', 'Approval') %>"><option value=""><%= t('सबै स्थिति', 'All statuses') %></option><% ['pending','approved','rejected'].forEach(s => { %><option value="<%= s %>" <%= st === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }) %></select>
+  <select class="select" name="status" data-autosubmit aria-label="<%= t('स्वीकृति', 'Approval') %>"><option value=""><%= t('सबै स्थिति', 'All statuses') %></option><% ['pending','approved','rejected','renewal_pending'].forEach(s => { %><option value="<%= s %>" <%= st === s ? 'selected' : '' %>><%= s === 'renewal_pending' ? t('नवीकरण बाँकी', 'Renewal pending') : statusLabel(s) %></option><% }) %></select>
   <select class="select" name="ms" data-autosubmit aria-label="<%= t('मासिक बचत', 'Monthly saving') %>"><option value=""><%= t('मासिक बचत: सबै', 'Monthly saving: all') %></option><option value="1" <%= ms === '1' ? 'selected' : '' %>><%= t('नियमित', 'Regular') %></option><option value="0" <%= ms === '0' ? 'selected' : '' %>><%= t('नियमित नभएको', 'Not regular') %></option><option value="unset" <%= ms === 'unset' ? 'selected' : '' %>><%= t('नतोकिएको', 'Not set') %></option></select>
-  <button class="btn btn-outline"><%- icon('search') %></button>
+  <select class="select" name="kyc" data-autosubmit aria-label="KYM"><option value=""><%= t('KYM: सबै', 'KYM: all') %></option><% [['linked', 'लिंक (पासवर्डसहित)', 'Linked (with password)'], ['unlinked', 'लिंक नभएको', 'Not linked'], ['no_password', 'पासवर्ड नभएको', 'No password']].forEach(o => { %><option value="<%= o[0] %>" <%= kyc === o[0] ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select>
+  <button type="submit" class="btn btn-outline"><%- icon('search') %></button>
 </form>
 <% if (!rows.length) { %><div class="empty"><%= t('सदस्य भेटिएन।', 'No members found.') %></div><% } else { %>
 <div class="table-wrap"><table class="table"><thead><tr><th><%= t('नाम', 'Name') %></th><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('फोन', 'Phone') %></th><th><%= t('स्थिति', 'Status') %></th><th><%= t('मासिक बचत', 'Monthly saving') %></th><th><%= view === 'arch' ? t('हटाइएको', 'Removed') : t('अन्तिम लगइन', 'Last login') %></th><% if (view === 'arch') { %><th></th><% } %></tr></thead><tbody>
@@ -29,7 +42,27 @@
     <td><span class="badge <%= m.approval_status === 'approved' ? 'badge-ok' : m.approval_status === 'rejected' ? 'badge-bad' : 'badge-warn' %>"><%= statusLabel(m.approval_status || 'pending') %></span><% if (!m.is_active) { %> <span class="badge"><%= t('निष्क्रिय', 'Inactive') %></span><% } %></td>
     <td><span class="badge <%= msv === 1 ? 'badge-ok' : msv === 0 ? 'badge-warn' : '' %>"><%= msv === 1 ? t('नियमित', 'Regular') : msv === 0 ? t('नियमित नभएको', 'Not regular') : t('नतोकिएको', 'Not set') %></span></td>
     <td class="small faint"><%= view === 'arch' ? bsDate(m.deleted_at) : m.last_login ? bsDate(m.last_login) : '—' %></td>
-    <% if (view === 'arch') { %><td class="text-right"><% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= m.id %>/restore"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-soft btn-sm" data-confirm="<%= t('सदस्य पुनर्स्थापित गर्ने?', 'Restore this member?') %>"><%= t('पुनर्स्थापित', 'Restore') %></button></form><% } %></td><% } %>
+    <% if (view === 'arch') { %><td class="text-right"><% if (roleLevel(admin.role) >= 3) { %><form method="post" action="/admin/members/<%= m.id %>/restore"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-soft btn-sm" data-confirm="<%= t('सदस्य पुनर्स्थापित गर्ने?', 'Restore this member?') %>"><%= t('पुनर्स्थापित', 'Restore') %></button></form><% } %></td><% } %>
   </tr><% }) %>
 </tbody></table></div>
 <%- include('../partials/pagination', { pg }) %><% } %>
+<% if (view === 'live' && locals.audience) { %>
+<details class="card mt-3" id="notify-all"><summary style="cursor:pointer;font-weight:600"><%- icon('bell') %> <%= t('सदस्य समूहलाई सूचना पठाउनुहोस्', 'Notify a group of members') %></summary>
+  <form method="post" action="/admin/members/notify-bulk" class="mt-2">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="form-grid">
+      <div class="field"><label for="nb_aud"><%= t('प्राप्तकर्ता', 'Audience') %></label><select class="select" id="nb_aud" name="audience">
+        <% [['active', 'सक्रिय र स्वीकृत', 'Active and approved'], ['pending', 'स्वीकृति बाँकी', 'Pending approval'], ['kyc_linked', 'KYM लिंक भएका सक्रिय', 'Active with a linked KYM'], ['all_active', 'सबै सक्रिय', 'All active']].forEach(a => { %><option value="<%= a[0] %>"><%= t(a[1], a[2]) %> (<%= num(audience[a[0]] || 0) %>)</option><% }) %></select></div>
+      <div class="field"><label for="nb_type"><%= t('प्रकार', 'Type') %></label><select class="select" id="nb_type" name="type"><option value="info"><%= t('जानकारी', 'Info') %></option><option value="success"><%= t('सफल', 'Success') %></option><option value="warning"><%= t('चेतावनी', 'Warning') %></option><option value="error"><%= t('जरुरी', 'Urgent') %></option></select></div>
+    </div>
+    <div class="field mt-2"><label for="nb_title"><%= t('शीर्षक', 'Title') %><span class="req">*</span></label><input class="input" id="nb_title" name="title" maxlength="200" required></div>
+    <div class="field mt-2"><label for="nb_msg"><%= t('सन्देश', 'Message') %></label><textarea class="textarea" id="nb_msg" name="message" rows="3" maxlength="2000"></textarea></div>
+    <div class="flex gap-1 wrap mt-2">
+      <label class="choice"><input type="checkbox" name="push" value="1" checked> <%= t('Push सूचना', 'Web push') %></label>
+      <% if (roleLevel(admin.role) >= 3) { %><label class="choice"><input type="checkbox" name="sms" value="1"> SMS</label><label class="choice"><input type="checkbox" name="email" value="1"> <%= t('इमेल', 'Email') %></label><% } %>
+    </div>
+    <p class="small faint mt-1"><%= t('पोर्टलमा सधैं देखिन्छ। SMS/इमेल दैनिक सीमाभित्र मात्र जान्छ।', 'Always shown in the member portal. SMS / email stop at the daily limits.') %></p>
+    <button type="submit" class="btn btn-primary mt-2" data-confirm="<%= t('छानिएका सबै सदस्यलाई पठाउने?', 'Send to every member in this group?') %>"><%- icon('bell') %><%= t('पठाउनुहोस्', 'Send') %></button>
+  </form>
+</details>
+<% } %>

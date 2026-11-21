@@ -18,7 +18,7 @@
     <% programs.forEach(p => { %><option value="<%= p.id %>" <%= p.id === pid ? 'selected' : '' %>><%= p.title %><%= p.event_date ? ' (' + bsDate(p.event_date) + ')' : '' %></option><% }) %>
   </select>
   <% if (kind === 'duplicates' && query.result) { %><input type="hidden" name="result" value="<%= query.result %>"><% } %>
-  <noscript><button class="btn btn-outline btn-sm"><%= t('हेर्नुहोस्', 'Show') %></button></noscript>
+  <noscript><button type="submit" class="btn btn-outline btn-sm"><%= t('हेर्नुहोस्', 'Show') %></button></noscript>
   <% if (prog && !['duplicates', 'breakdown'].includes(kind)) { %><a class="btn btn-soft btn-sm" href="<%= csvHref({}) %>"><%- icon('download') %>CSV</a><% } %>
 </form>
 <% } %>
@@ -67,7 +67,7 @@
   <div class="flex gap-1 wrap items-center mb-2">
     <span class="badge"><%= num(total) %><%= total !== grandTotal ? ' / ' + num(grandTotal) : '' %> <%= t('उपस्थिति', 'check-ins') %></span>
     <% Object.entries(f).filter(([, v]) => v).forEach(([k, v]) => { %><a class="badge" href="<%= link({ [k]: '' }) %>" title="<%= t('हटाउनुहोस्', 'Remove') %>"><%= k %>: <%= v %> ✕</a><% }) %>
-    <form method="get" class="flex gap-1"><% Object.entries({ program_id: pid, ...f }).filter(([k, v]) => v && k !== 'q').forEach(([k, v]) => { %><input type="hidden" name="<%= k %>" value="<%= v %>"><% }) %><input class="input" name="q" value="<%= f.q %>" placeholder="<%= t('नाम / सदस्यता नं. / फोन', 'Name / member no. / phone') %>" style="max-width:240px"><button class="btn btn-ghost btn-sm"><%- icon('search') %></button></form>
+    <form method="get" class="flex gap-1"><% Object.entries({ program_id: pid, ...f }).filter(([k, v]) => v && k !== 'q').forEach(([k, v]) => { %><input type="hidden" name="<%= k %>" value="<%= v %>"><% }) %><input class="input" name="q" value="<%= f.q %>" placeholder="<%= t('नाम / सदस्यता नं. / फोन', 'Name / member no. / phone') %>" style="max-width:240px"><button type="submit" class="btn btn-ghost btn-sm"><%- icon('search') %></button></form>
     <a class="btn btn-soft btn-sm" href="<%= link({ export: 'csv' }) %>"><%- icon('download') %><%= t('सारांश CSV', 'Summary CSV') %></a>
     <a class="btn btn-soft btn-sm" href="<%= link({ export: 'detail' }) %>"><%- icon('download') %><%= t('विस्तृत CSV', 'Detail CSV') %></a>
   </div>
@@ -100,7 +100,7 @@
 <% } %>
 
 <% if (kind === 'member') { %>
-  <form method="get" class="flex gap-1 wrap mb-2"><input class="input" name="q" value="<%= q %>" placeholder="<%= t('सदस्यता नं. / नाम / कार्यक्रम', 'Member no. / name / programme') %>" style="max-width:360px"><button class="btn btn-primary btn-sm"><%- icon('search') %><%= t('खोज्नुहोस्', 'Search') %></button><a class="btn btn-soft btn-sm" href="<%= qs({ q, export: 'csv' }) %>"><%- icon('download') %>CSV</a></form>
+  <form method="get" class="flex gap-1 wrap mb-2"><input class="input" name="q" value="<%= q %>" placeholder="<%= t('सदस्यता नं. / नाम / कार्यक्रम', 'Member no. / name / programme') %>" style="max-width:360px"><button type="submit" class="btn btn-primary btn-sm"><%- icon('search') %><%= t('खोज्नुहोस्', 'Search') %></button><a class="btn btn-soft btn-sm" href="<%= qs({ q, export: 'csv' }) %>"><%- icon('download') %>CSV</a></form>
   <%- limitNote(rows.length, total) %>
   <div class="card" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th><%= t('सदस्यता नं.', 'Member no.') %></th><th><%= t('नाम', 'Name') %></th><th><%= t('बुबाको नाम', 'Father') %></th><th><%= t('कार्यक्रम', 'Programme') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('तरिका', 'Method') %></th><th><%= t('समय', 'Time') %></th></tr></thead><tbody>
     <% rows.forEach(r => { const no = r.member_card_no || r.sadasyata_number || ''; %><tr><td class="small"><%= no %></td><td><a href="/admin/programs/reports/history?member_id=<%= encodeURIComponent(no) %>"><%= r.member_name_np || r.member_name %></a></td><td class="small"><%= r.father_name %></td><td class="small"><%= r.program_title %></td><td class="small"><%= r.location_label || '—' %></td><td><span class="badge"><%= L(rep.methodLabel(r.attendance_method)) %></span></td><td class="small faint"><%= when(r.attended_at) %></td></tr><% }) %>
@@ -112,7 +112,7 @@
   <form method="get" class="flex gap-1 wrap items-center mb-2">
     <input class="input" name="member_id" value="<%= q %>" placeholder="<%= t('सदस्यता नं.', 'Member no.') %>" required style="max-width:240px" aria-label="<%= t('सदस्यता नं.', 'Member no.') %>">
     <select class="select" name="type" style="max-width:260px" aria-label="<%= t('लगातार उपस्थिति जाँच', 'Streak check') %>"><% Object.entries(rep.TYPES).forEach(([k, l]) => { %><option value="<%= k %>" <%= type === k ? 'selected' : '' %>><%= L(l) %></option><% }) %><option value="" <%= type === '' ? 'selected' : '' %>><%= t('सबै कार्यक्रम', 'All programmes') %></option></select>
-    <button class="btn btn-primary btn-sm"><%- icon('search') %><%= t('हेर्नुहोस्', 'Show') %></button>
+    <button type="submit" class="btn btn-primary btn-sm"><%- icon('search') %><%= t('हेर्नुहोस्', 'Show') %></button>
     <% if (member) { %><a class="btn btn-soft btn-sm" href="<%= qs({ member_id: q, type, export: 'csv' }) %>"><%- icon('download') %>CSV</a><% } %>
   </form>
   <% if (q && !member) { %><div class="alert alert-warn"><%= t(`सदस्य नं. «${q}» फेला परेन।`, `Member “${q}” not found.`) %></div><% } %>

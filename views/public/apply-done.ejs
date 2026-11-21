@@ -6,12 +6,16 @@
     <% if (locals.notice) { %><div class="alert alert-info"><%- icon('info') %><span><%= t(...notice) %></span></div><% } %>
     <% if (tracking) { %>
       <div class="small muted"><%= t('तपाईंको ट्र्याकिङ नम्बर', 'Your tracking number') %></div>
-      <div class="tracking-id"><%= tracking %></div>
+      <div class="tracking-id" id="tracking-id"><%= tracking %></div>
+      <button type="button" class="btn btn-ghost btn-sm" data-copy-text="<%= tracking %>"><%- icon('file') %><span><%= t('नम्बर कपी गर्नुहोस्', 'Copy number') %></span></button>
       <p class="small muted"><%= t('यो नम्बर सुरक्षित राख्नुहोस्। स्थिति हेर्न आवेदनमा दिएको फोन नम्बर पनि चाहिन्छ।', 'Keep this number. You will also need the phone number you used to check the status.') %></p>
     <% } %>
     <div class="flex gap-1 wrap" style="justify-content:center">
       <% if (tracking) { %><a class="btn btn-primary" href="/track?id=<%= encodeURIComponent(tracking) %>"><%= t('स्थिति हेर्नुहोस्', 'Check status') %></a><% } %>
-      <a class="btn btn-outline" href="/"><%= t('गृहपृष्ठ', 'Home') %></a>
+      <a class="btn btn-outline" href="/apply/<%= mod.key %>"><%= t('नयाँ आवेदन', 'New application') %></a>
+      <% if (mod.key === 'loan') { %><a class="btn btn-outline" href="/emi-calculator"><%= t('EMI हिसाब गर्नुहोस्', 'EMI calculator') %></a><% } %>
+      <a class="btn btn-ghost" href="/"><%= t('गृहपृष्ठ', 'Home') %></a>
     </div>
+    <% if (locals.draftKey) { %><span hidden data-draft-clear="<%= draftKey %>"></span><% } %>
   </div>
 </div></section>

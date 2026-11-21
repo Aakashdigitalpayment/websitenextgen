@@ -187,6 +187,20 @@ sudo npm ci --omit=dev && sudo -u coop npm run db:migrate && sudo systemctl rest
 
 Migrations in `db/migrations/` are applied to every tenant, and each one runs only once.
 
+### PII encryption (citizenship numbers)
+
+New values are encrypted when `PII_KEY` is set. Values saved before the key was set (or imported into a tenant without it) stay plaintext until you migrate them:
+
+```bash
+npm run pii -- keygen                          # prints a new key once; put it in .env as PII_KEY and back it up offline
+npm run pii -- status --all                    # encrypted / legacy (PHP) / plaintext counts per table
+npm run pii -- migrate --tenant=aakash --dry-run
+npm run pii -- migrate --all                   # encrypts plaintext (and PHP pii1/pii2 values when PII_LEGACY_KEY is set)
+npm run pii -- decrypt --tenant=aakash         # rollback to plaintext
+```
+
+Every value is checked with a round trip before it is written, and a row changed in the meantime is skipped. Never change `PII_KEY` once data is encrypted.
+
 ## 7. Checklist before going live
 
 - `PII_KEY` set (and backed up offline) so citizenship numbers are encrypted at rest.

@@ -11,6 +11,8 @@ const nd = require('../lib/nepali-date');
 const modules = require('../modules/applications');
 const portal = require('../lib/member-portal');
 const { isBot } = require('../lib/security');
+const forms = require('../lib/forms');
+const submissions = require('../lib/submissions');
 
 const router = express.Router();
 const ah = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -32,12 +34,13 @@ const last8 = v => String(v || '').replace(/\D/g, '').slice(-8);
 
 const renderTrack = (res, extra) => res.render('public/track', {
   title: res.locals.t('आवेदनको स्थिति', 'Track your application'), id: '', phone: '', email: '', proof: '', result: null, history: [], searched: false,
-  list: null, listError: null, cardLink: null, cardName: null, mode: 'id', ...extra,
+  list: null, listError: null, cardLink: null, cardName: null, mode: 'id', details: [], steps: [], ...extra,
 });
 
-router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, next) : next()), ah(async (req, res) => {
-  const id = String(req.query.id || '').trim().toUpperCase().slice(0, 96);
-  const phone = nd.toLatinDigits(String(req.query.phone || '').trim()).slice(0, 24);
+/** Tracking number + phone lookup. The form POSTs (the phone never lands in access logs / Referer); GET keeps old links working. */
+async function trackById(req, res, rawId, rawPhone) {
+  const id = String(rawId || '').trim().toUpperCase().slice(0, 96);
+  const phone = nd.toLatinDigits(String(rawPhone || '').trim()).slice(0, 24);
   let result = null, history = [], searched = false;
   const blocked = id && phone ? trackBlocked(req) : 0;
   if (id && phone && !blocked) {
@@ -55,14 +58,18 @@ router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, 
     }
     trackResult(req, !!result);
   } else if (id && phone) searched = true;
-  renderTrack(res, { id, phone, result, history, searched, blocked });
-}));
+  const details = result ? await submissions.publicDetails(result.mod, result.row, await forms.resolveOptions(result.mod), req.lang) : [];
+  const steps = result && !result.mod.noStatus ? submissions.stages(result.mod, result.row.status) : [];
+  renderTrack(res, { id, phone, result, history, searched, blocked, details, steps });
+}
+router.get('/track', (req, res, next) => (req.query.id ? trackLimiter(req, res, next) : next()), ah((req, res) => trackById(req, res, req.query.id, req.query.phone)));
 
 /**
  * Phone + email: every request of that person. One of their tracking numbers is the second factor
  * (it is not derivable from the phone/email), and that application must carry both contacts.
  */
 router.post('/track', trackLimiter, ah(async (req, res) => {
+  if (req.body.mode === 'id') return trackById(req, res, req.body.id, req.body.phone);
   const t = res.locals.t;
   const phone = portal.normalizeMobile(req.body.phone).slice(-10);
   const email = String(req.body.email || '').trim().toLowerCase().slice(0, 160);
@@ -134,45 +141,95 @@ router.get('/track/id-card', ah(async (req, res) => {
 
 // ---------------------------------------------------------------- ID card verification (wrong CVV ×5 locks the card)
 const verifyLimiter = rateLimit({ windowMs: 60 * 60_000, limit: 15, keyGenerator: tenantKey, standardHeaders: 'draft-7', legacyHeaders: false });
-const verifyView = (res, extra) => res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: null, code: '', message: null, partners: [], log: null, ...extra });
+const verifyView = (res, extra) => res.render('public/verify', { title: res.locals.t('सदस्य परिचयपत्र प्रमाणीकरण', 'Verify member ID card'), result: null, code: '', message: null, partners: [], log: null, mode: 'name', form: {}, partnerPref: '', ...extra });
+/** ?partner_id= / ?partner=CODE from a partner desk QR (verify.php) → the partner preselected in the service log. */
+async function partnerPref(raw) {
+  const v = String(raw || '').trim().slice(0, 40);
+  if (!v) return '';
+  if (/^\d{1,9}$/.test(v)) return v;
+  return String((await db.value('SELECT id FROM partner_facilities WHERE is_active = 1 AND upper(partner_code) = upper($1) LIMIT 1', [v])) || '');
+}
+/** Result card data: card + member + KYM (photo, father's name, DOB) — the same for both verification methods. */
+async function verifiedResult(req, card, member, kyc) {
+  const valid = !!(member && member.approval_status === 'approved' && (!card || card.status === 'active'));
+  // a valid member opens a 30-minute window in which a partner desk may log a service (POST /verify/service) and see the photo
+  if (member && valid) req.session.partnerVerify = { mid: member.id, card: card?.card_no || member.sadasyata_number || '', code: card?.verification_code || '', at: Date.now() };
+  return { card, member, kyc, valid, hasPhoto: !!(kyc?.photo || member?.avatar_url) };
+}
 const partnersFor = (card, member) => (card && member && card.status === 'active'
   ? db.many("SELECT id, partner_name, partner_name_en, (pin_hash IS NOT NULL AND pin_hash <> '') AS has_pin FROM partner_facilities WHERE is_active = 1 ORDER BY display_order, partner_name") : []);
 
-router.get('/verify', (req, res) => verifyView(res, { code: String(req.query.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) }));
+router.get('/verify', ah(async (req, res) => {
+  const code = String(req.query.code || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
+  verifyView(res, { code, mode: code || req.query.mode === 'code' ? 'code' : 'name', partnerPref: await partnerPref(req.query.partner_id || req.query.partner) });
+}));
 router.post('/verify', verifyLimiter, ah(async (req, res) => {
   const t = res.locals.t;
-  const code = String(req.body.code || '').trim().toUpperCase().slice(0, 20);
-  const cvv = nd.toLatinDigits(String(req.body.cvv || '').trim()).slice(0, 4);
-  const card = code.length >= 8 ? await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
-                                                FROM member_id_cards WHERE upper(verification_code) = $1 ORDER BY (status = 'active') DESC, id DESC LIMIT 1`, [code]) : null;
+  const pref = await partnerPref(req.body.partner_pref);
+  // name + Member ID + mobile (+ optional CVV): the method printed on PHP-issued cards
+  if (req.body.mode === 'name' || (req.body.name && req.body.member_no)) {
+    const form = { name: String(req.body.name || '').slice(0, 120), member_no: String(req.body.member_no || '').slice(0, 50), mobile: String(req.body.mobile || '').slice(0, 20) };
+    if (isBot(req)) return verifyView(res, { mode: 'name', form, result: false });
+    const r = await portal.verifyByNameIdMobile({ name: form.name, memberId: form.member_no, mobile: form.mobile, cvv: req.body.cvv });
+    await db.query('INSERT INTO card_verify_attempts (ip, code_tried, success, created_at) VALUES ($1, $2, $3, now())', [req.ip, ('ID:' + form.member_no).slice(0, 50), r.ok ? 1 : 0]);
+    if (!r.ok) return verifyView(res, { mode: 'name', form, partnerPref: pref, result: false, message: t(...r.error) });
+    const result = await verifiedResult(req, r.card, r.member, r.kyc);
+    return verifyView(res, { mode: 'name', form: {}, partnerPref: pref, result, partners: result.valid ? await partnersFor(r.card || { status: 'active' }, r.member) : [] });
+  }
+  const code = String(req.body.code || '').trim().toUpperCase().slice(0, 40);
+  const cvv = portal.normalizeCvv(req.body.cvv);
+  // normalizeCardLookupKey (card-verify-helpers.php): the code as printed, without dashes, or the card number without dashes
+  const key = code.replace(/[^A-Z0-9]/g, '');
+  await portal.releaseExpiredCardLocks();
+  const card = code.length >= 8 || key.length >= 8 ? await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
+                                                FROM member_id_cards
+                                                WHERE upper(verification_code) = $1
+                                                   OR regexp_replace(upper(verification_code), '[^A-Z0-9]', '', 'g') = $2
+                                                   OR regexp_replace(upper(card_no), '[^A-Z0-9]', '', 'g') = $2
+                                                ORDER BY (upper(verification_code) = $1) DESC, (status = 'active') DESC, id DESC LIMIT 1`, [code, key || '-']) : null;
   const log = ok => db.query('INSERT INTO card_verify_attempts (ip, code_tried, success, created_at) VALUES ($1, $2, $3, now())', [req.ip, code, ok ? 1 : 0]);
-  if (!card) { await log(false); return verifyView(res, { result: false, code }); }
+  if (!card) { await log(false); return verifyView(res, { mode: 'code', result: false, code }); }
   if (card.locked_at) {
     await log(false);
-    return verifyView(res, { result: false, code, message: t('यो कार्ड हाल LOCK छ। कृपया कार्यालय/Admin सँग unlock गर्नुहोस्।', 'This card is locked. Please ask the office to unlock it.') });
+    return verifyView(res, { mode: 'code', result: false, code, message: t('यो कार्ड केही समयका लागि LOCK छ। ३० मिनेटपछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for now. Try again in 30 minutes or ask the office to unlock it.') });
   }
-  if (!card.cvv || card.cvv !== cvv) {
+  // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
+  const member = await db.one(`SELECT * FROM members
+                               WHERE (id::text = $1 OR sadasyata_number = $1 OR member_card_no = $1) AND deleted_at IS NULL
+                               ORDER BY (id::text = $1) DESC, id LIMIT 1`, [card.member_id]);
+  const kyc = member ? await portal.linkedKyc(member) : null;
+  // the stored CVV (Node: 4 random digits) or the name+Member-ID CVV printed on PHP-issued cards (e.g. SUJ0123)
+  if (!portal.cvvMatches(cvv, card.cvv, portal.derivedCvvs(member, kyc))) {
     await log(false);
     const r = await db.one(`UPDATE member_id_cards SET failed_verify_count = COALESCE(failed_verify_count, 0) + 1,
                               locked_at = CASE WHEN COALESCE(failed_verify_count, 0) + 1 >= $2 THEN now() ELSE locked_at END
                             WHERE id = $1 RETURNING failed_verify_count`, [card.id, portal.CARD_LOCK_AFTER]);
     const left = Math.max(0, portal.CARD_LOCK_AFTER - r.failed_verify_count);
     return verifyView(res, {
-      result: false, code,
+      mode: 'code', result: false, code,
       message: left ? t(`Card Code वा CVV मेल खाएन। बाँकी प्रयास: ${left}`, `Card code or CVV did not match. Tries left: ${left}`)
-        : t('यो कार्ड ५ पटक गलत प्रयासका कारण LOCK भएको छ। कृपया कार्यालय/Admin सँग unlock अनुरोध गर्नुहोस्।', 'This card is now locked after 5 wrong tries. Please ask the office to unlock it.'),
+        : t('५ पटक गलत प्रयासका कारण यो कार्ड ३० मिनेटका लागि LOCK भयो। पछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for 30 minutes after 5 wrong tries. Try again later or ask the office to unlock it.'),
     });
   }
   if (card.is_expired && card.status === 'active') card.status = 'expired';
   await log(true);
-  await db.query('UPDATE member_id_cards SET verify_count = COALESCE(verify_count, 0) + 1, failed_verify_count = 0, last_verified_at = now() WHERE id = $1', [card.id]);
-  // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
-  const member = await db.one(`SELECT id, name, name_np, sadasyata_number, member_card_no, avatar_url, approval_status FROM members
-                               WHERE (id::text = $1 OR sadasyata_number = $1 OR member_card_no = $1) AND deleted_at IS NULL
-                               ORDER BY (id::text = $1) DESC, id LIMIT 1`, [card.member_id]);
-  // a valid card opens a 30-minute window in which a partner desk may log a service for this member (POST /verify/service)
-  if (member && card.status === 'active') req.session.partnerVerify = { mid: member.id, card: card.card_no || member.sadasyata_number || '', code, at: Date.now() };
-  verifyView(res, { result: { card, member }, code, partners: await partnersFor(card, member) });
+  const vc = await db.one('UPDATE member_id_cards SET verify_count = COALESCE(verify_count, 0) + 1, failed_verify_count = 0, last_verified_at = now() WHERE id = $1 RETURNING verify_count', [card.id]);
+  card.verify_count = vc.verify_count;
+  const result = await verifiedResult(req, card, member, kyc);
+  verifyView(res, { mode: 'code', result, code, partnerPref: pref, partners: result.valid ? await partnersFor(card, member) : [] });
+}));
+
+/** Member photo (KYM photo, else avatar) for the result card — only within the 30-minute window of a successful verification. */
+router.get('/verify/photo/:mid', ah(async (req, res, next) => {
+  const pv = req.session.partnerVerify;
+  if (!pv || String(pv.mid) !== String(req.params.mid) || Date.now() - pv.at > 30 * 60_000) return res.status(403).end();
+  const member = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [Number(pv.mid)]);
+  if (!member) return next();
+  const kyc = await portal.linkedKyc(member);
+  const stored = kyc?.photo || member.avatar_url;
+  if (!stored) return next();
+  if (/^https?:\/\//i.test(stored)) return res.redirect(stored);
+  require('../lib/uploads').sendStored(req, res, next, stored);
 }));
 
 module.exports = router;

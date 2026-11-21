@@ -13,6 +13,7 @@ The original MySQL schema is kept at `db/legacy/install.sql` (input for the sche
 | Database | PostgreSQL 14+ (tested on 16) |
 | Sessions | PostgreSQL (`platform.user_sessions`) |
 | Design | Own CSS design system (`public/css/app.css`): Inter + Noto Sans Devanagari at **400/500/600** (no heavy weights), neutral surfaces, one brand colour per tenant, dark mode |
+| Icons | [Lucide](https://lucide.dev) only, self-hosted from the pinned `lucide-static` package and rendered server-side as inline SVG by `src/lib/icons.js` (`icon(name, cls \| { class, size, title })`). One alias table there maps the old custom names and PHP-era Font Awesome values (`fas fa-piggy-bank`) to Lucide; unknown names fall back to `circle`. The admin icon picker offers a curated set and searches all Lucide icons (`GET /admin/icons?q=`). No CDN, no icon font. |
 
 ## Multi-tenancy: one schema per tenant
 
@@ -50,8 +51,15 @@ npm start                       # http://aakash.localhost:3000  (admin: /admin)
 
 ## Moving an existing PHP site over
 
-The recommended way is the migration tool: Platform console → **Demo data & old site import** (upload the public_html .zip and the phpMyAdmin .sql — no MySQL server needed), or `npm run migrate:site -- --tenant=<slug> --zip=<public_html.zip> --sql=<dump.sql> --dry-run` / `--php-root=<old public_html>`. See docs/DEPLOY.md §4. The lower-level importer below still works.
+The recommended way is the migration tool: Platform console → **Demo data & old site import** (upload the public_html .zip and the phpMyAdmin .sql — no MySQL server needed), or `npm run migrate:site -- --tenant=<slug> --zip=<public_html.zip> --sql=<dump.sql> --dry-run` / `--php-root=<old public_html>`. Operator guide (Nepali + English): **[docs/MIGRATION.md](docs/MIGRATION.md)**; deployment: docs/DEPLOY.md §4.
 
+- Every row of the old database is **imported**, **repaired** (zero / BS / impossible dates, mojibake, legacy statuses and roles, PHP-encrypted citizenship numbers, duplicate tracking ids …), **quarantined** (kept whole in `import_quarantine` until fixed: `--quarantine`, `--retry-quarantine`) or **archived** (`legacy_archive`: retired HRM tables, a cooperative's own tables and columns). The report says *Every row accounted for: yes*.
+- The map from PHP to platform tables and columns lives in one place, `src/lib/legacy-map.js`; the PHP schema it covers (install.sql plus everything the PHP app adds at runtime) is `db/legacy/php-runtime-schema.sql`.
+- `--dry-run` rehearses the whole import in a rolled-back transaction; the real run is one transaction and writes a safety copy first; `--verify` compares old and new row by row at any time.
+- PHP `password_hash()` ($2y$) hashes keep working, so admins and members sign in with their old passwords. 2FA secrets, settings under their old names, VAPID keys and the credentials vault are carried over.
+- Old stored paths like `assets/uploads/news/x.jpg` keep resolving; confidential folders move to private storage. Executable files (`.php`, `.html`, `.js`) are **not** copied from the old uploads folder.
+
+The older entry point does the same import from a live MySQL server:
 
 ```bash
 npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --domain=www.aakashsaccos.com.np --password='Temp@12345678'
@@ -59,13 +67,10 @@ npm run db:import-mysql -- --tenant=aakash --mysql=mysql://user:pass@host:3306/o
      --uploads=/path/to/old-site/assets/uploads --truncate
 ```
 
-- Every table and column that exists on both sides is copied. MySQL zero dates become `NULL`, and id sequences are reset.
-- PHP `password_hash()` ($2y$) hashes keep working, so admins and members sign in with their old passwords.
-- Old stored paths like `assets/uploads/news/x.jpg` keep resolving. Executable files (`.php`, `.html`, `.js`) are **not** copied from the old uploads folder.
-- `--truncate` only empties tables that have rows in the source.
+- `--truncate` = mode fresh (replaces the tenant's rows for tables that have rows in the source); without it only new rows are added.
 - If the tenant ends up with no active admin, run `npm run tenant:admin -- --tenant=aakash --username=admin --password=…`.
 
-Tested against the legacy `install.sql` loaded into MariaDB.
+Tested end to end (`test/legacy-migration.test.js`) with a synthetic dump of every PHP table and dirty legacy data, a real mysqldump of a fresh PHP install, and against MariaDB.
 
 ## What is included
 
@@ -97,7 +102,7 @@ Tested against the legacy `install.sql` loaded into MariaDB.
 | Module | Where | Notes |
 |---|---|---|
 | **SMS / email / web push** | Admin → SMS / email / push; Settings → SMS / email | Sparrow, Aakash or a custom webhook for SMS; SMTP for email; editable templates (`{{name}} {{tracking_id}} {{module}} {{status}} {{remarks}} {{site}}`); delivery log; test send. The applicant and office are notified on submit, and the applicant on status change. Members can turn on browser push (VAPID keys per tenant); admins can broadcast to all members. Webhook URLs must be public https. |
-| **Admin 2FA** | Admin → 2-step login | TOTP (Google/Microsoft Authenticator, Authy) with 8 single-use backup codes. Compatible with 2FA secrets imported from the PHP site; superadmins can reset another user's 2FA. |
+| **Admin 2FA** | Admin → 2-step login | TOTP (Google/Microsoft Authenticator, Authy) with 8 single-use backup codes. Compatible with 2FA secrets imported from the PHP site; superadmins can reset another user's 2FA. **Policy** (Admin → Security policy, superadmin): `admin_2fa_required` = optional (default for new tenants, so a fresh install can sign in at once) or required for every admin including superadmins — admins without an authenticator then scan a QR code at their next sign-in, see their backup codes once, and cannot turn 2FA off; already signed-in admins are sent to enrol first. Sites moved from PHP get `required`, as on the PHP app. |
 | **Member CSV import** | Admin → Members → Import CSV | Validate and preview first, then commit. Modes: update or skip existing members (matched by member number, else mobile). Use `dob_bs` / `dob_ad` columns for dates of birth. A sample CSV is provided. |
 | **Programmes & QR attendance** | Admin → Programme attendance; member `/member/programs` | A QR code per programme or per location, with open/close times. Check-in is instant or needs approval. The registration desk can check in by member number, card or phone. Also: void, pre-registration, CSV export, and one valid check-in per member, enforced by the database. |
 | **Member marketplace** | `/marketplace`, `/member/marketplace`, Admin → Marketplace | Products and skills; the office approves listings (and re-approves after edits); public inquiries notify the seller. |
@@ -116,6 +121,8 @@ CREDENTIALS_KEY=          # office credential vault, min 32 chars (openssl rand 
 CREDENTIALS_LEGACY_KEY=   # optional: PHP CRED_MASTER_KEY, to open imported credentials
 PLATFORM_HOST=platform.example.com
 PLATFORM_ADMIN_USER= / PLATFORM_ADMIN_PASSWORD=   # bootstrap the first platform operator
+LICENSE_RENEWAL_AMOUNT= / LICENSE_ESEWA_ID= / LICENSE_KHALTI_ID= / LICENSE_BANK_DETAILS=   # shown on the tenant licence pages
+LICENSE_VENDOR_EMAIL=     # gets an email for every renewal payment notice
 ```
 
 ## Development

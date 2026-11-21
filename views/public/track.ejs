@@ -1,5 +1,5 @@
 <%- include('../partials/page-head', { lead: t('ट्र्याकिङ नम्बर र आवेदनमा दिएको फोन नम्बर राख्नुहोस्, वा फोन + इमेलबाट आफ्ना सबै आवेदन हेर्नुहोस्।', 'Enter your tracking number and the phone number used on the application, or list all your applications by phone + email.') }) %>
-<% const badgeFor = s => /approved|completed|resolved|selected|confirmed|disbursed/.test(s) ? 'badge-ok' : /rejected|cancelled/.test(s) ? 'badge-bad' : 'badge-warn'; %>
+<% const badgeFor = s => /approved|completed|resolved|selected|confirmed|disbursed|accepted|paid/.test(s) ? 'badge-ok' : /rejected|cancelled/.test(s) ? 'badge-bad' : 'badge-warn'; %>
 <section class="section"><div class="container maxw-md" style="margin-left:0">
   <div class="tabs">
     <a class="tab <%= mode !== 'contact' ? 'active' : '' %>" href="/track"><%= t('ट्र्याकिङ नम्बरबाट', 'By tracking number') %></a>
@@ -22,11 +22,12 @@
     <% if (!list.length) { %><div class="empty mt-3"><%= t('कुनै आवेदन भेटिएन।', 'No applications found.') %></div><% } else { %>
     <p class="small muted mt-3"><%= t(list.length + ' आवेदन भेटियो।', list.length + ' application(s) found.') %></p>
     <div class="table-wrap"><table class="table"><thead><tr><th><%= t('सेवा', 'Service') %></th><th><%= t('ट्र्याकिङ नं.', 'Tracking no.') %></th><th><%= t('मिति', 'Submitted') %></th><th><%= t('स्थिति', 'Status') %></th></tr></thead><tbody>
-      <% list.forEach(({ mod, row }) => { %><tr><td><%= t(...mod.title) %></td><td><a href="/track?id=<%= encodeURIComponent(row.tracking_id) %>&phone=<%= encodeURIComponent(phone) %>"><code><%= row.tracking_id %></code></a></td><td class="small"><%= bsDate(row.created_at) %></td><td><% if (!mod.noStatus) { %><span class="badge <%= badgeFor(row.status) %>"><%= statusLabel(row.status || 'pending') %></span><% } %></td></tr><% }) %>
+      <% list.forEach(({ mod, row }) => { %><tr><td><%= t(...mod.title) %></td><td><form method="post" action="/track"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="mode" value="id"><input type="hidden" name="id" value="<%= row.tracking_id %>"><input type="hidden" name="phone" value="<%= phone %>"><button type="submit" class="btn btn-ghost btn-sm"><code><%= row.tracking_id %></code></button></form></td><td class="small"><%= bsDate(row.created_at) %></td><td><% if (!mod.noStatus) { %><span class="badge <%= badgeFor(row.status) %>"><%= statusLabel(row.status || 'pending') %></span><% } %></td></tr><% }) %>
     </tbody></table></div><% } %>
   <% } %>
   <% } else { %>
-  <form class="form-card" method="get">
+  <form class="form-card" method="post" action="/track">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="mode" value="id">
     <div class="form-grid">
       <div class="field"><label for="id"><%= t('ट्र्याकिङ नम्बर', 'Tracking number') %></label><input class="input" id="id" name="id" value="<%= id %>" placeholder="LN-830718-7KQ2M" required></div>
       <div class="field"><label for="phone"><%= t('फोन नम्बर', 'Phone number') %></label><input class="input" id="phone" name="phone" type="tel" value="<%= phone %>" required></div>
@@ -42,10 +43,13 @@
       <div class="kv mt-2">
         <div><%= t('नाम', 'Name') %></div><div><%= r[m.nameCol] %></div>
         <div><%= t('पेश मिति', 'Submitted') %></div><div><%= bsDate(r.created_at) %></div>
+        <% if (m.key === 'membership' && r.assigned_sadasyata) { %><div><%= t('दिइएको सदस्यता नं.', 'Assigned Member ID') %></div><div><code style="font-size:1.05rem"><%= r.assigned_sadasyata %></code></div><% } %>
         <% if (r[m.remarksCol]) { %><div><%= t('कार्यालयको टिप्पणी', 'Office remarks') %></div><div><%= r[m.remarksCol] %></div><% } %>
         <% if (m.attachCol && r[m.attachCol]) { %><div><%= t('कार्यालयको संलग्न फाइल', 'Office attachment') %></div><div><a class="btn btn-soft btn-sm" href="/track/attachment?id=<%= encodeURIComponent(r.tracking_id) %>&phone=<%= encodeURIComponent(phone) %>" rel="nofollow"><%- icon('download') %><%= t('डाउनलोड', 'Download') %></a></div><% } %>
       </div>
-      <% if (history.length) { %><h4 class="mt-3"><%= t('प्रगति', 'Progress') %></h4><ul class="timeline mt-1"><% history.forEach(h => { %><li><div class="small faint"><%= bsDate(h.created_at) %></div><div style="font-weight:500"><%= statusLabel(h.new_status) %></div><% if (h.admin_comment) { %><div class="small muted"><%= h.admin_comment %></div><% } %></li><% }) %></ul><% } %>
+      <% if (m.key === 'membership' && r.assigned_sadasyata) { %><div class="alert alert-success mt-2"><%- icon('check') %><span class="grow"><%= t('तपाईंको सदस्यता स्वीकृत भयो। यही सदस्यता नम्बर र आवेदनको मोबाइल प्रयोग गरी केवाइएम भर्नुहोस्।', 'Your membership is approved. Use this Member ID and the mobile on your application to fill in the KYM.') %></span><a class="btn btn-primary btn-sm" href="/apply/kyc"><%= t('अब Online केवाइएम भर्नुहोस्', 'Fill in the online KYM now') %></a></div><% } %>
+      <%- include('../partials/request-progress', { steps: locals.steps || [], details: locals.details || [] }) %>
+      <% if (history.length) { %><h4 class="mt-3"><%= t('प्रगति', 'Progress') %></h4><ul class="timeline mt-1"><% history.forEach(h => { %><li><div class="small faint"><%= bsDate(h.created_at) %></div><div style="font-weight:500"><%= h.old_status ? statusLabel(h.old_status) + ' → ' : '' %><%= statusLabel(h.new_status) %></div><% if (h.admin_comment) { %><div class="small muted"><%= h.admin_comment %></div><% } %><%- include('../partials/notify-chips', { h }) %></li><% }) %></ul><% } %>
     </div>
   <% } %>
   <% } %>

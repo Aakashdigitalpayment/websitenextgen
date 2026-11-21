@@ -193,17 +193,29 @@ const memberLog = (memberId, limit = 300) => db.many(`SELECT a.id, a.program_tit
  * Held programmes of one type (default AGM), newest first, each marked attended/absent, with the current streak
  * (legacy programMemberTypeRegister). "Held" = has at least one VALID attendance.
  */
-async function memberTypeRegister(memberId, type = 'AGM', limit = 10) {
+async function memberTypeRegister(memberId, type = 'AGM', limit = 10, excludeProgramId = 0) {
   const params = [memberId];
   if (type) params.push(type);
+  const exclude = excludeProgramId ? `AND p.id <> ${Number(excludeProgramId)}` : '';
   const rows = await db.many(`SELECT p.id, p.title, p.program_type, p.event_date,
       EXISTS (SELECT 1 FROM member_program_attendance x WHERE x.program_id = p.id AND x.member_id = $1 AND x.attendance_status = 'VALID') AS attended
-    FROM upcoming_programs p WHERE p.parent_program_id IS NULL ${type ? 'AND p.program_type = $2' : ''}
+    FROM upcoming_programs p WHERE p.parent_program_id IS NULL ${type ? 'AND p.program_type = $2' : ''} ${exclude}
       AND EXISTS (SELECT 1 FROM member_program_attendance h WHERE h.program_id = p.id AND h.attendance_status = 'VALID')
     ORDER BY COALESCE(p.event_date, p.created_at::date) DESC, p.id DESC LIMIT ${Number(limit)}`, params);
   let streak = 0, open = true, attended = 0;
   for (const r of rows) { if (r.attended) { attended++; if (open) streak++; } else open = false; }
   return { rows, attended, total: rows.length, streak };
+}
+
+/** Compact history for the desk lookup card (legacy programMemberHistorySummary); the current programme is left out of the AGM tally. */
+async function memberHistorySummary(memberId, currentProgramId = 0) {
+  const [log, total, agm] = await Promise.all([
+    memberLog(memberId, 3),
+    db.value("SELECT count(*) FROM member_program_attendance WHERE member_id = $1 AND attendance_status = 'VALID'", [memberId]),
+    memberTypeRegister(memberId, 'AGM', 3, currentProgramId),
+  ]);
+  return { total: Number(total), agm_last3_attended: agm.attended, agm_last3_total: agm.total, agm_streak: agm.streak,
+    recent: log.map(r => ({ title: r.parent_title || r.program_title, date: r.event_date || null })) };
 }
 
 const desksFor = (programId, activeOnly = false) => db.many(`SELECT d.*, o.location_name, u.full_name AS staff_name, u.username AS staff_username,
@@ -213,5 +225,5 @@ const desksFor = (programId, activeOnly = false) => db.many(`SELECT d.*, o.locat
 
 module.exports = {
   DISPLAY_LIMIT, METHODS, TYPES, ATTEMPT_RESULTS, GENDER_LABELS, methodLabel, typeLabel, genderKey, programList, program, eligibleCount, occurrenceCounts,
-  liveStats, validAttendance, absent, breakdownFilters, breakdown, breakdownDetail, attempts, memberRegister, findMemberByNo, memberLog, memberTypeRegister, desksFor,
+  liveStats, validAttendance, absent, breakdownFilters, breakdown, breakdownDetail, attempts, memberRegister, findMemberByNo, memberLog, memberTypeRegister, memberHistorySummary, desksFor,
 };

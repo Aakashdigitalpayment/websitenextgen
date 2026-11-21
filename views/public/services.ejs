@@ -2,12 +2,15 @@
 <section class="section"><div class="container">
   <% if (!services.length) { %><div class="empty"><%= t('सेवाहरू चाँडै थपिनेछन्।', 'Services will be listed soon.') %></div><% } %>
   <% const groups = cats.length ? cats.map(c => ({ c, items: services.filter(s => s.service_category_id === c.id) })).concat([{ c: null, items: services.filter(s => !cats.some(c => c.id === s.service_category_id)) }]) : [{ c: null, items: services }]; %>
-  <% groups.filter(g => g.items.length).forEach(g => { %>
-    <% if (g.c) { %><h2 class="mt-3"><%= f(g.c, 'name') %></h2><% } %>
+  <% const usedAnchors = new Set(); const shown = groups.filter(g => g.items.length); if (shown.filter(g => g.c).length > 1) { %>
+  <nav class="tabs" aria-label="<%= t('सेवा समूह', 'Service categories') %>"><% shown.filter(g => g.c).forEach(g => { %><a class="tab" href="#cat-<%= g.c.id %>"><%- icon(iconFor(g.c.icon, 'layers')) %> <%= f(g.c, 'name') %> (<%= num(g.items.length) %>)</a><% }) %></nav>
+  <% } %>
+  <% shown.forEach(g => { %>
+    <% if (g.c) { %><h2 class="mt-3" id="cat-<%= g.c.id %>"><span class="icon-tile" style="vertical-align:middle"><%- icon(iconFor(g.c.icon, 'layers')) %></span> <%= f(g.c, 'name') %></h2><% if (f(g.c, 'description')) { %><p class="muted"><%= f(g.c, 'description') %></p><% } %><% } %>
     <div class="grid grid-3 mt-2"><% g.items.forEach(s => { %>
-      <a class="card card-link" href="/services/<%= s.id %>">
-        <% if (s.image) { %><div class="card-media"><img src="<%= mediaUrl(s.image) %>"<%- srcset(s.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon('wallet') %></span><% } %>
-        <h3><%= f(s, 'title') %></h3><p class="muted small"><%= util.excerpt(f(s, 'description'), 140) %></p>
+      <a class="card card-link" href="/services/<%= s.id %>"<% const anchor = /^[a-z][a-z0-9_-]{1,40}$/i.test(s.nav_group || '') ? s.nav_group.toLowerCase() : ''; %><%- anchor && !usedAnchors.has(anchor) && usedAnchors.add(anchor) ? ' id="' + anchor + '"' : '' %>>
+        <% if (s.image) { %><div class="card-media"><img src="<%= mediaUrl(s.image) %>"<%- srcset(s.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon(iconFor(s.icon, /loan|ऋण/i.test(s.title || '') ? 'banknote' : 'wallet')) %></span><% } %>
+        <h3><%= f(s, 'title') %><% if (Number(s.is_new) && (!s.new_until || String(s.new_until) >= new Date().toISOString().slice(0, 10))) { %> <span class="badge badge-brand"><%= t('नयाँ', 'New') %></span><% } %></h3><p class="muted small"><%= util.excerpt(f(s, 'description'), 140) %></p>
       </a>
     <% }) %></div>
   <% }) %>

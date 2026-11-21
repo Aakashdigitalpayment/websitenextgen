@@ -1,0 +1,14 @@
+<%- include('../partials/page-head', { crumbs: [['/apply', t('अनलाइन सेवा', 'Online services')]] }) %>
+<section class="section"><div class="container maxw-md" style="margin-left:0">
+  <div class="alert alert-info"><%- icon('info') %><span><%= t('अहिले कुनै सम्मान/पुरस्कार कार्यक्रमको आवेदन खुला छैन। कार्यक्रम खुलेपछि यहीँबाट आवेदन दिन सकिन्छ।', 'Applications are closed: no honour or award programme is open right now. You can apply here once a programme opens.') %></span></div>
+  <% if (upcoming.length) { %>
+    <h3 class="mt-3"><%= t('आगामी कार्यक्रम', 'Upcoming programmes') %></h3>
+    <div class="grid grid-2"><% upcoming.forEach(p => { %>
+      <div class="card"><span class="icon-tile"><%- icon('award') %></span><h3><%= f(p, 'title') %></h3>
+        <% if (p.event_label || p.fiscal_year) { %><div class="small muted"><%= [p.event_label, p.fiscal_year ? t('आ.व. ', 'FY ') + p.fiscal_year : ''].filter(Boolean).join(' · ') %></div><% } %>
+        <div class="kv mt-1 small"><div><%= t('खुल्ने', 'Opens') %></div><div><%= bsDate(p.opens_at) %></div><% if (p.closes_at) { %><div><%= t('बन्द हुने', 'Closes') %></div><div><%= bsDate(p.closes_at) %></div><% } %></div>
+      </div>
+    <% }) %></div>
+  <% } %>
+  <p class="mt-3"><a class="btn btn-outline" href="/apply"><%= t('अन्य अनलाइन सेवा', 'Other online services') %></a></p>
+</div></section>

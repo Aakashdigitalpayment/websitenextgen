@@ -1,11 +1,32 @@
-<form class="form-card" method="post" action="/admin/login/2fa<%= query.next ? '?next=' + encodeURIComponent(query.next) : '' %>">
-  <h1 style="font-size:1.35rem"><%= t('दुई-चरण प्रमाणीकरण', 'Two-step verification') %></h1>
-  <p class="muted small"><%= t('Authenticator एपमा देखिएको ६ अंकको कोड, वा एउटा backup कोड राख्नुहोस्।', 'Enter the 6-digit code from your authenticator app, or a backup code.') %></p>
+<% const m = locals.mode || 'verify'; const nextQ = query.next ? '?next=' + encodeURIComponent(query.next) : ''; %>
+<% if (m === 'ack') { %>
+<form class="form-card" method="post" action="/admin/login/2fa/ack<%= nextQ %>">
+  <h1 style="font-size:1.35rem"><%= t('Backup कोड सुरक्षित राख्नुहोस्', 'Save your backup codes') %></h1>
+  <div class="alert alert-success"><%= t('दुई-चरण प्रमाणीकरण सक्रिय भयो। फोन हराएमा यी कोड प्रयोग गर्नुहोस् — प्रत्येक एक पटक मात्र चल्छ र फेरि देखिँदैन।', 'Two-step sign-in is on. Use these codes if you lose your phone — each works once and they will not be shown again.') %></div>
+  <div class="grid grid-2 backup-codes"><% codes.forEach(c => { %><div><%= c %></div><% }) %></div>
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="stack mt-2">
+    <label class="choice"><input type="checkbox" name="saved" value="1" required> <%= t('मैले कोडहरू सुरक्षित राखेँ', 'I have saved these codes') %></label>
+    <button type="submit" class="btn btn-primary btn-block btn-lg"><%= t('जारी राख्नुहोस्', 'Continue') %></button>
+  </div>
+</form>
+<% } else { %>
+<form class="form-card" method="post" action="/admin/login/2fa<%= nextQ %>">
+  <h1 style="font-size:1.35rem"><%= m === 'setup' ? t('दुई-चरण प्रमाणीकरण सेटअप', 'Set up two-step sign-in') : t('दुई-चरण प्रमाणीकरण', 'Two-step verification') %></h1>
+  <% if (m === 'setup') { %>
+    <p class="muted small"><%= t('यो सहकारीमा सबै प्रशासकलाई दुई-चरण प्रमाणीकरण अनिवार्य छ। Google Authenticator, Microsoft Authenticator वा Authy एपले QR स्क्यान गरी देखिएको ६ अंकको कोड राख्नुहोस्।', 'This cooperative requires two-step sign-in for every admin. Scan the QR code with Google Authenticator, Microsoft Authenticator or Authy, then enter the 6-digit code.') %></p>
+    <div class="text-center"><img src="<%= qr %>" alt="QR code" width="220" height="220" class="qr-img"></div>
+    <div class="small muted mt-1"><%= t('QR स्क्यान नभए यो key हाल्नुहोस्:', "Can't scan? Enter this key:") %></div>
+    <code class="secret-key"><%= secret.replace(/(.{4})/g, '$1 ').trim() %></code>
+  <% } else { %>
+    <p class="muted small"><%= t('Authenticator एपमा देखिएको ६ अंकको कोड, वा एउटा backup कोड राख्नुहोस्।', 'Enter the 6-digit code from your authenticator app, or a backup code.') %></p>
+  <% } %>
   <% if (error) { %><div class="alert alert-error"><%= error %></div><% } %>
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <div class="stack">
-    <div class="field"><label for="c"><%= t('कोड', 'Code') %></label><input class="input" id="c" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus style="font-size:1.3rem;letter-spacing:.2em;text-align:center"></div>
-    <button class="btn btn-primary btn-block btn-lg"><%= t('प्रमाणित गर्नुहोस्', 'Verify') %></button>
+    <div class="field"><label for="c"><%= t('कोड', 'Code') %></label><input class="input otp-input" id="c" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus></div>
+    <button type="submit" class="btn btn-primary btn-block btn-lg"><%= m === 'setup' ? t('सक्रिय गरी लगइन', 'Turn on and sign in') : t('प्रमाणित गर्नुहोस्', 'Verify') %></button>
   </div>
 </form>
+<% } %>
 <p class="text-center small mt-2"><a href="/admin/login"><%= t('← फेरि लगइन', '← Start over') %></a></p>

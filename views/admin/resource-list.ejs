@@ -1,13 +1,21 @@
 <div class="content-head">
   <h1><%= title %> <span class="muted" style="font-weight:400;font-size:1rem">(<%= num(pg.total) %>)</span></h1>
-  <div class="flex gap-1 wrap"><% (r.links || []).forEach(([href, ic, np, en]) => { %><a class="btn btn-outline" href="<%= href %>"><%- icon(ic) %><%= t(np, en) %></a><% }) %><a class="btn btn-primary" href="/admin/r/<%= r.key %>/new"><%- icon('plus') %><%= t('नयाँ थप्नुहोस्', 'Add new') %></a></div>
+  <div class="flex gap-1 wrap"><% (r.links || []).forEach(([href, ic, np, en]) => { %><a class="btn btn-outline" href="<%= href %>"><%- icon(ic) %><%= t(np, en) %></a><% }) %><% if (r.softDelete) { %><a class="btn btn-ghost" href="/admin/r/<%= r.key %>/trash"><%- icon('trash') %><%= t('हटाइएका', 'Trash') %></a><% } %><a class="btn btn-primary" href="/admin/r/<%= r.key %>/new"><%- icon('plus') %><%= t('नयाँ थप्नुहोस्', 'Add new') %></a></div>
 </div>
-<form class="toolbar" method="get"><input class="input" name="q" value="<%= q %>" placeholder="<%= t('खोज्नुहोस्…', 'Search…') %>"><button class="btn btn-outline"><%- icon('search') %></button><% if (q) { %><a class="btn btn-ghost" href="/admin/r/<%= r.key %>"><%= t('हटाउनुहोस्', 'Clear') %></a><% } %></form>
+<% const fl_ = locals.filters || []; const fv = locals.fvals || {}; const keep = extra => { const u = new URLSearchParams(); if (q) u.set('q', q); Object.entries(fv).forEach(([k, v]) => u.set('f_' + k, v)); Object.entries(extra).forEach(([k, v]) => (v === '' ? u.delete(k) : u.set(k, v))); const x = u.toString(); return x ? '?' + x : ''; }; %>
+<% if (locals.counts) { %><div class="list-tabs" role="tablist">
+  <a class="tab <%= !active ? 'active' : '' %>" href="/admin/r/<%= r.key %><%= keep({ active: '' }) %>"><%= t('सबै', 'All') %> (<%= num(Number(counts.live) + Number(counts.archived)) %>)</a>
+  <a class="tab <%= active === '1' ? 'active' : '' %>" href="/admin/r/<%= r.key %><%= keep({ active: '1' }) %>"><%= t('सक्रिय', 'Live') %> (<%= num(counts.live) %>)</a>
+  <a class="tab <%= active === '0' ? 'active' : '' %>" href="/admin/r/<%= r.key %><%= keep({ active: '0' }) %>"><%= t('निष्क्रिय / संग्रह', 'Archived') %> (<%= num(counts.archived) %>)</a>
+</div><% } %>
+<form class="toolbar wrap" method="get"><% if (active) { %><input type="hidden" name="active" value="<%= active %>"><% } %>
+  <% fl_.forEach(f => { %><select class="select" name="f_<%= f.name %>" aria-label="<%= t(...f.label) %>" data-autosubmit><option value=""><%= t(...f.label) %>: <%= t('सबै', 'all') %></option><% f.options.forEach(o => { %><option value="<%= o[0] %>" <%= String(fv[f.name] ?? '') === String(o[0]) ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select><% }) %>
+  <input class="input" name="q" value="<%= q %>" placeholder="<%= t('खोज्नुहोस्…', 'Search…') %>"><button type="submit" class="btn btn-outline"><%- icon('search') %></button><% if (q || Object.keys(fv).length || active) { %><a class="btn btn-ghost" href="/admin/r/<%= r.key %>"><%= t('हटाउनुहोस्', 'Clear') %></a><% } %></form>
 <% if (!rows.length) { %><div class="empty"><%= t('कुनै रेकर्ड छैन।', 'Nothing here yet.') %> <a href="/admin/r/<%= r.key %>/new"><%= t('पहिलो थप्नुहोस्', 'Add the first one') %></a></div><% } else { %>
 <% if (r.bulk) { %><form class="bulk-bar" id="bulkForm" method="post" action="/admin/r/<%= r.key %>/bulk" data-bulk data-confirm-delete="<%= t('छानिएका रेकर्ड हटाउने?', 'Delete the selected records?') %>"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <label class="choice" style="padding:4px 10px"><input type="checkbox" data-bulk-all="bulkForm"> <%= t('सबै छान्नुहोस्', 'Select all') %></label>
   <select class="select" name="action" aria-label="<%= t('कार्य', 'Action') %>"><option value=""><%= t('छानिएकामा…', 'With selected…') %></option><% if (hasActive) { %><option value="activate"><%= t('सक्रिय गर्नुहोस्', 'Activate') %></option><option value="deactivate"><%= t('निष्क्रिय गर्नुहोस्', 'Deactivate') %></option><% } %><option value="delete"><%= t('हटाउनुहोस्', 'Delete') %></option></select>
-  <button class="btn btn-outline btn-sm"><%= t('लागू गर्नुहोस्', 'Apply') %></button>
+  <button type="submit" class="btn btn-outline btn-sm"><%= t('लागू गर्नुहोस्', 'Apply') %></button>
 </form><% } %>
 <div class="table-wrap"><table class="table">
   <thead><tr><% if (r.bulk) { %><th style="width:32px"></th><% } %><% listFields.forEach(fl => { %><th><%= t(fl.label[0], fl.label[1]) %></th><% }) %><th></th></tr></thead>
@@ -16,16 +24,18 @@
     <% listFields.forEach((fl, i) => { const v = row[fl.name]; %><td>
       <% if (fl.type === 'image') { %><% if (v) { %><img class="thumb" src="<%= mediaUrl(v) %>" alt=""><% } %>
       <% } else if (fl.type === 'bool') { %>
-        <% if (fl.name === 'is_active') { %><form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/toggle"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="badge <%= v ? 'badge-ok' : '' %>" style="border:0;cursor:pointer"><%= v ? t('सक्रिय', 'Active') : t('निष्क्रिय', 'Hidden') %></button></form>
+        <% if (fl.name === 'is_active') { %><form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/toggle"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="badge <%= v ? 'badge-ok' : '' %>" style="border:0;cursor:pointer"><%= v ? t('सक्रिय', 'Active') : t('निष्क्रिय', 'Hidden') %></button></form>
         <% } else { %><%= v ? '✓' : '' %><% } %>
       <% } else if (fl.type === 'select') { const o = (options[fl.name] || []).find(o => String(o[0]) === String(v)); %><%= o ? t(o[1], o[2]) : (v ?? '') %>
       <% } else if (fl.type === 'date') { %><span class="small"><%= v ? bsDate(v) : '' %></span>
+      <% } else if (fl.type === 'icon') { %><%- v ? icon(v) : '' %>
+      <% } else if (fl.type === 'readonly') { %><span class="small"><%= typeof v === 'number' || /^\d+$/.test(String(v ?? '')) ? num(v) : (v ?? '') %></span>
       <% } else { %><% if (i === 0) { %><a href="<%= r.view ? r.view + row.id : '/admin/r/' + r.key + '/' + row.id + '/edit' %>" style="font-weight:500;color:var(--text)"><%= util.excerpt(v, 80) || '#' + row.id %></a><% } else { %><%= util.excerpt(v, 60) %><% } %><% } %>
     </td><% }) %>
     <td><div class="row-actions">
       <% (r.rowLinks || []).forEach(l => { %><a class="btn btn-ghost btn-sm" href="<%= l.href.replace(':id', row.id) %>"><%- icon(l.icon || 'link') %><%= t(...l.label) %></a><% }) %>
       <a class="btn btn-ghost btn-sm btn-icon" href="/admin/r/<%= r.key %>/<%= row.id %>/edit" title="Edit"><%- icon('edit') %></a>
-      <form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-sm btn-icon" title="Delete" data-confirm="<%= t('पक्का हटाउने?', 'Delete this item?') %>"><%- icon('trash') %></button></form>
+      <form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/delete"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-ghost btn-sm btn-icon" title="Delete" data-confirm="<%= t('पक्का हटाउने?', 'Delete this item?') %>"><%- icon('trash') %></button></form>
     </div></td>
   </tr><% }) %>
   </tbody>

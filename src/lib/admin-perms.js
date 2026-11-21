@@ -15,7 +15,7 @@ const auth = require('./auth');
 const settings = require('./settings');
 
 const ACTIONS = { v: ['हेर्ने', 'View'], c: ['थप्ने', 'Add'], e: ['सम्पादन', 'Edit'], d: ['हटाउने', 'Delete'] };
-const ALWAYS = ['/', '/password', '/2fa', '/2fa/enable', '/2fa/disable', '/logout', '/quick-search', '/plan'];
+const ALWAYS = ['/', '/profile', '/password', '/2fa', '/2fa/enable', '/2fa/disable', '/logout', '/quick-search', '/icons', '/plan', '/help'];
 
 // bespoke admin pages: [section key, label, group, url prefixes]
 const EXTRA = [
@@ -26,6 +26,8 @@ const EXTRA = [
   ['password_requests', ['पासवर्ड अनुरोध', 'Password requests'], 'members', ['/password-requests']],
   ['member_portal', ['सदस्य पोर्टल अनुरोध', 'Member portal requests'], 'members', ['/member-portal']],
   ['settings', ['सेटिङ', 'Settings'], 'system', ['/settings']],
+  ['admin_users', ['प्रशासक प्रयोगकर्ता', 'Admin users'], 'system', ['/users']],
+  ['credentials', ['कार्यालय पासवर्ड', 'Office credentials'], 'system', ['/credentials']],
   ['theme', ['रूप / थिम', 'Theme'], 'system', ['/theme']],
   ['notifications', ['SMS/इमेल/Push', 'SMS / email / push'], 'system', ['/notifications']],
   ['license', ['सेवा नवीकरण', 'Licence'], 'system', ['/license']],
@@ -45,7 +47,7 @@ const ALIASES = [
   ['/files/_private/reports', 'r:reports'],
 ];
 // never grantable (requireAdmin('superadmin') guards them as well)
-const SUPER_ONLY = ['/users', '/roles', '/menu-control', '/domains', '/integrations', '/credentials', '/system', '/backup', '/error-log'];
+const SUPER_ONLY = ['/security', '/roles', '/menu-control', '/domains', '/integrations', '/system', '/backup', '/error-log'];
 
 const GROUP_LABELS = {
   applications: ['आवेदन तथा अनुरोध', 'Applications'], members: ['सदस्य', 'Members'],

@@ -5,7 +5,7 @@
 <form class="toolbar" method="get">
   <input class="input" type="number" min="1" name="item" value="<%= item || '' %>" placeholder="<%= t('कागजात ID', 'Document ID') %>" aria-label="<%= t('कागजात ID', 'Document ID') %>">
   <select class="select" name="viewer" aria-label="<%= t('दर्शक', 'Viewer') %>"><option value=""><%= t('सबै दर्शक', 'All viewers') %></option><option value="member" <%= viewer === 'member' ? 'selected' : '' %>><%= t('सदस्य', 'Members') %></option><option value="admin" <%= viewer === 'admin' ? 'selected' : '' %>><%= t('प्रशासक', 'Admins') %></option></select>
-  <button class="btn btn-outline"><%- icon('search') %><%= t('फिल्टर', 'Filter') %></button>
+  <button type="submit" class="btn btn-outline"><%- icon('search') %><%= t('फिल्टर', 'Filter') %></button>
   <% if (item || viewer) { %><a class="btn btn-ghost" href="/admin/information-room/logs"><%= t('सबै', 'All') %></a><% } %>
 </form>
 <% if (!rows.length) { %><div class="empty"><%= t('अहिलेसम्म कुनै पहुँच रेकर्ड छैन।', 'No access recorded yet.') %></div><% } else { %>

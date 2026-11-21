@@ -53,6 +53,18 @@ function verify(secret, code, window = 1, now = Date.now()) {
   return null;
 }
 
+/**
+ * Replay guard shared by every process and surviving restarts (PHP totp-2fa.php kept a locked file per scope):
+ * atomically records the step as used. true = first use of this step (or a later one) for that account.
+ */
+const STEP_TABLES = new Set(['admin_users', 'members']);
+async function claimStep(table, id, step) {
+  if (!STEP_TABLES.has(table) || step === null || step === undefined) return false;
+  const db = require('../db');
+  const r = await db.query(`UPDATE ${table} SET twofa_last_step = $2 WHERE id = $1 AND COALESCE(twofa_last_step, 0) < $2 RETURNING id`, [id, step]);
+  return r.rowCount === 1;
+}
+
 function provisioningUri(issuer, label, secret) {
   const i = encodeURIComponent(issuer);
   return `otpauth://totp/${i}:${encodeURIComponent(label)}?secret=${secret}&issuer=${i}&algorithm=SHA1&digits=6&period=30`;
@@ -78,4 +90,4 @@ async function consumeBackupCode(input, hashesJson) {
   return null;
 }
 
-module.exports = { generateSecret, verify, codeAt, currentStep, provisioningUri, backupCodes, consumeBackupCode, base32Encode, base32Decode };
+module.exports = { generateSecret, verify, claimStep, codeAt, currentStep, provisioningUri, backupCodes, consumeBackupCode, base32Encode, base32Decode };

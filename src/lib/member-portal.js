@@ -148,9 +148,19 @@ async function register({ sadasyata, email, phone, password, confirm }, t) {
   }
 }
 
+/** member-auth.php:737-753: an approved member whose 5-year card has expired moves to renewal_pending (mutates m). */
+async function checkCardExpiry(m) {
+  if (m && m.approval_status === 'approved' && m.card_expires_at && new Date(m.card_expires_at) < new Date()) {
+    await db.query("UPDATE members SET approval_status = 'renewal_pending', updated_at = now() WHERE id = $1 AND approval_status = 'approved'", [m.id]);
+    m.approval_status = 'renewal_pending';
+  }
+  return m;
+}
+
 /** Login gate shared by password, OAuth and 2FA completion (memberLoginEligibilityError). */
 function eligibilityError(m, t) {
   if (!m.is_active) return t('तपाईंको खाता निष्क्रिय छ। कार्यालयमा सम्पर्क गर्नुहोस्।', 'Your account is inactive. Please contact the office.');
+  if (m.approval_status === 'renewal_pending') return t('तपाईंको Member Card को ५ बर्षे म्याद सकिएको छ। कार्यालयमा सम्पर्क गरी renew गर्नुहोस्।', 'Your 5-year member card has expired. Please contact the office to renew it.');
   if (m.approval_status === 'pending') return t('तपाईंको खाता स्वीकृत हुन बाँकी छ। Admin अनुमोदनपछि लगिन गर्न सक्नुहुन्छ।', 'Your account is awaiting approval. You can sign in once the office approves it.');
   if (m.approval_status === 'rejected') {
     return t('तपाईंको दर्ता अस्वीकृत भएको छ।', 'Your registration has been rejected.')
@@ -305,6 +315,152 @@ async function issueCard(member, adminId, tenant) {
 }
 
 const CARD_LOCK_AFTER = 5;
+/** A lock from wrong tries lapses on its own after this many minutes, so nobody can disable a member's card for good. */
+const CARD_LOCK_MINUTES = 30;
+/** Lift card locks older than CARD_LOCK_MINUTES (wrong-try counter reset). The office can still unlock at once. */
+const releaseExpiredCardLocks = () => db.query(`UPDATE member_id_cards SET locked_at = NULL, failed_verify_count = 0, unlock_requested = 0, unlock_requested_at = NULL
+                                               WHERE locked_at IS NOT NULL AND locked_at < now() - make_interval(mins => $1)`, [CARD_LOCK_MINUTES]);
+
+// ---------------------------------------------------------------- card verification by name + Member ID + mobile (card-verify-helpers.php)
+/** normalizeMemberNameForMatch: lower case, single spaces, honorifics dropped. */
+function normalizeName(name) {
+  return String(name || '').replace(/\s+/gu, ' ').trim().toLowerCase()
+    .replace(/(^|\s)(mr|mrs|ms|miss|shree|shri|श्री)\.?(?=\s|$)/gu, ' ').replace(/\s+/gu, ' ').trim();
+}
+/** PHP similar_text() similarity in percent. */
+function similarPct(a, b) {
+  const sim = (x, y) => {
+    if (!x.length || !y.length) return 0;
+    let max = 0, px = 0, py = 0;
+    for (let i = 0; i < x.length; i++) for (let j = 0; j < y.length; j++) {
+      let k = 0;
+      while (i + k < x.length && j + k < y.length && x[i + k] === y[j + k]) k++;
+      if (k > max) { max = k; px = i; py = j; }
+    }
+    return max ? max + sim(x.slice(0, px), y.slice(0, py)) + sim(x.slice(px + max), y.slice(py + max)) : 0;
+  };
+  return (a.length + b.length) ? (sim(a, b) * 2 * 100) / (a.length + b.length) : 0;
+}
+/** memberNamesMatch: full / first word / safe prefix / close Latin spelling — never short substrings. */
+function namesMatch(input, stored) {
+  const a = normalizeName(input), b = normalizeName(stored);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const aFirst = a.split(' ')[0], bFirst = b.split(' ')[0];
+  const len = s => [...s].length;
+  if (aFirst && aFirst === bFirst && (len(aFirst) >= 3 || (!/[a-z]/.test(aFirst) && len(aFirst) >= 2))) return true;
+  if (len(a) >= 3 && len(b) >= 3) {
+    if (b.startsWith(a) && len(a) >= len(bFirst)) return true;
+    if (a.startsWith(b) && len(b) >= len(aFirst)) return true;
+  }
+  const al = a.replace(/[^a-z]/g, ''), bl = b.replace(/[^a-z]/g, '');
+  return al.length >= 4 && bl.length >= 4 && Math.abs(al.length - bl.length) <= 3 && similarPct(al, bl) >= 88;
+}
+
+/** The newest card of a member (active first), with the derived expired flag. */
+const cardOf = memberPk => db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired FROM member_id_cards
+                                   WHERE member_id = $1 ORDER BY (status = 'active') DESC, id DESC LIMIT 1`, [String(memberPk)]);
+
+/** Count a wrong try on a card; locked after CARD_LOCK_AFTER. Returns the tries left. */
+// ---------------------------------------------------------------- card CVV (card-verify-helpers.php)
+/** pickNameForCardCvv: prefer a name with Latin letters (easier for vendors to type). */
+function pickNameForCardCvv(primary, secondary = '') {
+  primary = String(primary || '').trim(); secondary = String(secondary || '').trim();
+  if (primary && /[A-Za-z]/.test(primary)) return primary;
+  if (secondary && /[A-Za-z]/.test(secondary)) return secondary;
+  return primary || secondary;
+}
+/**
+ * deriveMemberCardCvv: the memorable CVV printed on PHP-issued cards — first 3 letters of the first name
+ * (Latin preferred, else the first 3 Unicode characters, 'X'-padded) + last 4 digits of the Member ID.
+ * "Sujan Sharma" + "MEM-2081-0123" → "SUJ0123".
+ */
+function deriveCardCvv(fullName, memberNumber) {
+  const first = String(fullName || '').replace(/\s+/gu, ' ').trim().split(' ')[0] || '';
+  const latin = first.replace(/[^A-Za-z]/g, '').toUpperCase();
+  let prefix;
+  if (latin) prefix = (latin + 'XXX').slice(0, 3);
+  else {
+    const clean = first.replace(/[\s\d\p{P}\p{S}]+/gu, '');
+    prefix = Array.from(clean || 'XXX').slice(0, 3).join('');
+    while (Array.from(prefix).length < 3) prefix += 'X';
+  }
+  const digits = String(memberNumber ?? '').replace(/\D/g, '') || '0000';
+  return prefix + digits.padStart(4, '0').slice(-4);
+}
+/** Every derived CVV a PHP card for this member may carry (PHP used two slightly different Member-ID picks). */
+function derivedCvvs(member, kyc) {
+  if (!member) return [];
+  const names = [pickNameForCardCvv(kyc?.full_name, member.name), kyc?.full_name_en, member.name].filter(Boolean);
+  const mc = String(member.member_card_no || '').trim();
+  const ids = [member.sadasyata_number || mc || member.id, member.sadasyata_number || (/^[A-Z]{2,4}-\d{4}-\d+$/i.test(mc) ? '' : mc) || member.id];
+  const out = new Set();
+  for (const n of names) for (const i of ids) out.add(deriveCardCvv(n, i));
+  return [...out];
+}
+const normalizeCvv = v => nd.toLatinDigits(String(v ?? '')).replace(/\s+/gu, '').toUpperCase().slice(0, 20);
+/** cvvCredentialsMatch: input vs the stored CVV and the derived ones, case-insensitive, constant time per candidate. */
+function cvvMatches(input, stored, derived = []) {
+  const a = Buffer.from(normalizeCvv(input));
+  if (!a.length) return false;
+  let ok = false;
+  for (const c of [stored, ...[].concat(derived)].map(normalizeCvv).filter(Boolean)) {
+    const b = Buffer.from(c);
+    if (b.length === a.length && crypto.timingSafeEqual(a, b)) ok = true;
+  }
+  return ok;
+}
+
+async function cardFailure(card) {
+  if (!card) return null;
+  const r = await db.one(`UPDATE member_id_cards SET failed_verify_count = COALESCE(failed_verify_count, 0) + 1,
+                            locked_at = CASE WHEN COALESCE(failed_verify_count, 0) + 1 >= $2 THEN COALESCE(locked_at, now()) ELSE locked_at END
+                          WHERE id = $1 RETURNING failed_verify_count`, [card.id, CARD_LOCK_AFTER]);
+  return Math.max(0, CARD_LOCK_AFTER - r.failed_verify_count);
+}
+
+/**
+ * verifyCardByNameAndMemberId (what PHP-printed cards tell people to use): name + Member ID + mobile, optional CVV.
+ * @returns {Promise<{ok:true, member, card, kyc} | {ok:false, error:[np,en]}>}
+ */
+async function verifyByNameIdMobile({ name, memberId, mobile, cvv = '' }) {
+  await releaseExpiredCardLocks();
+  name = String(name || '').trim().slice(0, 120);
+  const id = normalizeId(memberId), mob = normalizeMobile(mobile);
+  cvv = normalizeCvv(cvv);
+  const mismatch = left => ({ ok: false, error: left === 0
+    ? ['५ पटक गलत प्रयासका कारण यो कार्ड ३० मिनेटका लागि LOCK भयो। पछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for 30 minutes after 5 wrong tries. Try again later or ask the office to unlock it.']
+    : [`नाम / सदस्यता नं. / मोबाइल मेल खाएन।${left ? ' बाँकी प्रयास: ' + left : ''}`, `Name / Member ID / mobile did not match.${left ? ' Tries left: ' + left : ''}`] });
+  if (!name || !id || !mob) return { ok: false, error: ['कृपया नाम, सदस्यता नं. र मोबाइल नम्बर तीनै प्रविष्ट गर्नुहोस्।', 'Please enter the name, Member ID and mobile number.'] };
+  if (mob.length < 10) return { ok: false, error: ['कृपया सही मोबाइल नम्बर प्रविष्ट गर्नुहोस्।', 'Please enter a valid mobile number.'] };
+  const v = idVariants(id);
+  const members = await db.many(`SELECT * FROM members WHERE deleted_at IS NULL AND (upper(trim(sadasyata_number)) = ANY($1) OR upper(trim(member_card_no)) = ANY($1))
+                                 ORDER BY (approval_status = 'approved') DESC, id LIMIT 5`, [v]);
+  if (!members.length) return mismatch(null);
+  let hit = null;
+  for (const m of members) {
+    const kyc = await linkedKyc(m);
+    const names = [kyc?.full_name, kyc?.full_name_en, m.name, m.name_np].filter(Boolean);
+    if (!names.some(n => namesMatch(name, n))) continue;
+    if (!phonesMatch(mob, m.phone) && !phonesMatch(mob, kyc?.mobile)) continue;
+    hit = { member: m, kyc };
+    break;
+  }
+  // a wrong name / mobile is not counted against the card: knowing a Member ID must not let anyone lock it
+  if (!hit) return mismatch(null);
+  const card = await cardOf(hit.member.id);
+  if (card?.locked_at) return { ok: false, error: ['यो कार्ड केही समयका लागि LOCK छ। ३० मिनेटपछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for now. Try again in 30 minutes or ask the office to unlock it.'] };
+  if (cvv && !cvvMatches(cvv, card?.cvv, derivedCvvs(hit.member, hit.kyc))) {
+    const left = await cardFailure(card);
+    return left === 0 ? mismatch(0) : { ok: false, error: [`CVV मेल खाएन।${left ? ' बाँकी प्रयास: ' + left : ''}`, `CVV did not match.${left ? ' Tries left: ' + left : ''}`] };
+  }
+  if (card) {
+    if (card.is_expired && card.status === 'active') card.status = 'expired';
+    const r = await db.one('UPDATE member_id_cards SET verify_count = COALESCE(verify_count, 0) + 1, failed_verify_count = 0, last_verified_at = now() WHERE id = $1 RETURNING verify_count', [card.id]);
+    card.verify_count = r.verify_count;
+  }
+  return { ok: true, member: hit.member, kyc: hit.kyc, card };
+}
 
 // ---------------------------------------------------------------- signed public ID-card preview (tracker-id-card.php)
 const cardLinkKey = () => crypto.createHmac('sha256', config.sessionSecret).update('tracker-id-card:' + (db.currentSchema() || '')).digest();
@@ -450,6 +606,9 @@ async function activities(member, { from = null, to = null } = {}) {
   await add(`SELECT * FROM member_program_preregistrations WHERE member_id = $1${range('created_at', p)} ORDER BY created_at DESC LIMIT 100`, p,
     r => ({ date: r.created_at, type: ['कार्यक्रम पूर्व दर्ता', 'Programme pre-registration'], status: r.source || '', detail: r.program_title || '' }));
   p = [member.id];
+  await add(`SELECT * FROM member_partner_services WHERE member_id = $1${range('created_at', p)} ORDER BY created_at DESC LIMIT 100`, p,
+    r => ({ date: r.created_at, type: ['साझेदार सेवा', 'Partner service'], status: Number(r.service_taken) ? 'taken' : 'logged', detail: [r.partner_name, r.service_name].filter(Boolean).join(' — ') }));
+  p = [member.id];
   await add(`SELECT * FROM member_password_reset_requests WHERE member_id = $1${range('requested_at', p)} ORDER BY requested_at DESC LIMIT 100`, p,
     r => ({ date: r.requested_at, type: ['पासवर्ड रिसेट अनुरोध', 'Password reset request'], status: r.status || '', detail: '#' + r.id + (r.admin_note ? ' — ' + r.admin_note : '') }));
   p = [member.id];
@@ -466,9 +625,10 @@ async function activities(member, { from = null, to = null } = {}) {
 
 module.exports = {
   normalizeId, idVariants, normalizeMobile, phonesMatch, phoneDigitsSql, findBySadasyata, findKycByMemberId, linkedKyc, phoneOwnedByOther,
-  passwordPolicyError, register, eligibilityError, approve, reject, alertOffice,
+  passwordPolicyError, register, eligibilityError, checkCardExpiry, approve, reject, alertOffice,
   createOtp, verifyOtp, dispatchOtp, otpChannels, findForReset, maskPhone, maskEmail,
-  cardPrefix, issueCard, CARD_LOCK_AFTER, signCardLink, checkCardLink,
+  cardPrefix, issueCard, CARD_LOCK_AFTER, CARD_LOCK_MINUTES, releaseExpiredCardLocks, signCardLink, checkCardLink, normalizeName, namesMatch, similarPct, verifyByNameIdMobile, cardOf,
+  deriveCardCvv, pickNameForCardCvv, derivedCvvs, cvvMatches, normalizeCvv,
   parseMonthlySaving, msFromDb, msLabel, monthlySavingFieldUpdate,
   duplicateReport, uniqueGuardExists, tryUniqueGuard, sadasyataTaken, activities,
 };

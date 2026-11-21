@@ -10,7 +10,9 @@
     <div class="kv" style="grid-template-columns:1fr 1fr">
       <% [[t('स्थिति','Status'), item.status], [t('प्रकार','Type'), item.property_type], [t('स्थान','Location'), item.location], [t('क्षेत्रफल','Area'), item.area], [t('न्यूनतम मूल्य','Minimum price'), item.minimum_price && 'रु. ' + money(item.minimum_price)], [t('मिति','Date'), item.auction_date && bsDate(item.auction_date)], [t('समय','Time'), item.auction_time], [t('सम्पर्क','Contact'), [item.contact_person, item.contact_phone].filter(Boolean).join(', ')], [t('कबोल संख्या','Bids'), num(bids)]].filter(x => x[1]).forEach(x => { %><div><%= x[0] %></div><div><%= x[1] %></div><% }) %>
     </div>
-    <% if (['upcoming','ongoing'].includes(item.status)) { %><a class="btn btn-primary btn-block mt-2" href="/apply/bid?auction=<%= item.id %>"><%= t('कबोल गर्नुहोस्', 'Place a bid') %></a><% } %>
+    <% if (locals.open) { %><a class="btn btn-primary btn-block mt-2" href="/apply/bid?auction=<%= item.id %>"><%= t('कबोल गर्नुहोस्', 'Place a bid') %></a>
+      <% if (Number(item.minimum_price) > 0) { %><div class="small muted mt-1 text-center"><%= t('न्यूनतम कबोल: रु. ', 'Minimum bid: Rs. ') %><%= money(item.minimum_price) %></div><% } %>
+    <% } else if (['upcoming','ongoing'].includes(item.status)) { %><div class="alert alert-info mt-2"><%- icon('info') %><span><%= t('यो लिलामीमा अहिले बोलपत्र खुला छैन।', 'This auction is not open for bids.') %></span></div><% } %>
     <% if (item.google_map_link) { %><a class="btn btn-ghost btn-block mt-1" href="<%= item.google_map_link %>" target="_blank" rel="noopener"><%- icon('pin') %><%= t('नक्सा', 'Map') %></a><% } %>
   </aside>
 </div></section>

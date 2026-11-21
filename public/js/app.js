@@ -62,33 +62,33 @@
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) start();
   });
 
-  // popup notice (once per session)
-  const popup = $('[data-popup]');
-  if (popup) {
-    const key = 'popup-seen-' + popup.dataset.popup;
-    let seen = false;
-    try { seen = sessionStorage.getItem(key) === '1'; } catch (e) { /* storage blocked */ }
-    if (!seen) popup.classList.add('open');
-    const close = () => { popup.classList.remove('open'); try { sessionStorage.setItem(key, '1'); } catch (e) { /* ignore */ } };
-    $$('[data-close]', popup).forEach(b => b.addEventListener('click', close));
-    popup.addEventListener('click', e => { if (e.target === popup) close(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-  }
+  // popup notices: public/js/site.js (carousel on every page)
 
-  // EMI calculator (live)
+  // EMI calculator (live): number inputs, range sliders, rate presets, principal/interest bar
   const emi = $('[data-emi]');
   if (emi) {
     const fmt = n => Math.round(n).toLocaleString('en-IN');
+    const tenureEl = $('[data-emi-tenure]', emi);
     const calc = () => {
       const P = parseFloat($('[name=amount]', emi).value) || 0;
       const r = (parseFloat($('[name=rate]', emi).value) || 0) / 1200;
-      const n = parseInt($('[name=months]', emi).value, 10) || 0;
+      const t = parseInt(tenureEl.value, 10) || 0;
+      const n = tenureEl.dataset.unit === 'years' ? t * 12 : t;
       if (!P || !n) return;
       const m = r ? P * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1) : P / n;
       $('[data-emi-monthly]').textContent = 'Rs. ' + fmt(m);
       $('[data-emi-interest]').textContent = 'Rs. ' + fmt(m * n - P);
       $('[data-emi-total]').textContent = 'Rs. ' + fmt(m * n);
+      const pct = Math.round(P / (m * n) * 100), bar = $('[data-emi-bar]'), lbl = $('[data-emi-pct]');
+      if (bar) bar.style.width = pct + '%';
+      if (lbl) lbl.textContent = pct;
     };
+    $$('input[type=range][data-sync]', emi).forEach(range => {
+      const box = range.dataset.sync === 'tenure' ? tenureEl : $('[name=' + range.dataset.sync + ']', emi);
+      range.addEventListener('input', () => { box.value = range.value; calc(); });
+      box.addEventListener('input', () => { range.value = box.value; });
+    });
+    $$('[data-emi-rate]', emi).forEach(a => a.addEventListener('click', e => { e.preventDefault(); $('[name=rate]', emi).value = a.dataset.emiRate; const rr = $('[data-sync=rate]', emi); if (rr) rr.value = a.dataset.emiRate; calc(); }));
     $$('input', emi).forEach(i => i.addEventListener('input', calc));
   }
 
@@ -162,6 +162,13 @@ document.querySelectorAll('[data-print]').forEach(b => b.addEventListener('click
       const r = await fetch('/api/chat', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'x-csrf-token': root.dataset.csrf }, body: JSON.stringify({ message: msg }) });
       const j = await r.json();
       wait.remove(); add(j.answer || '—', 'bot');
+      // suggested pages: same-site paths only, rendered as text links (never HTML from the server)
+      const links = Array.isArray(j.links) ? j.links.filter(u => typeof u === 'string' && /^\/(?!\/)[\w\-/?=&#.]*$/.test(u)).slice(0, 3) : [];
+      if (links.length) {
+        const row = document.createElement('div'); row.className = 'chat-chips';
+        links.forEach(u => { const a = document.createElement('a'); a.className = 'tab'; a.href = u; a.textContent = u; row.appendChild(a); });
+        log.appendChild(row); log.scrollTop = log.scrollHeight;
+      }
       history.push({ role: 'user', content: msg }, { role: 'assistant', content: j.answer || '' });
       history.splice(0, Math.max(0, history.length - 8));
     } catch (err) { wait.remove(); add(root.dataset.lang === 'en' ? 'Connection problem. Please try again.' : 'जडानमा समस्या भयो। फेरि प्रयास गर्नुहोस्।', 'bot'); }
@@ -192,3 +199,37 @@ document.querySelectorAll('[data-print]').forEach(b => b.addEventListener('click
 if ('serviceWorker' in navigator && !/^\/(admin|platform)\b/.test(location.pathname)) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}));
 }
+
+// application received: drop the draft kept on this device; copy the tracking number
+document.querySelectorAll('[data-draft-clear]').forEach(el => { try { localStorage.removeItem(el.dataset.draftClear); localStorage.removeItem(el.dataset.draftClear + ':step'); } catch (e) { /* storage blocked */ } });
+document.querySelectorAll('[data-copy-text]').forEach(b => b.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(b.dataset.copyText); const s = b.querySelector('span'); if (s) s.textContent = '✓'; } catch (e) { /* clipboard blocked */ }
+}));
+
+// ballot: list the chosen candidates per position before the vote is cast (member/election-vote.php confirm modal)
+document.querySelectorAll('form[data-ballot]').forEach(form => {
+  const btn = form.querySelector('[data-ballot-submit]');
+  if (!btn) return;
+  btn.addEventListener('click', ev => {
+    ev.preventDefault();
+    const lines = Array.from(form.querySelectorAll('[data-ballot-position]')).map(box => {
+      const picks = Array.from(box.querySelectorAll('input:checked')).map(i => i.dataset.candName);
+      return [box.dataset.ballotPosition, picks.length ? picks.join(', ') : btn.dataset.none];
+    });
+    if (typeof HTMLDialogElement !== 'function') { if (window.confirm(btn.dataset.confirmText + '\n\n' + lines.map(l => l[0] + ': ' + l[1]).join('\n'))) form.submit(); return; }
+    const dlg = document.createElement('dialog');
+    dlg.className = 'ballot-dialog';
+    const h = document.createElement('h3'); h.textContent = btn.dataset.confirmText; dlg.appendChild(h);
+    const dl = document.createElement('div'); dl.className = 'kv';
+    lines.forEach(([k, v]) => { const a = document.createElement('div'); a.textContent = k; const b = document.createElement('div'); b.textContent = v; b.style.fontWeight = '600'; dl.append(a, b); });
+    dlg.appendChild(dl);
+    const bar = document.createElement('div'); bar.className = 'flex gap-1 mt-2';
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'btn btn-primary'; ok.textContent = btn.dataset.ok;
+    const back = document.createElement('button'); back.type = 'button'; back.className = 'btn btn-ghost'; back.textContent = btn.dataset.back;
+    ok.addEventListener('click', () => { ok.disabled = true; form.submit(); });
+    back.addEventListener('click', () => dlg.close());
+    dlg.addEventListener('close', () => dlg.remove());
+    bar.append(ok, back); dlg.appendChild(bar);
+    document.body.appendChild(dlg); dlg.showModal();
+  });
+});

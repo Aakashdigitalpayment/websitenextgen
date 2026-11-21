@@ -1,5 +1,18 @@
 <%- include('../partials/page-head', { lead: t('सदस्य शिक्षा, तालिम, साधारण सभा लगायतका कार्यक्रम।', 'Member education, training, general meetings and more.') }) %>
+<% const tab = query.tab === 'past' ? 'past' : 'upcoming'; const openCount = upcoming.filter(p => Number(p.pre_registration_open)).length; %>
 <section class="section"><div class="container">
+  <div class="stats mb-3">
+    <div class="stat"><div class="stat-value"><%= num(upcoming.length) %></div><div class="stat-label"><%= t('आगामी कार्यक्रम', 'Upcoming') %></div></div>
+    <div class="stat"><div class="stat-value"><%= num(openCount) %></div><div class="stat-label"><%= t('पूर्व दर्ता खुला', 'Pre-registration open') %></div></div>
+    <div class="stat"><div class="stat-value"><%= num(past.length) %></div><div class="stat-label"><%= t('सम्पन्न', 'Held') %></div></div>
+  </div>
+  <ol class="steps-3 mb-3">
+    <li><b><%= t('१. पूर्व दर्ता', '1. Pre-register') %></b><span class="small muted"><%= t('सदस्यता नं. र दर्ता भएको मोबाइलबाट दर्ता गर्नुहोस्।', 'Register with your Member ID and registered mobile.') %></span></li>
+    <li><b><%= t('२. QR स्क्यान', '2. Scan the QR') %></b><span class="small muted"><%= t('कार्यक्रम स्थलमा सदस्य पोर्टलबाट QR स्क्यान गर्नुहोस्।', 'Scan the QR at the venue from the member portal.') %></span></li>
+    <li><b><%= t('३. उपस्थिति', '3. Attendance counted') %></b><span class="small muted"><%= t('तपाईंको उपस्थिति स्वतः दर्ता हुन्छ।', 'Your attendance is recorded automatically.') %></span></li>
+  </ol>
+  <nav class="tabs"><a class="tab <%= tab === 'upcoming' ? 'active' : '' %>" href="/programs"><%= t('आगामी', 'Upcoming') %> (<%= num(upcoming.length) %>)</a><a class="tab <%= tab === 'past' ? 'active' : '' %>" href="/programs?tab=past"><%= t('विगतका', 'Past') %> (<%= num(past.length) %>)</a></nav>
+  <% if (tab === 'upcoming') { %>
   <% if (!upcoming.length) { %><div class="empty"><%= t('आगामी कार्यक्रम छैन।', 'No upcoming programmes.') %></div><% } %>
   <div class="grid grid-3"><% upcoming.forEach(p => { %>
     <div class="card">
@@ -7,9 +20,18 @@
       <h3><%= p.title %></h3>
       <% if (p.location) { %><div class="small muted flex gap-1"><%- icon('pin') %><%= p.location %></div><% } %>
       <% if (p.description) { %><p class="small muted mt-1"><%= util.excerpt(p.description, 160) %></p><% } %>
-      <% if (Number(p.pre_registration_open)) { %><a class="btn btn-soft btn-sm mt-1" href="/member/programs"><%= t('पूर्व दर्ता (सदस्य)', 'Pre-register (members)') %></a><% } %>
+      <% if (Number(p.pre_registration_open)) { %>
+        <details class="mt-1"><summary class="btn btn-soft btn-sm"><%= t('पूर्व दर्ता (सदस्य)', 'Pre-register (members)') %></summary>
+          <form method="post" action="/programs/<%= p.id %>/register" class="mt-1">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <div class="field"><label class="small" for="pr_m_<%= p.id %>"><%= t('सदस्यता नं.', 'Member ID') %></label><input class="input" id="pr_m_<%= p.id %>" name="member_no" required autocomplete="off"></div>
+            <div class="field"><label class="small" for="pr_p_<%= p.id %>"><%= t('दर्ता भएको मोबाइल', 'Registered mobile') %></label><input class="input" id="pr_p_<%= p.id %>" name="mobile" type="tel" required inputmode="numeric"></div>
+            <button class="btn btn-primary btn-sm mt-1"><%= t('दर्ता गर्नुहोस्', 'Register') %></button> <a class="small" href="/member/programs"><%= t('वा लगइन गर्नुहोस्', 'or sign in') %></a>
+          </form></details>
+      <% } %>
     </div>
   <% }) %></div>
-  <% if (past.length) { %><h2 class="mt-4"><%= t('विगतका कार्यक्रम', 'Past programmes') %></h2>
-  <div class="table-wrap mt-2"><table class="table"><tbody><% past.forEach(p => { %><tr><td><%= p.title %></td><td class="small muted"><%= p.location || '' %></td><td class="small"><%= p.event_date ? bsDate(p.event_date) : '' %></td></tr><% }) %></tbody></table></div><% } %>
+  <% } else { %><% if (!past.length) { %><div class="empty"><%= t('विगतका कार्यक्रम छैनन्।', 'No past programmes.') %></div><% } %>
+  <% if (past.length) { %>
+  <div class="table-wrap mt-2"><table class="table"><tbody><% past.forEach(p => { %><tr><td><%= p.title %></td><td class="small muted"><%= p.location || '' %></td><td class="small"><%= p.event_date ? bsDate(p.event_date) : '' %></td></tr><% }) %></tbody></table></div><% } %><% } %>
 </div></section>

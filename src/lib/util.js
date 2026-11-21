@@ -91,4 +91,9 @@ function paginate(total, page, perPage = 20) {
   return { total, page: p, pages, perPage, offset: (p - 1) * perPage };
 }
 
-module.exports = { csvCell, toCsv, trackingId, escapeHtml, stripTags, excerpt, sanitizeHtml, richText, money, int, slugify, isEmail, isPhone, paginate };
+/** CSV download with a header row and formula-safe cells. */
+function sendCsv(res, filename, header, rows) {
+  res.type('text/csv; charset=utf-8').attachment(filename).send('\ufeff' + [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n'));
+}
+
+module.exports = { csvCell, toCsv, sendCsv, trackingId, escapeHtml, stripTags, excerpt, sanitizeHtml, richText, money, int, slugify, isEmail, isPhone, paginate };

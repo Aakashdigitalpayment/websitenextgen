@@ -49,4 +49,42 @@ async function tryUnlock(req, raw, mobileRaw) {
   return { ok: true };
 }
 
-module.exports = { normalizeLevel, unlocked, canOpen, tryUnlock, guard };
+/**
+ * Signed short-lived file link (PHP coopMemberAccessCheckFileToken): Facebook's in-app browser drops cookies, so links
+ * shown to an unlocked visitor carry ?t=<expiry>.<hmac> (10 minutes, bound to tenant + kind + id).
+ */
+const TOKEN_TTL = 10 * 60_000;
+const sign = (req, kind, id, exp) => require('crypto').createHmac('sha256', require('../config').sessionSecret)
+  .update(`member-file|${req.tenant?.id || ''}|${kind}|${id}|${exp}`).digest('base64url').slice(0, 32);
+function fileToken(req, kind, id) {
+  const exp = Math.floor((Date.now() + TOKEN_TTL) / 1000);
+  return exp.toString(36) + '.' + sign(req, kind, id, exp);
+}
+function checkFileToken(req, kind, id, token) {
+  const m = /^([0-9a-z]{1,10})\.([A-Za-z0-9_-]{32})$/.exec(String(token || ''));
+  if (!m) return false;
+  const exp = parseInt(m[1], 36);
+  if (!exp || exp * 1000 < Date.now()) return false;
+  const want = Buffer.from(sign(req, kind, id, exp)), got = Buffer.from(m[2]);
+  return want.length === got.length && require('crypto').timingSafeEqual(want, got);
+}
+
+/**
+ * coopMemberAccessBounceSocialInAppToPage (public-member-access.php:598-660): link-preview crawlers and cold opens in
+ * Facebook / Instagram / Line in-app browsers get the HTML page (OG card, unlock form) instead of the file bytes.
+ * Links on our own pages carry ?nav=1 (or a same-site Referer) and go straight through. Returns the page to send them to, or null.
+ */
+const SOCIAL_CRAWLER = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp/i;
+const SOCIAL_INAPP = /FBAN|FBAV|FB_IAB|Instagram|Line\//i;
+function socialBounce(req, pageUrl) {
+  const ua = String(req.get('user-agent') || '');
+  const crawler = SOCIAL_CRAWLER.test(ua), inApp = SOCIAL_INAPP.test(ua);
+  if (!crawler && !inApp) return null;
+  if (!crawler) {
+    if (req.query.nav === '1') return null;
+    try { if (new URL(String(req.get('referer') || '')).hostname === req.hostname) return null; } catch { /* no / bad referer */ }
+  }
+  return pageUrl;
+}
+
+module.exports = { normalizeLevel, unlocked, canOpen, tryUnlock, guard, fileToken, checkFileToken, socialBounce };

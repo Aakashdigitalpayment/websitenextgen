@@ -1,0 +1,46 @@
+<%
+/* Header extras (includes/header.php): site search, notice bell, login menu. <details> menus work without JS. */
+const okUrl = u => /^https:\/\/[^\s"'<>]+$/i.test(String(u || '').trim()) ? String(u).trim() : '';
+const latest = (locals.latestNotices || []).slice(0, 6);
+const recent = latest.filter(n => n.created_at && Date.now() - new Date(n.created_at).getTime() < 30 * 86400_000).length;
+const extLinks = [
+  [okUrl(settings.internet_banking_url), 'globe', t('इ-बैंकिङ लगिन', 'Internet banking login')],
+  [okUrl(settings.web_login_url), 'globe', t('वेब लगिन', 'Web login')],
+  [okUrl(settings.play_store_url), 'phone', t('मोबाइल एप (Android)', 'Mobile app (Android)')],
+  [okUrl(settings.app_store_url), 'phone', t('मोबाइल एप (iOS)', 'Mobile app (iOS)')],
+].filter(l => l[0]);
+const portal = !locals.plan || plan.has('member_portal');
+%>
+<button type="button" class="btn btn-ghost btn-icon" data-pwa-install hidden aria-label="<%= t('एप इन्स्टल गर्नुहोस्', 'Install app') %>" title="<%= t('एप इन्स्टल गर्नुहोस्', 'Install app') %>"><%- icon('download') %></button>
+<a class="btn btn-ghost btn-icon" href="/search" data-search-open aria-label="<%= t('खोज्नुहोस्', 'Search') %>" title="<%= t('खोज्नुहोस्', 'Search') %>"><%- icon('search') %></a>
+<details class="hdr-menu hdr-bell" data-menu>
+  <summary class="btn btn-ghost btn-icon" aria-label="<%= t('सूचनाहरू', 'Notices') %><%= recent ? ' (' + recent + ')' : '' %>"><%- icon('bell') %><% if (recent) { %><span class="hdr-count"><%= num(Math.min(recent, 9)) %></span><% } %></summary>
+  <div class="hdr-pop">
+    <div class="hdr-pop-head"><b style="font-weight:600"><%= t('पछिल्ला सूचना', 'Latest notices') %></b></div>
+    <% if (!latest.length) { %><p class="small muted" style="padding:8px 12px"><%= t('हाल कुनै सूचना छैन।', 'No notices yet.') %></p><% } %>
+    <% latest.forEach((n, i) => { %>
+      <a href="/notices/<%= n.id %>" class="hdr-notice">
+        <% if (i < 3) { %><span class="hdr-dot" title="<%= t('नयाँ', 'New') %>"></span><% } %>
+        <span><span class="hdr-notice-title"><%= util.excerpt(f(n, 'title'), 70) %></span>
+          <span class="small faint"><%= bsDate(n.notice_date || n.created_at) %><% if (n.attachment) { %> · <%- icon('file') %><% } %></span></span>
+      </a>
+    <% }) %>
+    <a class="hdr-pop-foot" href="/notices"><%= t('सबै सूचना हेर्नुहोस्', 'View all notices') %> →</a>
+  </div>
+</details>
+<% if (portal || extLinks.length) { %>
+<details class="hdr-menu hdr-login" data-menu>
+  <summary class="btn <%= locals.member ? 'btn-primary' : 'btn-outline' %> btn-sm"><%- icon('user') %><span class="btn-text"><%= locals.member ? t('मेरो खाता', 'My account') : t('लगइन', 'Login') %></span><% if (locals.memberUnread) { %><span class="hdr-count"><%= num(Math.min(memberUnread, 99)) %></span><% } %><%- icon('chevron') %></summary>
+  <div class="hdr-pop hdr-pop-right">
+    <% extLinks.forEach(l => { %><a href="<%= l[0] %>" target="_blank" rel="noopener"><%- icon(l[1]) %><%= l[2] %></a><% }) %>
+    <% if (portal) { %>
+      <% if (extLinks.length) { %><hr><% } %>
+      <% if (locals.member) { %><a href="/member"><%- icon('user') %><%= t('मेरो खाता', 'My account') %><% if (locals.memberUnread) { %> <span class="badge badge-bad"><%= num(memberUnread) %></span><% } %></a>
+      <% } else { %><a href="/member/login"><%- icon('user') %><%= t('सदस्य लगइन', 'Member login') %></a><% } %>
+      <hr>
+      <a href="/verify"><%- icon('id') %><%= t('सदस्य कार्ड प्रमाणीकरण', 'Verify member card') %></a>
+    <% } %>
+    <a href="/admin"><%- icon('building') %><%= t('कार्यालय लगिन', 'Office login') %></a>
+  </div>
+</details>
+<% } %>

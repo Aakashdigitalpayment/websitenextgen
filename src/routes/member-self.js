@@ -50,6 +50,8 @@ async function profileData(req) {
     kyc, kycLocked: kyc?.status === 'approved', kycRejected: kyc?.status === 'rejected', docs,
     pendingPhone, phoneOtp: pc && pc.memberId === m.id && Date.now() - pc.at < 10 * 60_000 ? pc : null,
     twofaRequired: required === '1', facebookEnabled: !!(await facebook.config()),
+    // read-only KYC details tab (member/profile.php): every KYM + AML field, family, photo score
+    kycView: kyc ? { mod: require('../modules/applications').kyc, options: await require('../lib/forms').resolveOptions(require('../modules/applications').kyc), display: require('../lib/forms').displayData(require('../modules/applications').kyc, kyc) } : null,
   };
 }
 

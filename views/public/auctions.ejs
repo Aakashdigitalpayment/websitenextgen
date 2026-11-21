@@ -1,10 +1,13 @@
 <%- include('../partials/page-head', {}) %>
+<% const ST = { ongoing: ['चालु', 'Ongoing'], upcoming: ['आगामी', 'Upcoming'], completed: ['सम्पन्न', 'Completed'], cancelled: ['रद्द', 'Cancelled'] };
+   const counts = {}; all.forEach(a => { counts[a.status] = (counts[a.status] || 0) + 1; }); %>
 <section class="section"><div class="container">
+  <% if (all.length) { %><nav class="tabs"><a class="tab <%= !status ? 'active' : '' %>" href="/auctions"><%= t('सबै', 'All') %> (<%= num(all.length) %>)</a><% Object.keys(ST).filter(k => counts[k]).forEach(k => { %><a class="tab <%= status === k ? 'active' : '' %>" href="?status=<%= k %>"><%= t(...ST[k]) %> (<%= num(counts[k]) %>)</a><% }) %></nav><% } %>
   <% if (!items.length) { %><div class="empty"><%= t('लिलाम सूचना छैन।', 'No auction notices.') %></div><% } %>
   <div class="grid grid-3"><% items.forEach(a => { %>
     <a class="card card-link" href="/auctions/<%= a.id %>">
       <% if (a.image) { %><div class="card-media"><img src="<%= mediaUrl(a.image) %>"<%- srcset(a.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy"></div><% } %>
-      <div class="card-meta"><span class="badge <%= a.status === 'ongoing' ? 'badge-ok' : a.status === 'upcoming' ? 'badge-info' : '' %>"><%= a.status %></span><%= a.auction_date ? bsDate(a.auction_date) : '' %></div>
+      <div class="card-meta"><span class="badge <%= a.status === 'ongoing' ? 'badge-ok' : a.status === 'upcoming' ? 'badge-info' : '' %>"><%= ST[a.status] ? t(...ST[a.status]) : a.status %></span><%= a.auction_date ? bsDate(a.auction_date) : '' %></div>
       <h3><%= f(a, 'title') %></h3><p class="small muted"><%= a.location || '' %></p>
       <% if (a.minimum_price) { %><div style="font-weight:500"><%= t('न्यूनतम मूल्य: रु. ', 'Minimum: Rs. ') %><%= money(a.minimum_price) %></div><% } %>
     </a>

@@ -1,0 +1,11 @@
+<div class="content-head">
+  <div><div class="crumbs"><a href="/admin/r/<%= r.key %>"><%= title %></a></div><h1><%= t('हटाइएका', 'Deleted items') %> <span class="muted small">(<%= num(rows.length) %>)</span></h1></div>
+</div>
+<% if (!rows.length) { %><div class="empty"><%= t('हटाइएको केही छैन।', 'Nothing in the trash.') %></div><% } else { %>
+<div class="table-wrap"><table class="table"><thead><tr><th><%= t('शीर्षक', 'Title') %></th><th><%= t('हटाइएको', 'Deleted') %></th><th></th></tr></thead><tbody>
+  <% rows.forEach(row => { %><tr><td><%= util.excerpt(row[label.name], 80) || '#' + row.id %></td><td class="small"><%= bsDate(row.deleted_at) %></td>
+    <td><div class="row-actions">
+      <form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/restore"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-outline btn-sm"><%= t('फिर्ता', 'Restore') %></button></form>
+      <% if (canPurge) { %><form method="post" action="/admin/r/<%= r.key %>/<%= row.id %>/purge"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-ghost btn-sm" data-confirm="<%= t('स्थायी रूपमा हटाउने? फाइल पनि मेटिन्छ।', 'Delete permanently? Files are removed too.') %>"><%- icon('trash') %><%= t('स्थायी हटाउने', 'Delete forever') %></button></form><% } %>
+    </div></td></tr><% }) %>
+</tbody></table></div><% } %>

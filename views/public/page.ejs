@@ -1,2 +1,6 @@
 <%- include('../partials/page-head', {}) %>
-<section class="section"><div class="container"><div class="prose"><%- html %></div></div></section>
+<section class="section"><div class="container">
+  <% if (locals.image) { %><img src="<%= mediaUrl(image) %>"<%- srcset(image, '(max-width: 1180px) 100vw, 1180px') %> alt="" style="border-radius:var(--radius);margin-bottom:24px;width:100%;max-height:420px;object-fit:cover"><% } %>
+  <div class="prose"><%- html %></div>
+  <% if (locals.tags && tags.length) { %><div class="flex gap-1 wrap mt-3"><% tags.forEach(tg => { %><a class="badge" href="/search?q=<%= encodeURIComponent(tg) %>">#<%= tg %></a><% }) %></div><% } %>
+</div></section>

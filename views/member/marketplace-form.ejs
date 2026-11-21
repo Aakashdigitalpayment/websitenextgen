@@ -13,6 +13,11 @@
     <%- include('../partials/field', { field: { name: 'experience_years', label: ['अनुभव (वर्ष, सीपका लागि)', 'Experience (years, skills)'], type: 'number' }, values, errors }) %>
     <%- include('../partials/field', { field: { name: 'location', label: ['स्थान', 'Location'] }, values, errors }) %>
     <%- include('../partials/field', { field: { name: 'price_note', label: ['मूल्य टिप्पणी', 'Price note'] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'available_from', label: ['उपलब्ध मिति देखि', 'Available from'], type: 'date' }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'available_until', label: ['उपलब्ध मिति सम्म', 'Available until'], type: 'date' }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'available_until_time', label: ['सम्म — समय (HH:MM)', 'Until — time (HH:MM)'], hint: '23:59' }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'available_time_from', label: ['दैनिक समय देखि (HH:MM)', 'Daily hours from (HH:MM)'] }, values, errors }) %>
+    <%- include('../partials/field', { field: { name: 'available_time_to', label: ['दैनिक समय सम्म (HH:MM)', 'Daily hours to (HH:MM)'] }, values, errors }) %>
     <%- include('../partials/field', { field: { name: 'contact_name', label: ['सम्पर्क व्यक्ति', 'Contact name'] }, values, errors }) %>
     <%- include('../partials/field', { field: { name: 'contact_phone', label: ['सम्पर्क फोन', 'Contact phone'], type: 'tel' }, values, errors }) %>
     <div class="field span-2"><label><%= t('फोटो', 'Photo') %></label><% if (item && item.image) { %><img class="thumb mb-1" src="<%= mediaUrl(item.image) %>" alt=""><% } %><input class="input" type="file" name="image" accept="image/jpeg,image/png,image/webp"></div>

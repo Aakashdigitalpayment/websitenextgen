@@ -29,7 +29,7 @@ const memberById = id => db.one('SELECT * FROM members WHERE id = $1 AND deleted
 // ---------------------------------------------------------------- list, filters, export, archive
 function memberFilter(req) {
   const q = String(req.query.q || '').trim().slice(0, 100);
-  const st = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
+  const st = ['pending', 'approved', 'rejected', 'renewal_pending'].includes(req.query.status) ? req.query.status : '';
   const ms = ['1', '0', 'unset'].includes(req.query.ms) ? req.query.ms : '';
   const view = req.query.view === 'arch' ? 'arch' : 'live';
   const where = [view === 'arch' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'], params = [];
@@ -41,8 +41,26 @@ function memberFilter(req) {
   if (st) { params.push(st); where.push(`approval_status = $${params.length}`); }
   if (ms === 'unset') where.push('monthly_saving_regular IS NULL');
   else if (ms) { params.push(Number(ms)); where.push(`monthly_saving_regular = $${params.length}`); }
-  return { q, st, ms, view, w: 'WHERE ' + where.join(' AND '), params };
+  // KYM link (legacy members.php kyc filter)
+  const kyc = Object.hasOwn(KYC_FILTER, req.query.kyc) ? req.query.kyc : '';
+  if (kyc) where.push(KYC_FILTER[kyc]);
+  const active = ['1', '0'].includes(req.query.active) ? req.query.active : '';
+  if (active) where.push(active === '1' ? 'is_active = 1' : 'COALESCE(is_active, 0) = 0');
+  return { q, st, ms, kyc, active, view, w: 'WHERE ' + where.join(' AND '), params };
 }
+const HAS_PW = "COALESCE(password_hash, '') <> ''";
+const KYC_FILTER = {
+  linked: `COALESCE(kyc_application_id, 0) <> 0 AND ${HAS_PW}`,
+  unlinked: 'COALESCE(kyc_application_id, 0) = 0',
+  no_password: `NOT (${HAS_PW})`,
+};
+// audience for the bulk notification (members.php notif_audience); always live members only
+const AUDIENCE = {
+  active: "is_active = 1 AND approval_status IN ('approved', 'active')",
+  pending: "approval_status = 'pending'",
+  kyc_linked: 'is_active = 1 AND COALESCE(kyc_application_id, 0) <> 0',
+  all_active: 'is_active = 1',
+};
 
 router.get('/members', requireAdmin('staff'), ah(async (req, res) => {
   const f = memberFilter(req);
@@ -50,8 +68,13 @@ router.get('/members', requireAdmin('staff'), ah(async (req, res) => {
   const pg = util.paginate(total, util.int(req.query.page, 1), 30);
   const rows = await db.many(`SELECT * FROM members ${f.w} ORDER BY ${f.view === 'arch' ? 'deleted_at DESC' : 'id DESC'} LIMIT ${pg.perPage} OFFSET ${pg.offset}`, f.params);
   const counts = await db.one('SELECT count(*) FILTER (WHERE deleted_at IS NULL) AS live, count(*) FILTER (WHERE deleted_at IS NOT NULL) AS arch FROM members');
-  const qs = new URLSearchParams(Object.entries({ q: f.q, status: f.st, ms: f.ms, view: f.view === 'arch' ? 'arch' : '' }).filter(([, v]) => v)).toString();
-  res.render('admin/members', { title: res.locals.t('सदस्यहरू', 'Members'), rows, pg, q: f.q, st: f.st, ms: f.ms, view: f.view, counts, qs });
+  const stats = await db.one(`SELECT count(*) AS total, count(*) FILTER (WHERE is_active = 1) AS active, count(*) FILTER (WHERE approval_status = 'pending') AS pending,
+      count(*) FILTER (WHERE approval_status = 'renewal_pending') AS renewal_pending, count(*) FILTER (WHERE ${KYC_FILTER.linked}) AS kyc_linked,
+      count(*) FILTER (WHERE COALESCE(google_id, '') <> '') AS google, count(*) FILTER (WHERE COALESCE(facebook_id, '') <> '') AS facebook
+    FROM members WHERE deleted_at IS NULL`);
+  const audience = await db.one(`SELECT ${Object.entries(AUDIENCE).map(([k, w]) => `count(*) FILTER (WHERE ${w}) AS ${k}`).join(', ')} FROM members WHERE deleted_at IS NULL`);
+  const qs = new URLSearchParams(Object.entries({ q: f.q, status: f.st, ms: f.ms, kyc: f.kyc, active: f.active, view: f.view === 'arch' ? 'arch' : '' }).filter(([, v]) => v)).toString();
+  res.render('admin/members', { title: res.locals.t('सदस्यहरू', 'Members'), rows, pg, q: f.q, st: f.st, ms: f.ms, kyc: f.kyc, view: f.view, counts, qs, stats, audience });
 }));
 
 const EXPORT_COLS = [
@@ -173,13 +196,42 @@ router.get('/members/import/:id', requireAdmin('admin'), ah(async (req, res, nex
   const rows = await db.many(`SELECT * FROM member_import_rows WHERE job_id = $1 ${filter ? 'AND status = $2' : ''} ORDER BY row_num LIMIT 300`, filter ? [job.id, filter] : [job.id]);
   res.render('admin/member-import-job', { title: res.locals.t('आयात', 'Import') + ' #' + job.id, job, rows, counts, filter });
 }));
+router.get('/members/import/:id/errors.csv', requireAdmin('admin'), ah(async (req, res, next) => {
+  const job = await db.one('SELECT id FROM member_import_jobs WHERE id = $1', [util.int(req.params.id)]);
+  if (!job) return next();
+  const rows = await memberImport.errorRows(job.id);
+  await auth.audit(req, 'export', 'member_import_rows', job.id, `Import #${job.id} errors CSV (${rows.length} rows)`);
+  res.type('text/csv; charset=utf-8').attachment(`member-import-${job.id}-errors.csv`).send(util.toCsv(['row_num', 'sadasyata_number', 'full_name', 'mobile', 'status', 'message'], rows));
+}));
 router.post('/members/import/:id/commit', requireAdmin('admin'), ah(async (req, res) => {
+  // one batch of rows per request (member-import.php chunked commit); the job page keeps posting until done
   const id = util.int(req.params.id);
+  const wantsJson = (req.get('accept') || '').includes('application/json');
   try {
-    const r = await memberImport.commit(id, req.admin.id);
-    await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${r.ok} ok, ${r.skip} skipped, ${r.fail} failed`);
-    flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${r.ok} सफल, ${r.skip} छोडियो, ${r.fail} असफल`, `Import done: ${r.ok} saved, ${r.skip} skipped, ${r.fail} failed`));
-  } catch (e) { flash(req, 'error', e.message); }
+    const r = await memberImport.commitChunk(id, req.admin.id, { tenant: req.tenant });
+    if (r.done) {
+      const p = await memberImport.progress(id);
+      await auth.audit(req, 'import_commit', 'member_import_jobs', id, `CSV import: ${p.saved} ok, ${p.skipped} skipped, ${p.failed} failed, ${p.cards} ID cards`);
+      if (!wantsJson) flash(req, 'success', res.locals.t(`आयात सम्पन्न: ${p.saved} सफल, ${p.skipped} छोडियो, ${p.failed} असफल, ${p.cards} परिचयपत्र`, `Import done: ${p.saved} saved, ${p.skipped} skipped, ${p.failed} failed, ${p.cards} ID cards issued`));
+    } else if (!wantsJson) flash(req, 'info', res.locals.t(`आयात जारी छ: ${r.remaining} row बाँकी।`, `Import in progress: ${r.remaining} rows left.`));
+    if (wantsJson) return res.json({ ok: true, ...(await memberImport.progress(id)) });
+  } catch (e) {
+    await memberImport.setError(id, e.message).catch(() => {});
+    if (wantsJson) return res.status(409).json({ ok: false, error: e.message });
+    flash(req, 'error', e.message);
+  }
+  res.redirect('/admin/members/import/' + id);
+}));
+router.get('/members/import/:id/status.json', requireAdmin('admin'), ah(async (req, res) => {
+  const p = await memberImport.progress(util.int(req.params.id));
+  if (!p) return res.status(404).json({ ok: false });
+  res.set('Cache-Control', 'no-store').json({ ok: true, ...p });
+}));
+router.post('/members/import/:id/retry', requireAdmin('admin'), ah(async (req, res) => {
+  const id = util.int(req.params.id);
+  const n = await memberImport.retryFailed(id);
+  await auth.audit(req, 'import_retry', 'member_import_jobs', id, `${n} failed rows queued again`);
+  flash(req, n ? 'info' : 'error', n ? res.locals.t(`${n} असफल row फेरि प्रयास गरिँदै।`, `${n} failed rows queued again.`) : res.locals.t('फेरि प्रयास गर्ने row छैन।', 'No failed rows to retry.'));
   res.redirect('/admin/members/import/' + id);
 }));
 
@@ -195,7 +247,15 @@ async function memberView(item) {
     db.many("SELECT * FROM member_profile_change_requests WHERE member_id = $1 AND status = 'pending' ORDER BY id DESC", [item.id]),
     db.many("SELECT * FROM member_password_reset_requests WHERE member_id = $1 AND status = 'pending' ORDER BY id DESC", [item.id]),
   ]);
-  return { cards, accounts, docs, timeline: timeline.slice(0, 15), timelineTotal: timeline.length, changes, resets };
+  // KYM link (SSOT), partner-service log and programme attendance rating (legacy member-online-portal.php)
+  const [kyc, partnerServices, rating] = await Promise.all([
+    require('../lib/kym').loadLinkedKyc(item),
+    db.many('SELECT partner_name, service_name, service_taken, service_note, created_at FROM member_partner_services WHERE member_id = $1 ORDER BY created_at DESC LIMIT 20', [item.id]),
+    db.one(`SELECT (SELECT count(DISTINCT a.program_id) FROM member_program_attendance a JOIN upcoming_programs p ON p.id = a.program_id
+                     WHERE a.member_id = $1 AND a.attendance_status = 'VALID' AND p.is_active = 1 AND p.parent_program_id IS NULL) AS attended,
+                   (SELECT count(*) FROM upcoming_programs WHERE is_active = 1 AND parent_program_id IS NULL AND (event_date IS NULL OR event_date <= CURRENT_DATE)) AS total`, [item.id]),
+  ]);
+  return { cards, accounts, docs, timeline: timeline.slice(0, 15), timelineTotal: timeline.length, changes, resets, kycId: kyc ? kyc.id : null, kycPhoto: kyc ? kyc.photo || '' : '', partnerServices, rating };
 }
 const renderMemberForm = async (res, item, values, errors = {}, status = 200) => res.status(status).render('admin/member-form', {
   title: item ? item.name_np || item.name : res.locals.t('नयाँ सदस्य', 'New member'), item, values, errors,
@@ -204,9 +264,28 @@ const renderMemberForm = async (res, item, values, errors = {}, status = 200) =>
 
 router.get('/members/new', requireAdmin('staff'), ah((req, res) => renderMemberForm(res, null, { approval_status: 'approved', is_active: 1 })));
 router.get('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
+  await require('../lib/member-portal').releaseExpiredCardLocks();
   const item = await memberById(req.params.id);
   if (!item) return next();
   await renderMemberForm(res, item, item);
+}));
+
+// member photo (members.php webcam / upload): stored on the linked KYM (SSOT), a KYM stub is made when there is none
+router.post('/members/:id/photo', requireAdmin('staff'), ...require('../lib/uploads').upload('kyc', [{ name: 'photo', kind: 'image' }], { private: true, maxMb: 5 }), ah(async (req, res, next) => {
+  const up = require('../lib/uploads');
+  const item = await memberById(req.params.id);
+  const stored = req.uploaded && req.uploaded.photo;
+  if (!item) { if (stored) up.remove(req, stored); return next(); }
+  const t = res.locals.t, back = `/admin/members/${item.id}#photo`;
+  if (req.uploadError || !stored) { flash(req, 'error', t('फोटो अपलोड भएन: ', 'Photo not saved: ') + (req.uploadError || t('फाइल छान्नुहोस्', 'choose a file'))); return res.redirect(back); }
+  const kym = require('../lib/kym');
+  const stub = await kym.ensureStubFromMember(item.id);
+  if (!stub) { up.remove(req, stored); flash(req, 'error', t('फोटोका लागि पहिले सदस्यता नम्बर राख्नुहोस्।', 'Set a membership number first — the photo is kept on the member\'s KYM.')); return res.redirect(back); }
+  const r = await kym.setPhoto(stub.id, stored);
+  if (r && r.old && r.old !== stored) up.remove(req, r.old);
+  await auth.audit(req, 'member_photo_update', 'members', item.id, `Member photo replaced (KYM #${stub.id})`);
+  flash(req, 'success', t('फोटो सुरक्षित भयो।', 'Photo saved.'));
+  res.redirect(back);
 }));
 
 async function saveMember(req, res, item) {
@@ -254,6 +333,42 @@ async function saveMember(req, res, item) {
     throw e;
   }
 }
+/**
+ * Notify an audience of members at once (legacy members.php notif_target=all): portal notification for every
+ * member (one set-wise INSERT), optional web push; SMS / email are admin-only and go through the daily caps.
+ */
+router.post('/members/notify-bulk', requireAdmin('staff'), ah(async (req, res) => {
+  const t = res.locals.t;
+  const audience = Object.hasOwn(AUDIENCE, req.body.audience) ? req.body.audience : 'active';
+  const title = String(req.body.title || '').trim().slice(0, 200);
+  const message = String(req.body.message || '').trim().slice(0, 2000);
+  const type = ['info', 'success', 'warning', 'error'].includes(req.body.type) ? req.body.type : 'info';
+  if (!title) { flash(req, 'error', t('शीर्षक राख्नुहोस्।', 'Enter a title.')); return res.redirect('/admin/members#notify-all'); }
+  const where = `deleted_at IS NULL AND ${AUDIENCE[audience]}`;
+  const ids = (await db.many(`INSERT INTO member_notifications (member_id, title, message, type, link, is_read, created_at)
+                              SELECT id, $1, $2, $3, '/member/notifications', 0, now() FROM members WHERE ${where} RETURNING member_id`, [title, message || null, type])).map(r => r.member_id);
+  const channels = ['portal'];
+  const isAdmin = auth.roleLevel(req.admin.role) >= auth.roleLevel('admin');
+  if (req.body.push === '1' && ids.length) { channels.push('push'); notify.later(() => require('../lib/push').sendToMembers(ids, { title, body: message, url: '/member/notifications' })); }
+  const wantSms = isAdmin && req.body.sms === '1', wantEmail = isAdmin && req.body.email === '1';
+  if ((wantSms || wantEmail) && ids.length) {
+    if (wantSms) channels.push('sms');
+    if (wantEmail) channels.push('email');
+    const site = res.locals.siteName || '';
+    // sequential, after the response; notify.sendSms / sendEmail stop at the tenant's daily limits
+    notify.later(async () => {
+      const rows = await db.many('SELECT phone, email FROM members WHERE id = ANY($1::int[])', [ids]);
+      for (const m of rows) {
+        if (wantSms && m.phone) await notify.sendSms('member_notice', m.phone, `${site}: ${title}${message ? ' — ' + message : ''}`.slice(0, 300));
+        if (wantEmail && m.email) await notify.sendEmail('member_notice', m.email, `${title} — ${site}`, message || title);
+      }
+    });
+  }
+  await auth.audit(req, 'notify_bulk', 'members', null, `Bulk notification "${title}" → ${ids.length} members (${audience}; ${channels.join('+')})`);
+  flash(req, 'success', t(`${ids.length} सदस्यलाई सूचना पठाइयो (${channels.join(', ')})।`, `Notification sent to ${ids.length} members (${channels.join(', ')}).`));
+  res.redirect('/admin/members');
+}));
+
 router.post('/members', requireAdmin('staff'), ah((req, res) => saveMember(req, res, null)));
 router.post('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
   const item = await memberById(req.params.id);
@@ -360,6 +475,7 @@ router.post('/members/:id/card/unlock', requireAdmin('admin'), ah(async (req, re
 
 // ---------------------------------------------------------------- member portal queue (admin/member-online-portal.php)
 router.get('/member-portal', requireAdmin('staff'), ah(async (req, res) => {
+  await require('../lib/member-portal').releaseExpiredCardLocks();
   const tab = ['pending', 'changes', 'cards', 'settings'].includes(req.query.tab) ? req.query.tab : 'pending';
   const [pending, changes, locked, counts] = await Promise.all([
     db.many("SELECT m.*, k.status AS kyc_status, k.full_name AS kyc_name FROM members m LEFT JOIN kyc_applications k ON k.id = m.kyc_application_id WHERE m.deleted_at IS NULL AND m.approval_status = 'pending' ORDER BY m.created_at DESC NULLS LAST, m.id DESC LIMIT 200"),
@@ -473,6 +589,24 @@ router.badges = ah(async (req, res, next) => {
     + (SELECT count(*) FROM member_profile_change_requests WHERE status = 'pending')
     + (SELECT count(*) FROM member_id_cards WHERE status = 'active' AND unlock_requested = 1 AND locked_at IS NOT NULL)
     + (SELECT count(*) FROM member_password_reset_requests WHERE status = 'pending')`)) || 0;
+  // admin-header.php bell: KYM risk reviews due, marketplace listings and programme attendance requests waiting
+  const extra = await db.one(`SELECT (SELECT count(*) FROM kyc_applications WHERE status = 'approved' AND risk_review_status = 'due_review' AND deleted_at IS NULL) AS kyc_risk,
+                                     (SELECT count(*) FROM member_marketplace_listings WHERE status = 'pending') AS marketplace,
+                                     (SELECT count(*) FROM member_program_attendance_requests WHERE status = 'pending') AS attendance`).catch(() => null);
+  if (extra) Object.assign(res.locals.pendingCounts, { _kycRisk: Number(extra.kyc_risk) || 0, _marketplace: Number(extra.marketplace) || 0, _attendance: Number(extra.attendance) || 0 });
+  // bell entries that are not inboxes: key → [href, [np, en], permission section]
+  res.locals.bellLinks = {
+    _memberPortal: ['/admin/member-portal', ['सदस्य पोर्टल अनुरोध', 'Member portal queue'], 'member_portal'],
+    _kycRisk: ['/admin/kyc-risk-reviews', ['KYM जोखिम पुनरावलोकन', 'KYM risk reviews due'], 'inbox:kyc'],
+    _marketplace: ['/admin/marketplace?status=pending', ['बजार सूची (स्वीकृतिका लागि)', 'Marketplace listings to approve'], 'marketplace'],
+    _attendance: ['/admin/programs/register?tab=requests', ['उपस्थिति अनुरोध', 'Attendance requests'], 'programs'],
+  };
+  // open the bell once whenever the waiting total grows (admin-header.php popup), not on every page
+  if (!req.path.endsWith('.json') && !(req.get('accept') || '').includes('application/json')) {
+    const total = Object.values(res.locals.pendingCounts).reduce((a, n) => a + (Number(n) || 0), 0);
+    res.locals.bellOpen = total > (Number(req.session.pendingSeen) || 0);
+    req.session.pendingSeen = total;
+  }
   next();
 });
 

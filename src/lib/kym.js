@@ -77,6 +77,37 @@ async function requireMemberIdAndMobile(memberId, mobile) {
   return { ok: true, member: m, kyc };
 }
 
+/**
+ * kyc-public-form.php verifyPublicFormKycByMemberId / ...ApprovedByMemberId: the newest non-rejected KYM of the
+ * Member ID (approved first) whose KYM mobile or ledger mobile equals the posted mobile. Returns { ok, kyc, member }.
+ */
+async function verifyForForm(memberId, mobile, { approved = false } = {}) {
+  const id = normalizeId(memberId);
+  if (!id) return err('सदस्यता नम्बर अनिवार्य छ।', 'Member ID is required.');
+  const kyc = await findKycByMemberId(id);
+  if (!kyc) return err('यो सदस्यता नम्बरको केवाइएम रेकर्ड भेटिएन।', 'No KYC record found for this Member ID.');
+  const member = await findMemberBySadasyata(id);
+  if (!phonesMatch(mobile, kyc.mobile) && !phonesMatch(mobile, member?.phone)) {
+    return { ...err('सदस्यता नम्बरसँग मोबाइल नम्बर मिलेन। KYM/सदस्यता दर्ता गर्दा दिएकै मोबाइल नम्बर लेख्नुहोस्।', 'Mobile number does not match this Member ID. Enter the mobile number given at KYC/registration.'), mismatch: true };
+  }
+  if (approved && kyc.status !== 'approved') return err('यो सेवा प्रयोग गर्न KYM verify (approved) हुनुपर्छ। कृपया पहिले केवाइएम स्वीकृत गराउनुहोस्।', 'KYC must be verified (approved) before using this service.');
+  return { ok: true, kyc, member };
+}
+
+/** Identity values a public form takes from the KYM (and the members row), never from the POST. */
+function identityFrom(kyc, member) {
+  const k = kyc || {}, m = member || {};
+  const s = v => (v == null ? '' : String(v).trim());
+  const perm = s(k.permanent_address) || s(m.address), temp = s(k.temporary_address);
+  return {
+    name: s(k.full_name) || s(m.name_np) || s(m.name), name_en: s(k.full_name_en) || s(m.name),
+    member_id: normalizeId(m.sadasyata_number || k.member_id), phone: normalizeMobile(k.mobile) || normalizeMobile(m.phone), email: s(k.email) || s(m.email),
+    address: [temp, perm].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(' / '), permanent_address: perm, temporary_address: temp,
+    citizenship_no: s(k.citizenship_no), citizenship_issued_place: s(k.citizenship_issued_place), citizenship_issued_date: s(k.citizenship_issued_date),
+    dob_bs: s(k.dob_bs), dob_ad: s(k.dob_ad), gender: s(k.gender) || s(m.gender), marital_status: s(k.marital_status), father_name: s(k.father_name), mother_name: s(k.mother_name),
+  };
+}
+
 /** Public path: never overwrite non-empty stored values (memberSsotMergePublicKycFillEmpty). */
 function mergeFillEmpty(existing, incoming) {
   const merged = { ...existing };
@@ -258,6 +289,11 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
     if (nid.length !== 14) return err('नेपालको लागि National ID नम्बर १४ अङ्कको हुनुपर्छ।', 'For Nepal, the National ID number should be 14 digits.');
     if (cit && nid === cit) return err('नागरिकता नम्बर र National ID नम्बर ठ्याक्कै एउटै हुन मिल्दैन।', 'Citizenship number and National ID number cannot be exactly the same.');
   }
+  const score = Number(data.photo_quality_score) || 0;
+  if (data.photo && score > 0 && score < 30) {
+    return err(`फोटो गुणस्तर धेरै कम छ (Score: ${score}/100)। राम्रो उज्यालोमा स्पष्ट अनुहार देखिने फोटो फेरि खिच्नुहोस्।`, `Photo quality is too low (score: ${score}/100). Please retake with better lighting and a clear face.`);
+  }
+  if (!data.photo) delete data.photo_quality_score; // the score belongs to a new photo only
   if (data.photo && !body.passport_face_confirm) return err('पासपोर्ट फोटो guideline पुष्टि गर्नुहोस् (दुवै आँखा र दुवै कान स्पष्ट देखिनुपर्छ)।', 'Please confirm the passport photo guidelines (eyes and both ears visible).');
   data.risk_category = REVIEW_YEARS[data.risk_category] ? data.risk_category : 'medium';
   data.want_id_card = body.want_id_card ? 1 : 0;
@@ -291,11 +327,25 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
     if (status === 'approved' || status === 'rejected') status = 'pending';
   } else {
     const { want_id_card: wantCard, ...mergeable } = row; // the card request is always taken as posted
-    const { merged, filled, blocked } = mergeFillEmpty(existing, mergeable);
+    // AML/CFT details live in one JSON column: fill empty keys one by one instead of all-or-nothing
+    let amlMerged = null, amlFilled = 0;
+    if (mod.amlCol && mergeable[mod.amlCol] && existing[mod.amlCol]) {
+      const parse = v => { try { const o = JSON.parse(v); return o && typeof o === 'object' ? o : {}; } catch { return {}; } };
+      const ex = parse(existing[mod.amlCol]), inc = parse(mergeable[mod.amlCol]);
+      for (const [key, val] of Object.entries(inc)) {
+        const empty = ex[key] == null || ex[key] === '' || (Array.isArray(ex[key]) && !ex[key].length);
+        if (empty && val != null && val !== '' && !(Array.isArray(val) && !val.length)) { ex[key] = val; amlFilled++; }
+      }
+      delete mergeable[mod.amlCol];
+      if (amlFilled) amlMerged = JSON.stringify(ex);
+    }
+    const m0 = mergeFillEmpty(existing, mergeable);
+    const merged = m0.merged, blocked = m0.blocked, filled = m0.filled + amlFilled;
+    if (amlMerged) merged[mod.amlCol] = amlMerged;
     if (filled < 1 && blocked > 0) {
       return err('नयाँ खाली field भेटिएन — पहिले भरिएको डेटा public बाट फेर्न मिल्दैन। परिवर्तनका लागि पोर्टल लगइन गर्नुहोस्।', 'Nothing new to add — existing fields stay locked on the public form. Log in to the member portal to request changes.');
     }
-    update = Object.fromEntries(Object.keys(mergeable).filter(k => merged[k] !== existing[k]).map(k => [k, merged[k]]));
+    update = Object.fromEntries(Object.keys(merged).filter(k => k in row && merged[k] !== existing[k]).map(k => [k, merged[k]]));
     update.want_id_card = wantCard;
     if (filled > 0) {
       if (status === 'rejected' || status === 'approved') status = 'pending';
@@ -310,8 +360,68 @@ async function submit(mod, data, { member = null, body = {} } = {}) {
   return { row: saved, updated: true };
 }
 
+/**
+ * memberSsotCompareSharedContact: shared fields that differ between a member row and its KYM
+ * (phone compared as normalised mobile). Returns [{ field: [np, en], member, kyc }].
+ */
+const SHARED_PAIRS = [['name', 'full_name_en', ['नाम (EN)', 'Name (EN)']], ['name_np', 'full_name', ['नाम (नेपाली)', 'Name (Nepali)']], ['phone', 'mobile', ['मोबाइल', 'Mobile']],
+  ['email', 'email', ['इमेल', 'Email']], ['address', 'permanent_address', ['ठेगाना', 'Address']], ['gender', 'gender', ['लिङ्ग', 'Gender']], ['dob', 'dob_ad', ['जन्म मिति', 'Date of birth']]];
+function compareShared(member, kyc) {
+  if (!member || !kyc) return [];
+  const out = [];
+  for (const [mc, kc, label] of SHARED_PAIRS) {
+    let mv = String(member[mc] ?? '').trim(), kv = String(kyc[kc] ?? '').trim();
+    if (mc === 'phone') { mv = normalizeMobile(mv); kv = normalizeMobile(kv); }
+    if (mc === 'email') { mv = mv.toLowerCase(); kv = kv.toLowerCase(); }
+    if (mc === 'dob') { mv = mv.slice(0, 10); kv = kv.slice(0, 10); }
+    if (!mv && !kv) continue;
+    if (mv !== kv) out.push({ field: label, member: mv || '—', kyc: kv || '—' });
+  }
+  return out;
+}
+
+/**
+ * memberSsotEnsureKycStubFromMember: the member's KYM, or a new `incomplete` stub built from the member row;
+ * members.kyc_application_id is linked either way. `extra` (father_name, citizenship_no …) only fills empty KYM fields.
+ * Returns { id, created } or null when the member has no Member ID.
+ */
+async function ensureStubFromMember(memberId, extra = {}) {
+  const m = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [memberId]);
+  const sid = m && normalizeId(m.sadasyata_number);
+  if (!sid) return null;
+  let k = await loadLinkedKyc(m);
+  let created = false;
+  if (!k) {
+    const row = {
+      tracking_id: require('./util').trackingId('KY'), status: 'incomplete', member_id: sid,
+      full_name: m.name_np || m.name, full_name_en: m.name || '', mobile: normalizeMobile(m.phone) || '', email: m.email || null,
+      permanent_address: m.address || null, gender: ['male', 'female', 'other'].includes(m.gender) ? m.gender : null, dob_ad: m.dob || null, created_at: new Date(),
+    };
+    k = await db.insert('kyc_applications', await db.pick('kyc_applications', row));
+    created = true;
+  }
+  if (Number(m.kyc_application_id) !== Number(k.id)) await linkMember(m.id, k.id);
+  const fill = Object.fromEntries(Object.entries(extra).filter(([key, v]) => v != null && String(v).trim() !== '' && String(k[key] ?? '').trim() === ''));
+  if (Object.keys(fill).length) {
+    await db.update('kyc_applications', k.id, await db.pick('kyc_applications', pii.encryptFields('kyc_applications', { ...fill, updated_at: new Date() }, db.currentSchema())));
+  }
+  return { id: k.id, created };
+}
+
+/**
+ * Replace the KYM photo (the member's photo lives on the KYM — SSOT; ID cards and the portal read it from there).
+ * Returns the previous stored path so the caller can delete the old file.
+ */
+async function setPhoto(kycId, stored) {
+  const k = await db.one('SELECT id, photo FROM kyc_applications WHERE id = $1 AND deleted_at IS NULL', [kycId]);
+  if (!k) return null;
+  await db.query('UPDATE kyc_applications SET photo = $1, photo_quality_score = NULL, updated_at = now() WHERE id = $2', [stored, k.id]);
+  return { id: k.id, old: k.photo || null };
+}
+
 module.exports = {
-  normalizeId, normalizeMobile, phonesMatch, findMemberBySadasyata, findKycByMemberId, loadLinkedKyc, requireMemberIdAndMobile,
+  compareShared, ensureStubFromMember, setPhoto,
+  normalizeId, normalizeMobile, phonesMatch, findMemberBySadasyata, findKycByMemberId, loadLinkedKyc, requireMemberIdAndMobile, verifyForForm, identityFrom,
   mergeFillEmpty, upsertMemberFromKyc, afterKycWrite, issueIdCard, autoIssueIdCard, applyStatus, refreshReviewCycle, markReviewed,
   submit, DOC_KEYS, REVIEW_YEARS,
 };

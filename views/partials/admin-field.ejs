@@ -2,18 +2,33 @@
   const fl = field; let val = values[fl.name]; if (val === undefined || val === null) val = '';
   if (val instanceof Date) val = fl.type === 'datetime' ? new Date(val.getTime() - val.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : val.toISOString().slice(0, 10);
   const err = errors[fl.name]; const id = 'f_' + fl.name; const label = t(fl.label[0], fl.label[1]);
-  const wide = ['textarea', 'richtext'].includes(fl.type); const opts = options[fl.name] || [];
+  const wide = ['textarea', 'richtext', 'icon', 'images'].includes(fl.type); const opts = options[fl.name] || [];
+  const locked = fl.readonlyOnEdit && locals.item;
 %>
 <div class="field <%= wide ? 'span-2' : '' %> <%= err ? 'has-error' : '' %>">
   <% if (fl.type === 'bool') { %>
     <label class="choice" style="margin-top:26px"><input type="checkbox" name="<%= fl.name %>" value="1" <%= Number(val) ? 'checked' : '' %>> <%= label %></label>
   <% } else { %>
-    <label for="<%= id %>"><%= label %><% if (fl.required) { %><span class="req">*</span><% } %></label>
+    <label for="<%= id %>" id="<%= id %>_l"><%= label %><% if (fl.required) { %><span class="req">*</span><% } %></label>
     <% if (fl.type === 'textarea' || fl.type === 'richtext') { %>
-      <textarea class="textarea" id="<%= id %>" name="<%= fl.name %>" rows="<%= fl.type === 'richtext' ? 10 : 4 %>"><%= val %></textarea>
-      <% if (fl.type === 'richtext') { %><div class="field-hint"><%= t('सादा पाठ वा HTML (p, strong, ul, li, a, img, table) प्रयोग गर्न सकिन्छ।', 'Plain text or basic HTML (p, strong, ul, li, a, img, table).') %></div><% } %>
+      <textarea class="textarea" id="<%= id %>" name="<%= fl.name %>" rows="<%= fl.type === 'richtext' ? 10 : 4 %>"<%= fl.type === 'richtext' ? ' data-richtext' : '' %>><%= val %></textarea>
+      <% if (fl.type === 'richtext') { %><div class="field-hint"><%= t('ढाँचा उपकरणपट्टी वा HTML (p, strong, ul, li, a, img, table) प्रयोग गर्न सकिन्छ; सुरक्षित गर्दा सफा गरिन्छ।', 'Use the toolbar or basic HTML (p, strong, ul, li, a, img, table); it is cleaned when saved.') %></div><% } %>
+    <% } else if (fl.type === 'readonly') { %>
+      <div class="input readonly-value"><%= val === '' ? '—' : val %></div>
+    <% } else if (fl.type === 'icon') { const names = locals.iconNames || []; const cur = String(val || ''); const legacy = cur && !names.includes(cur); %>
+      <input class="input icon-search" type="search" data-icon-search data-name="<%= fl.name %>" placeholder="<%= t('आइकन खोज्नुहोस् (जस्तै: bank, user)', 'Search all Lucide icons (e.g. bank, user)') %>" aria-label="<%= t('आइकन खोज्नुहोस्', 'Search icons') %>" aria-controls="<%= id %>_picker">
+      <div class="icon-picker" id="<%= id %>_picker" role="radiogroup" aria-labelledby="<%= id %>_l">
+        <% if (legacy) { %><label class="icon-opt" title="<%= cur %>"><input type="radio" name="<%= fl.name %>" value="<%= cur %>" checked><%- icon(cur) %><span class="sr-only"><%= cur %></span></label><% } %>
+        <% names.forEach(n => { %><label class="icon-opt" title="<%= n %>" data-tags="<%= locals.iconTags ? iconTags(n) : '' %>"><input type="radio" name="<%= fl.name %>" value="<%= n %>" <%= cur === n ? 'checked' : '' %>><%- icon(n) %><span class="sr-only"><%= n %></span></label><% }) %>
+      </div>
+      <% if (legacy) { %><div class="field-hint"><%= t('हालको आइकन', 'Current icon') %>: <code><%= cur %></code> → Lucide <code><%= iconName(cur) %></code></div><% } %>
+    <% } else if (fl.type === 'images') { let list = []; try { list = JSON.parse(val || '[]'); } catch { list = []; } if (!Array.isArray(list)) list = []; %>
+      <% if (list.length) { %><div class="thumb-grid"><% list.forEach(im => { %><label class="thumb-pick"><img class="thumb" src="<%= mediaUrl(im) %>" alt=""><span class="choice"><input type="checkbox" name="remove_<%= fl.name %>" value="<%= im %>"> <%= t('हटाउने', 'Remove') %></span></label><% }) %></div><% } %>
+      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" multiple accept="image/jpeg,image/png,image/webp,image/gif">
+      <div class="field-hint"><%= t('बढीमा', 'Up to') %> <%= num(fl.max || 10) %> <%= t('फोटो', 'photos') %></div>
     <% } else if (fl.type === 'select') { %>
       <select class="select" id="<%= id %>" name="<%= fl.name %>"><option value="">—</option>
+        <% if (val !== null && val !== undefined && String(val) !== '' && !opts.some(o => String(o[0]) === String(val))) { %><option value="<%= val %>" selected><%= val %></option><% } %>
         <% opts.forEach(o => { %><option value="<%= o[0] %>" <%= String(val) === String(o[0]) ? 'selected' : '' %>><%= t(o[1], o[2]) %></option><% }) %></select>
     <% } else if (fl.type === 'image' || fl.type === 'file') { %>
       <% if (val) { %><div class="file-current">
@@ -23,12 +38,13 @@
         <% } else { %><%- icon('file') %><a href="<%= mediaUrl(val) %>" target="_blank" rel="noopener"><%= String(val).split('/').pop() %></a><% } %>
         <label class="choice" style="padding:4px 10px"><input type="checkbox" name="remove_<%= fl.name %>" value="1"> <%= t('हटाउने', 'Remove') %></label>
       </div><% } %>
-      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" <%= fl.type === 'image' ? 'accept=image/jpeg,image/png,image/webp,image/gif' : '' %>>
+      <input class="input" type="file" id="<%= id %>" name="<%= fl.name %>" <%- fl.type === 'image' ? 'accept="image/jpeg,image/png,image/webp,image/gif"' : fl.kind === 'doc' ? 'accept=".pdf,.doc,.docx"' : '' %><% if (fl.type === 'image' && fl.capture) { %> data-capture-field="<%= fl.name %>" data-capture-file data-facing="<%= fl.capture %>" data-aspect="<%= fl.aspect || '' %>"<% } %>>
       <% if (fl.type === 'image') { %><div class="field-hint"><%= t('JPG/PNG/WebP, ८K (7680×4320) सम्म। सबै स्क्रिनका लागि साना-ठूला आकार (AVIF/WebP) आफैं बन्छन्। ब्यानर/स्लाइडका लागि कम्तीमा 1920px चौडा, उत्कृष्टका लागि 3840–7680px।', 'JPG/PNG/WebP up to 8K (7680×4320). Smaller sizes for every screen (AVIF/WebP) are made automatically. Banners/slides: at least 1920 px wide, best 3840–7680 px.') %></div><% } %>
     <% } else { %>
       <input class="input" id="<%= id %>" name="<%= fl.name %>" value="<%= val %>"
         type="<%= fl.type === 'date' ? 'date' : fl.type === 'datetime' ? 'datetime-local' : fl.type === 'color' ? 'color' : fl.type === 'url' ? 'url' : 'text' %>"
-        <%= fl.type === 'number' ? 'inputmode=decimal' : '' %>>
+        <%= fl.type === 'number' ? 'inputmode=decimal' : '' %><%= fl.type === 'date' && locals.bsDates ? ' data-ad-date' : '' %><%= locked ? ' disabled' : '' %>>
+      <% if (locked) { %><div class="field-hint"><%= t('यो कोड बदल्न मिल्दैन (अनुरोधहरूले प्रयोग गर्छन्)', 'This code cannot be changed (requests refer to it)') %></div><% } %>
     <% } %>
     <% if (fl.hint) { %><div class="field-hint"><%= fl.hint %></div><% } %>
   <% } %>

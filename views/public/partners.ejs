@@ -1,15 +1,55 @@
-<%- include('../partials/page-head', { lead: t('सदस्य परिचयपत्र देखाएर साझेदार संस्थामा छुट पाउनुहोस्।', 'Show your member card to get discounts at partner outlets.') }) %>
+<%- include('../partials/page-head', { lead: t('साझेदार संस्थामा सदस्यले पाउने सुविधाहरू — सदस्य परिचयपत्र देखाएर छुट पाउनुहोस्।', 'Benefits members get at partner organisations — show your member card for a discount.') }) %>
+<% const link = o => { const p = new URLSearchParams(); const v = { type, q, view: view === 'table' ? 'table' : '', ...o }; Object.entries(v).forEach(([k, x]) => { if (x) p.set(k, x); }); const s = p.toString(); return '/partner-facilities' + (s ? '?' + s : ''); }; %>
 <section class="section"><div class="container">
-  <% if (!partners.length) { %><div class="empty"><%= t('साझेदार सूची चाँडै।', 'Partners coming soon.') %></div><% } %>
+  <div class="flex gap-1 wrap mb-2">
+    <a class="btn btn-primary btn-sm" href="/verify"><%- icon('id') %><%= t('सदस्य कार्ड प्रमाणित', 'Verify member card') %></a>
+    <% if (!locals.plan || plan.has('member_portal')) { %><a class="btn btn-outline btn-sm" href="/member/login"><%- icon('user') %><%= t('सदस्य पोर्टल', 'Member portal') %></a><% } %>
+    <% if (!locals.plan || plan.allows('/apply/vendor')) { %><a class="btn btn-ghost btn-sm" href="/apply/vendor"><%- icon('store') %><%= t('साझेदार बन्नुहोस्', 'Become a partner') %></a><% } %>
+  </div>
+  <ol class="steps-3 mb-3">
+    <li><b><%= t('१. कार्ड देखाउनुहोस्', '1. Show your card') %></b><span class="small muted"><%= t('साझेदार काउन्टरमा सदस्य परिचयपत्र (वा डिजिटल कार्ड) देखाउनुहोस्।', 'Show your member ID card (or the digital card) at the partner counter.') %></span></li>
+    <li><b><%= t('२. प्रमाणीकरण', '2. Verification') %></b><span class="small muted"><%= t('साझेदारले QR वा सदस्य नम्बरबाट कार्ड प्रमाणित गर्छ।', 'The partner verifies the card by QR or member number.') %></span></li>
+    <li><b><%= t('३. छुट पाउनुहोस्', '3. Get the discount') %></b><span class="small muted"><%= t('तोकिएको छुट वा सुविधा पाउनुहोस्।', 'Receive the listed discount or benefit.') %></span></li>
+  </ol>
+
+  <% if (featured.length) { %><div class="featured-strip mb-2" aria-label="<%= t('विशेष साझेदार', 'Featured partners') %>"><% featured.forEach(p => { %><a class="tab" href="#partner-<%= p.id %>"><%- icon('star') %> <%= f(p, 'partner_name') %><% if (p.discount) { %> · <b style="font-weight:600"><%= p.discount %></b><% } %></a><% }) %></div><% } %>
+
+  <form class="filter-pills" method="get" action="/partner-facilities" role="search">
+    <% if (type) { %><input type="hidden" name="type" value="<%= type %>"><% } %>
+    <% if (view === 'table') { %><input type="hidden" name="view" value="table"><% } %>
+    <input class="input" type="search" name="q" value="<%= q %>" maxlength="80" placeholder="<%= t('नाम, स्थान वा सुविधा खोज्नुहोस्', 'Search name, place or benefit') %>" aria-label="<%= t('खोज', 'Search') %>" style="max-width:280px" data-live-filter="[data-partner]">
+    <button class="btn btn-outline btn-sm"><%- icon('search') %><%= t('खोज्नुहोस्', 'Search') %></button>
+    <span class="grow"></span>
+    <a class="tab <%= view === 'cards' ? 'active' : '' %>" href="<%= link({ view: '' }) %>"><%= t('कार्ड', 'Cards') %></a>
+    <a class="tab <%= view === 'table' ? 'active' : '' %>" href="<%= link({ view: 'table' }) %>"><%= t('तालिका', 'Table') %></a>
+  </form>
+  <% if (Object.keys(typeCounts).length > 1) { %><nav class="tabs" aria-label="<%= t('प्रकार', 'Type') %>">
+    <a class="tab <%= !type ? 'active' : '' %>" href="<%= link({ type: '' }) %>"><%= t('सबै', 'All') %> (<%= num(total) %>)</a>
+    <% Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).forEach(([k, n]) => { %><a class="tab <%= type === k ? 'active' : '' %>" href="<%= link({ type: k }) %>"><%= k %> (<%= num(n) %>)</a><% }) %>
+  </nav><% } %>
+
+  <% if (!partners.length) { %><div class="empty"><%= total ? t('मिल्ने साझेदार भेटिएन।', 'No matching partners.') : t('छिट्टै आउँदैछ — साझेदार बन्न आवेदन दिनुहोस्।', 'Coming soon — apply to become a partner.') %><% if (!total) { %> <a href="/apply/vendor"><%= t('आवेदन', 'Apply') %></a><% } %></div><% } %>
+  <% if (view === 'table' && partners.length) { %>
+    <div class="table-wrap"><table class="table"><thead><tr><th><%= t('साझेदार', 'Partner') %></th><th><%= t('प्रकार', 'Type') %></th><th><%= t('स्थान', 'Location') %></th><th><%= t('छुट', 'Discount') %></th><th><%= t('सम्पर्क', 'Contact') %></th></tr></thead><tbody>
+      <% partners.forEach(p => { %><tr data-partner id="partner-<%= p.id %>"><td><%= f(p, 'partner_name') %><% if (p.partner_code) { %> <span class="faint small">#<%= p.partner_code %></span><% } %></td><td><%= p.facility_type || '' %></td><td><%= p.location || '' %></td><td><%= p.discount %></td><td class="small"><%= p.contact_phone || '' %> <%= p.contact_email || '' %></td></tr><% }) %>
+    </tbody></table></div>
+  <% } else { %>
   <div class="grid grid-3"><% partners.forEach(p => { %>
-    <div class="card">
+    <div class="card" data-partner id="partner-<%= p.id %>">
       <div class="flex gap-2 items-center mb-2">
         <% if (p.logo_path) { %><img src="<%= mediaUrl(p.logo_path) %>"<%- srcset(p.logo_path, '52px') %> alt="" style="width:52px;height:52px;object-fit:contain;border-radius:10px;border:1px solid var(--line)"><% } else { %><span class="icon-tile" style="margin:0"><%- icon('store') %></span><% } %>
-        <div><h3 class="mb-0"><%= f(p, 'partner_name') %></h3><div class="small muted"><%= p.facility_type || '' %> <%= p.location ? '· ' + p.location : '' %></div></div>
+        <div><h3 class="mb-0"><%= f(p, 'partner_name') %><% if (Number(p.is_featured)) { %> <span class="badge badge-brand"><%= t('विशेष', 'Featured') %></span><% } %></h3><div class="small muted"><%= p.facility_type || '' %> <%= p.location ? '· ' + p.location : '' %></div></div>
       </div>
-      <% if (p.discount_percent || p.discount_label) { %><span class="badge badge-ok" style="font-size:.85rem"><%= p.discount_label || num(p.discount_percent) + '% ' + t('छुट', 'off') %></span><% } %>
-      <p class="muted small mt-1"><%= util.excerpt(f(p, 'description'), 140) %></p>
-      <% if (p.contact_phone) { %><div class="small"><%- icon('phone') %> <%= p.contact_phone %></div><% } %>
+      <% if (p.discount) { %><span class="badge badge-ok" style="font-size:.85rem"><%= p.discount %></span><% } %>
+      <p class="muted small mt-1"><%= util.excerpt(f(p, 'description'), 160) %></p>
+      <% if (p.terms_np) { %><details class="small"><summary><%= t('सर्तहरू', 'Terms') %></summary><p class="muted"><%= p.terms_np %></p></details><% } %>
+      <div class="small mt-1">
+        <% if (p.contact_phone) { %><div><%- icon('phone') %> <a href="tel:<%= p.contact_phone %>"><%= p.contact_phone %></a></div><% } %>
+        <% if (p.contact_email) { %><div><%- icon('mail') %> <a href="mailto:<%= p.contact_email %>"><%= p.contact_email %></a></div><% } %>
+        <% if (p.site) { %><div><%- icon('globe') %> <a href="<%= p.site %>" target="_blank" rel="noopener"><%= p.site.replace(/^https?:\/\//, '').slice(0, 40) %></a></div><% } %>
+        <% if (p.partner_code) { %><div class="faint"><%= t('डेस्क कोड: ', 'Desk code: ') %><%= p.partner_code %></div><% } %>
+      </div>
     </div>
   <% }) %></div>
+  <% } %>
 </div></section>

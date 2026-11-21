@@ -22,7 +22,7 @@ async function verifyPin(partner, pin) {
   return p ? auth.checkPassword(p, partner.pin_hash) : false;
 }
 
-/** PIN: 4–12 digits/letters; null clears it. */
+/** PIN: 6–12 digits/letters (stricter than the PHP 4); null clears it. */
 async function setPin(partnerId, pin) {
   const hash = pin ? await auth.hashPassword(String(pin).trim()) : null;
   const row = await db.one('SELECT partner_code FROM partner_facilities WHERE id = $1', [partnerId]);

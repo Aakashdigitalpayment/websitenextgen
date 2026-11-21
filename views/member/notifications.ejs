@@ -1,5 +1,11 @@
-<div class="content-head"><h1><%= title %></h1></div>
+<div class="content-head"><h1><%= title %></h1>
+  <% if (rows.some(n => !Number(n.is_read))) { %><form method="post" action="/member/notifications/read-all"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-outline btn-sm"><%- icon('check') %><%= t('सबै पढियो', 'Mark all read') %></button></form><% } %></div>
 <% if (!rows.length) { %><div class="empty"><%= t('कुनै सूचना छैन।', 'No notifications.') %></div><% } %>
-<div class="card" style="padding:4px 22px"><ul class="list"><% rows.forEach(n => { %>
-  <li class="list-item"><span class="icon-tile" style="margin:0;width:36px;height:36px"><%- icon('bell') %></span><div class="grow"><div style="font-weight:<%= n.is_read ? 400 : 500 %>"><%= n.title %></div><% if (n.message) { %><div class="small muted"><%= n.message %></div><% } %><div class="small faint"><%= bsDate(n.created_at) %></div></div><% if (n.link && /^\/(?!\/)/.test(n.link)) { %><a class="btn btn-ghost btn-sm" href="<%= n.link %>"><%- icon('right') %></a><% } %></li>
+<div class="card" style="padding:4px 22px"><ul class="list"><% rows.forEach(n => { const unread = !Number(n.is_read); const link = n.link && /^\/(?!\/)/.test(n.link); %>
+  <li class="list-item"><span class="icon-tile" style="margin:0;width:36px;height:36px"><%- icon('bell') %></span>
+    <div class="grow"><div style="font-weight:<%= unread ? 600 : 400 %>"><%= n.title %><% if (unread) { %> <span class="badge badge-info"><%= t('नयाँ', 'New') %></span><% } %></div><% if (n.message) { %><div class="small muted"><%= n.message %></div><% } %><div class="small faint"><%= bsDate(n.created_at) %></div></div>
+    <% if (unread || link) { %><form method="post" action="/member/notifications/<%= n.id %>/read" class="flex gap-1"><input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% if (unread) { %><button class="btn btn-ghost btn-sm" title="<%= t('पढियो', 'Mark read') %>" aria-label="<%= t('पढियो', 'Mark read') %>"><%- icon('check') %></button><% } %>
+      <% if (link) { %><button class="btn btn-ghost btn-sm" name="go" value="1" aria-label="<%= t('खोल्नुहोस्', 'Open') %>"><%- icon('right') %></button><% } %>
+    </form><% } %></li>
 <% }) %></ul></div>

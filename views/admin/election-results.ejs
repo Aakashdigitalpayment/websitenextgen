@@ -25,7 +25,7 @@
 <div class="grid no-print" style="grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:20px">
   <div class="card"><h3><%= t('नतिजा अन्तिम गर्नुहोस्', 'Finalise results') %></h3>
     <p class="small muted"><%= t('नतिजा अन्तिम गर्दा मतदान बन्द हुन्छ।', 'Finalising closes voting for this election.') %></p>
-    <form method="post" action="/admin/elections/<%= cycle.id %>/finalize"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-primary" data-confirm="<%= t('नतिजा अन्तिम गरी मतदान बन्द गर्ने?', 'Finalise results and close voting?') %>" <%= Number(cycle.results_finalized) ? 'disabled' : '' %>><%- icon('check') %><%= t('अन्तिम गर्नुहोस्', 'Finalise') %></button></form>
+    <form method="post" action="/admin/elections/<%= cycle.id %>/finalize"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" class="btn btn-primary" data-confirm="<%= t('नतिजा अन्तिम गरी मतदान बन्द गर्ने?', 'Finalise results and close voting?') %>" <%= Number(cycle.results_finalized) ? 'disabled' : '' %>><%- icon('check') %><%= t('अन्तिम गर्नुहोस्', 'Finalise') %></button></form>
   </div>
   <div class="card"><h3><%= t('विजेतालाई समिति सदस्य बनाउनुहोस्', 'Winners → committee members') %></h3>
     <p class="small muted"><%= t('समिति तोकिएका प्रत्येक पदका विजेता (सिट संख्या बराबर) नयाँ कार्यकालमा थपिन्छन्; पुरानो कार्यकाल "हालको" रहँदैन।', 'Winners of every position linked to a committee (as many as its seats) are added to a new current tenure of that committee.') %> (<%= num(committees) %> <%= t('पद तयार', 'positions ready') %>)</p>
@@ -37,7 +37,7 @@
         <div class="field"><label for="sd"><%= t('सुरु मिति', 'Start date') %></label><input class="input" type="date" id="sd" name="start_date" value="<%= convertDefaults.start %>"></div>
         <div class="field"><label for="ed"><%= t('अन्त्य मिति', 'End date') %></label><input class="input" type="date" id="ed" name="end_date" value="<%= convertDefaults.end %>"></div>
       </div>
-      <button class="btn btn-outline mt-2" data-confirm="<%= t('विजेतालाई समिति सदस्यमा रूपान्तरण गर्ने? मतदान बन्द हुनेछ।', 'Convert winners into committee members? Voting will close.') %>" <%= closed ? '' : 'disabled' %>><%- icon('users') %><%= t('रूपान्तरण गर्नुहोस्', 'Convert winners') %></button>
+      <button type="submit" class="btn btn-outline mt-2" data-confirm="<%= t('विजेतालाई समिति सदस्यमा रूपान्तरण गर्ने? मतदान बन्द हुनेछ।', 'Convert winners into committee members? Voting will close.') %>" <%= closed ? '' : 'disabled' %>><%- icon('users') %><%= t('रूपान्तरण गर्नुहोस्', 'Convert winners') %></button>
     </form>
   </div>
 </div>

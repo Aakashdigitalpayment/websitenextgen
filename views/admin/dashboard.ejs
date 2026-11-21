@@ -4,7 +4,30 @@
   <a class="kpi card-link" href="/admin/members?status=pending"><div class="l"><%= t('स्वीकृति बाँकी', 'Pending approval') %></div><div class="v"><%= num(stats.pendingMembers) %></div></a>
   <a class="kpi card-link" href="/admin/r/notices"><div class="l"><%= t('सक्रिय सूचना', 'Active notices') %></div><div class="v"><%= num(stats.notices) %></div></a>
   <a class="kpi card-link" href="/admin/r/news"><div class="l"><%= t('समाचार', 'News') %></div><div class="v"><%= num(stats.news) %></div></a>
+  <% if (w.kyc) { %><a class="kpi card-link" href="/admin/inbox/kyc"><div class="l"><%= t('KYC बाँकी', 'KYC pending') %></div><div class="v"><%= num(w.kyc.pending) %></div></a>
+  <a class="kpi card-link" href="/admin/kyc-risk-reviews"><div class="l"><%= t('KYC पुनरावलोकन', 'KYC due review') %></div><div class="v"><%= num(w.kyc.due) %></div></a><% } %>
+  <% if (w.loans !== undefined && w.loans !== null) { %><a class="kpi card-link" href="/admin/inbox/loan"><div class="l"><%= t('ऋण आवेदन बाँकी', 'Loans pending') %></div><div class="v"><%= num(w.loans) %></div></a><% } %>
+  <% if (w.pwRequests !== undefined && w.pwRequests !== null) { %><a class="kpi card-link" href="/admin/password-requests"><div class="l"><%= t('पासवर्ड अनुरोध', 'Password requests') %></div><div class="v"><%= num(w.pwRequests) %></div></a><% } %>
 </div>
+<% const tabs = [['office', t('कार्यालय', 'Office')], ...(w.pendingMembers ? [['members', t('सदस्य', 'Members')]] : []), ...(w.welfare ? [['welfare', t('कल्याण', 'Welfare')]] : []), ...(w.programs ? [['programs', t('कार्यक्रम', 'Programmes')]] : []), ...(w.credentials && w.credentials.length ? [['credentials', t('पासवर्ड', 'Credentials')]] : [])]; %>
+<% if (tabs.length > 1) { %><div class="tabs"><% tabs.forEach(([k, l]) => { %><a class="tab <%= tab === k ? 'active' : '' %>" href="?tab=<%= k %>"><%= l %></a><% }) %></div><% } %>
+<% if (tab === 'members' && w.pendingMembers) { %>
+  <div class="card"><h3><%= t('स्वीकृति बाँकी सदस्य', 'Members waiting for approval') %></h3>
+    <% if (!w.pendingMembers.length) { %><p class="muted"><%= t('कोही छैन।', 'None.') %></p><% } %>
+    <table class="table"><tbody><% w.pendingMembers.forEach(m => { %><tr><td><a href="/admin/members/<%= m.id %>"><%= m.name_np || m.name %></a></td><td class="small"><%= m.phone || '' %></td><td class="small faint text-right"><%= bsDate(m.created_at) %></td></tr><% }) %></tbody></table>
+    <a class="btn btn-outline btn-sm mt-1" href="/admin/members?status=pending"><%= t('सबै हेर्नुहोस्', 'See all') %></a></div>
+<% } else if (tab === 'welfare' && w.welfare) { %>
+  <div class="kpis"><a class="kpi card-link" href="/admin/inbox/welfare?status=pending"><div class="l"><%= t('बाँकी', 'Pending') %></div><div class="v"><%= num(w.welfare.counts.pending) %></div></a><a class="kpi card-link" href="/admin/inbox/welfare?status=under_review"><div class="l"><%= t('पुनरावलोकनमा', 'Under review') %></div><div class="v"><%= num(w.welfare.counts.review) %></div></a><a class="kpi card-link" href="/admin/inbox/welfare?status=approved"><div class="l"><%= t('स्वीकृत', 'Approved') %></div><div class="v"><%= num(w.welfare.counts.approved) %></div></a></div>
+  <div class="grid grid-2"><div class="card"><h3><%= t('प्रकार अनुसार', 'By type') %></h3><table class="table"><tbody><% w.welfare.byType.forEach(x => { %><tr><td><%= x.claim_type %></td><td class="text-right"><%= num(x.n) %></td><td class="text-right small"><%= money(x.amount) %></td></tr><% }) %></tbody></table></div>
+  <div class="card"><h3><%= t('पछिल्ला दाबी', 'Recent claims') %></h3><table class="table"><tbody><% w.welfare.recent.forEach(x => { %><tr><td><a href="/admin/inbox/welfare/<%= x.id %>"><%= x.claim_type %></a></td><td class="small"><%= money(x.claim_amount) %></td><td><span class="badge"><%= statusLabel(x.status) %></span></td></tr><% }) %></tbody></table></div></div>
+<% } else if (tab === 'programs' && w.programs) { %>
+  <div class="kpis"><a class="kpi card-link" href="/admin/programs"><div class="l"><%= t('कुल उपस्थिति', 'Check-ins') %></div><div class="v"><%= num(w.programs.totals.total) %></div></a><div class="kpi"><div class="l"><%= t('फरक सदस्य', 'Unique members') %></div><div class="v"><%= num(w.programs.totals.members) %></div></div><a class="kpi card-link" href="/admin/programs"><div class="l"><%= t('स्वीकृति बाँकी', 'Pending requests') %></div><div class="v"><%= num(w.programs.pending) %></div></a></div>
+  <div class="grid grid-2"><div class="card"><h3><%= t('पछिल्ला उपस्थिति', 'Recent check-ins') %></h3><table class="table"><tbody><% w.programs.recent.forEach(x => { %><tr><td><%= x.name_np || x.name || x.member_card_no || '' %></td><td class="small"><%= x.program_title || '' %></td><td class="small faint text-right"><%= x.attended_at ? bsDate(x.attended_at) : '' %></td></tr><% }) %></tbody></table></div>
+  <div class="card"><h3><%= t('मुख्य कार्यक्रम', 'Top programmes') %></h3><table class="table"><tbody><% w.programs.top.forEach(x => { %><tr><td><%= x.title %></td><td class="text-right"><%= num(x.n) %></td></tr><% }) %></tbody></table></div></div>
+<% } else if (tab === 'credentials' && w.credentials) { %>
+  <div class="card"><h3><%= t('छिटो खोल्ने', 'Quick launch') %> <a class="small" href="/admin/credentials"><%= t('पासवर्ड हेर्न', 'Reveal passwords') %></a></h3>
+    <div class="table-wrap"><table class="table"><tbody><% w.credentials.forEach(c => { %><tr><td><span class="badge"><%= c.category %></span> <%= c.site_name %></td><td><code><%= c.username %></code> <button class="btn btn-ghost btn-sm" type="button" data-copy-text="<%= c.username %>"><%= t('कपी', 'Copy') %></button></td><td><% if (/^https?:\/\//i.test(c.site_url || '')) { %><a class="btn btn-outline btn-sm" href="<%= c.site_url %>" target="_blank" rel="noopener noreferrer"><%- icon('link') %><%= t('खोल्ने', 'Open') %></a><% } %></td></tr><% }) %></tbody></table></div></div>
+<% } else { %>
 <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
   <div class="card" style="padding:0">
     <div class="flex justify-between items-center" style="padding:16px 20px;border-bottom:1px solid var(--line)"><h3 class="mb-0"><%= t('पछिल्ला आवेदन', 'Recent submissions') %></h3></div>
@@ -36,3 +59,6 @@
     </div>
   </div>
 </div>
+<% if (w.activity && w.activity.length) { %><div class="card mt-2"><h3><%= t('पछिल्ला प्रशासनिक गतिविधि', 'Recent admin activity') %> <a class="small" href="/admin/audit"><%= t('अडिट लग', 'Audit log') %></a></h3>
+  <table class="table"><tbody><% w.activity.forEach(a => { %><tr><td class="small"><%= a.actor_name || '' %></td><td><span class="badge"><%= a.action %></span></td><td class="small"><%= util.excerpt(a.summary, 90) %></td><td class="small faint text-right"><%= bsDate(a.created_at) %></td></tr><% }) %></tbody></table></div><% } %>
+<% } %>

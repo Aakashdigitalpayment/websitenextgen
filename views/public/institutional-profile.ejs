@@ -1,22 +1,76 @@
 <%- include('../partials/page-head', { crumbs: [['/about', t('हाम्रो बारेमा', 'About')]], lead: latest ? t('आर्थिक वर्ष ', 'Fiscal year ') + num(latest.fiscal_year) : '' }) %>
+<% const MONTHS = lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP;
+   const has = (r, k) => Object.prototype.hasOwnProperty.call(r, k) && r[k] !== null && r[k] !== '' && Number(r[k]) !== 0;
+   const pct = (r, k) => has(r, k) ? '<span class="ip-chip' + (Number(r[k]) < 0 ? ' is-down' : '') + '">' + (Number(r[k]) > 0 ? '▲ ' : '▼ ') + num(Math.abs(Number(r[k])).toFixed(2).replace(/\.?0+$/, '')) + '%</span>' : '';
+   const rs = v => t('रु. ', 'Rs. ') + money(v);
+   const period = r => Number(r.report_month) ? MONTHS[r.report_month - 1] + ' ' + num(r.fiscal_year) : t('वार्षिक', 'Annual') + ' · ' + t('आ.व. ', 'FY ') + num(r.fiscal_year); %>
 <section class="section"><div class="container">
-  <% if (!latest) { %><div class="empty"><%= t('विवरण चाँडै।', 'Coming soon.') %></div><% } else { %>
-  <div class="grid grid-4">
-    <% [['total_members', t('कुल सदस्य', 'Members'), false], ['share_capital', t('शेयर पुँजी', 'Share capital'), true], ['deposit', t('कुल बचत', 'Deposits'), true], ['loan', t('कुल ऋण', 'Loans'), true], ['total_assets', t('कुल सम्पत्ति', 'Total assets'), true], ['other_fund', t('अन्य कोष', 'Other funds'), true], ['npa_percent', t('निष्क्रिय कर्जा', 'NPA'), false], ['profit_loss', t('नाफा/नोक्सान', 'Profit / loss'), true]].forEach(([k, label, isMoney]) => { if (latest[k] !== null && latest[k] !== undefined && latest[k] !== 0) { %>
-      <div class="card card-flat"><div class="small muted"><%= label %></div><div class="stat-value mt-1"><%= isMoney ? t('रु. ', 'Rs. ') + money(latest[k]) : (k === 'npa_percent' ? num(latest[k]) + '%' : num(Number(latest[k]).toLocaleString('en-IN'))) %></div></div>
-    <% } }) %>
+  <% if (locked) { %>
+  <div class="card mb-3 no-print" id="unlock">
+    <b style="font-weight:600"><%- icon('shield') %> <%= t(num(locked) + ' विवरण सदस्यका लागि मात्र', num(locked) + ' records are for members only') %></b>
+    <form class="flex gap-1 wrap mt-2" method="post" action="/reports/unlock">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="next" value="/institutional-profile">
+      <input class="input" name="membership_no" required maxlength="50" autocomplete="off" placeholder="<%= t('सदस्यता नम्बर', 'Membership number') %>" aria-label="<%= t('सदस्यता नम्बर', 'Membership number') %>" style="max-width:220px">
+      <input class="input" name="mobile" required inputmode="numeric" maxlength="14" autocomplete="tel" placeholder="<%= t('दर्ता भएको मोबाइल', 'Registered mobile') %>" aria-label="<%= t('दर्ता भएको मोबाइल', 'Registered mobile') %>" style="max-width:200px">
+      <button class="btn btn-primary"><%= t('खोल्नुहोस्', 'Unlock') %></button>
+      <a class="btn btn-ghost" href="/member/login?next=/institutional-profile"><%= t('सदस्य लगइन', 'Member login') %></a>
+    </form>
+    <% if (unlockError) { %><div class="field-error mt-1"><%= unlockError %></div><% } %>
   </div>
-  <% if (latest.attachment_path) { %><p class="mt-2"><a class="btn btn-outline btn-sm" href="/institutional-profile/<%= latest.id %>/file" target="_blank" rel="noopener"><%- icon('file') %><%= t('प्रतिवेदन हेर्नुहोस्', 'View report') %></a></p><% } %>
+  <% } %>
+
+  <% if (total) { %>
+  <form class="filter-pills no-print" method="get" action="/institutional-profile">
+    <label class="small muted" for="ip-fy"><%= t('आर्थिक वर्ष', 'Fiscal year') %></label>
+    <select class="input" id="ip-fy" name="fy" data-autosubmit style="max-width:150px"><option value=""><%= t('सबै', 'All') %></option><% fys.forEach(y => { %><option value="<%= y %>" <%= y === fy ? 'selected' : '' %>><%= num(y) %></option><% }) %></select>
+    <label class="small muted" for="ip-month"><%= t('महिना', 'Month') %></label>
+    <select class="input" id="ip-month" name="month" data-autosubmit style="max-width:150px"><option value=""><%= t('सबै', 'All') %></option><option value="0" <%= month === 0 ? 'selected' : '' %>><%= t('वार्षिक', 'Annual') %></option><% MONTHS.forEach((m, i) => { %><option value="<%= i + 1 %>" <%= month === i + 1 ? 'selected' : '' %>><%= m %></option><% }) %></select>
+    <noscript><button class="btn btn-outline btn-sm"><%= t('हेर्नुहोस्', 'Show') %></button></noscript>
+    <a class="tab <%= !filtered && !showAll ? 'active' : '' %>" href="/institutional-profile"><%= t('पछिल्ला २', 'Latest 2') %></a>
+    <a class="tab <%= showAll && !filtered ? 'active' : '' %>" href="/institutional-profile?all=1"><%= t('सबै', 'All') %> (<%= num(total) %>)</a>
+    <button type="button" class="btn btn-ghost btn-sm" data-print><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></button>
+  </form>
+  <% } %>
+
+  <% if (!latest) { %><div class="empty"><%= total ? t('यो छनोटमा विवरण छैन।', 'No records for this selection.') : t('विवरण चाँडै।', 'Coming soon.') %></div><% } else { %>
+  <div class="grid grid-2">
+    <% rows.forEach(r => { const reserve = Number(r.reserved_fund) || 0, other = Number(r.other_fund) || 0; %>
+    <div class="card ip-card">
+      <div class="flex justify-between items-center gap-1 wrap"><h3 class="mb-0"><%= period(r) %></h3>
+        <span class="small muted"><%= r.report_date_bs ? t('मिति ', 'As of ') + num(r.report_date_bs) : '' %><% if (r.access_level === 'member') { %> <span class="badge"><%= t('सदस्य', 'Members') %></span><% } %></span></div>
+      <div class="kv mt-2">
+        <% if (has(r, 'total_members')) { %><div><%= t('कुल सदस्य', 'Members') %><% if (has(r, 'total_balance_member')) { %><div class="small faint"><%= t('सक्रिय (मौज्दात भएका) ', 'Active (with balance) ') + num(Number(r.total_balance_member).toLocaleString('en-IN')) %></div><% } %></div><div><%= num(Number(r.total_members).toLocaleString('en-IN')) %></div><% } %>
+        <% if (has(r, 'share_capital')) { %><div><%= t('शेयर पुँजी', 'Share capital') %><%- pct(r, 'share_capital_percent') %></div><div><%= rs(r.share_capital) %></div><% } %>
+        <% if (has(r, 'reserved_fund')) { %><div><%= t('जगेडा कोष', 'Reserve fund') %><%- pct(r, 'reserved_fund_percent') %></div><div><%= rs(reserve) %></div><% } %>
+        <% if (has(r, 'other_fund')) { %><div><%= t('अन्य कोष', 'Other funds') %></div><div><%= rs(other) %></div><% } %>
+        <% if (reserve || other) { %><div><%= t('संस्थागत पुँजी', 'Institutional capital') %></div><div><%= rs(reserve + other) %></div><% } %>
+        <% if (has(r, 'deposit')) { %><div><%= t('कुल बचत', 'Deposits') %><%- pct(r, 'deposit_percent') %></div><div><%= rs(r.deposit) %></div><% } %>
+        <% if (has(r, 'loan')) { %><div><%= t('ऋण लगानी', 'Loans') %><%- pct(r, 'loan_percent') %><% if (has(r, 'total_loan_members')) { %><div class="small faint"><%= t('ऋणी ', 'Borrowers ') + num(Number(r.total_loan_members).toLocaleString('en-IN')) %></div><% } %></div><div><%= rs(r.loan) %></div><% } %>
+        <% if (has(r, 'total_loan_reserve_fund')) { %><div><%= t('कर्जा नोक्सानी व्यवस्था', 'Loan loss provision') %><%- pct(r, 'total_loan_reserve_percent') %></div><div><%= rs(r.total_loan_reserve_fund) %></div><% } %>
+        <% if (has(r, 'bank_cash_balance')) { %><div><%= t('तरलता (बैंक/नगद)', 'Liquidity (bank & cash)') %><% if (has(r, 'liquidity_percent')) { %> <span class="small faint"><%= num(r.liquidity_percent) %>%</span><% } %></div><div><%= rs(r.bank_cash_balance) %></div><% } %>
+        <% if (has(r, 'fixed_assets')) { %><div><%= t('स्थिर सम्पत्ति', 'Fixed assets') %></div><div><%= rs(r.fixed_assets) %></div><% } %>
+        <% if (has(r, 'total_assets')) { %><div><%= t('कुल सम्पत्ति', 'Total assets') %></div><div><%= rs(r.total_assets) %></div><% } %>
+        <% const npl = has(r, 'npl_percent') ? r.npl_percent : has(r, 'npa_percent') ? r.npa_percent : null; if (npl !== null) { %><div><%= t('निष्क्रिय कर्जा', 'Non-performing loans') %></div><div><%= num(npl) %>%</div><% } %>
+        <% const profit = has(r, 'net_profit') ? r.net_profit : has(r, 'profit_loss') ? r.profit_loss : null; if (profit !== null) { %><div><%= t('खुद नाफा/नोक्सान', 'Net profit / loss') %></div><div><%= rs(profit) %></div><% } %>
+      </div>
+      <% if (r.report_note) { %><p class="small muted mt-2"><%= r.report_note %></p><% } %>
+      <% if (r.attachment_path) { %><a class="btn btn-outline btn-sm mt-2 no-print" href="/institutional-profile/<%= r.id %>/file?nav=1" target="_blank" rel="noopener"><%- icon('file') %><%= t('प्रतिवेदन हेर्नुहोस्', 'View report') %></a><% } %>
+    </div>
+    <% }) %>
+  </div>
+
   <% if (locals.welfare && welfare.length) { const top = Math.max(1, ...welfare.map(w => w.amount)); %>
   <h2 class="mt-4"><%= t('सदस्य राहत (कुल)', 'Member welfare paid (cumulative)') %></h2>
   <div class="card mt-2"><% welfare.forEach(w => { %>
     <div class="mb-2"><div class="flex justify-between small"><span><%= t(w.label[0], w.label[1]) %> · <%= num(w.count) %> <%= t('जना', 'claims') %></span><strong style="font-weight:600"><%= t('रु. ', 'Rs. ') %><%= money(w.amount) %></strong></div>
       <div style="height:8px;background:var(--surface-2);border-radius:4px" aria-hidden="true"><div style="height:8px;width:<%= Math.max(2, Math.round(w.amount / top * 100)) %>%;background:<%= /^#[0-9a-f]{3,8}$/i.test(w.color) ? w.color : 'var(--brand)' %>;border-radius:4px"></div></div></div>
   <% }) %></div><% } %>
-  <% if (rows.length > 1) { %>
-  <h2 class="mt-4"><%= t('विगतका विवरण', 'History') %></h2>
-  <div class="table-wrap mt-2"><table class="table"><thead><tr><th><%= t('आ.व.', 'FY') %></th><th><%= t('महिना', 'Month') %></th><th class="num"><%= t('सदस्य', 'Members') %></th><th class="num"><%= t('बचत', 'Deposits') %></th><th class="num"><%= t('ऋण', 'Loans') %></th><th class="num"><%= t('सम्पत्ति', 'Assets') %></th></tr></thead><tbody>
-    <% rows.forEach(r => { %><tr><td><%= num(r.fiscal_year) %></td><td><%= r.report_month ? (lang === 'en' ? nd.MONTHS_EN : nd.MONTHS_NP)[r.report_month - 1] : '' %></td><td class="num"><%= num(r.total_members || '') %></td><td class="num"><%= money(r.deposit) %></td><td class="num"><%= money(r.loan) %></td><td class="num"><%= money(r.total_assets) %><% if (r.attachment_path) { %> <a href="/institutional-profile/<%= r.id %>/file" target="_blank" rel="noopener" title="<%= t('प्रतिवेदन', 'Report') %>"><%- icon('file') %></a><% } %></td></tr><% }) %>
-  </tbody></table></div><% } %>
+
+  <% if (charts.length) { %>
+  <h2 class="mt-4" id="charts"><%= t('प्रवृत्ति', 'Trends') %></h2>
+  <div class="grid grid-2 mt-2"><% charts.forEach(c => { %>
+    <div class="card"><h3><%= c.label %></h3><%- include('../partials/chart', { kind: 'line', data: c.data, label: c.label }) %></div>
+  <% }) %></div>
+  <% } %>
   <% } %>
 </div></section>

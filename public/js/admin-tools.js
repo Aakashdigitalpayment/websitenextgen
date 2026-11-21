@@ -1,4 +1,4 @@
-/* Admin panel helpers: top-bar quick search, role permission matrix, bulk-select on list pages. No dependencies. */
+/* Admin panel helpers: top-bar quick search, role permission matrix, bulk-select on list pages, icon picker search. No dependencies. */
 (function () {
   'use strict';
   const $ = (s, r = document) => r.querySelector(s);
@@ -89,4 +89,90 @@
     if (!n || !act) { e.preventDefault(); return; }
     if (act === 'delete' && !window.confirm(f.dataset.confirmDelete || 'Delete?')) e.preventDefault();
   }));
+
+  // ---- help guide: filter articles while typing (the form still works without JS via ?q=)
+  const help = $('[data-help-search]');
+  if (help) {
+    const input = $('input[type=search]', help), arts = $$('[data-help-article]'), count = $('[data-help-count]'), empty = $('[data-help-empty]');
+    const norm = v => String(v || '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ').trim();
+    const filter = () => {
+      const words = norm(input.value).split(' ').filter(Boolean);
+      let shown = 0;
+      arts.forEach(a => { const ok = words.every(w => a.dataset.helpText.includes(w)); a.hidden = !ok; if (ok) shown++; if (words.length) a.open = ok; });
+      $$('[data-help-section]').forEach(sec => { sec.hidden = !$$('[data-help-article]', sec).some(a => !a.hidden); });
+      if (count) count.textContent = shown + ' ' + (count.dataset.of || '');
+      if (empty) empty.hidden = shown > 0;
+    };
+    input.addEventListener('input', filter);
+  }
+
+  // ---- copy a plain value (dashboard credential usernames)
+  $$('[data-copy-text]').forEach(b => b.addEventListener('click', () => {
+    if (!navigator.clipboard) return;
+    const old = b.textContent;
+    navigator.clipboard.writeText(b.dataset.copyText).then(() => { b.textContent = '✓'; setTimeout(() => { b.textContent = old; }, 1200); }, () => {});
+  }));
+
+  // ---- icon picker: filter the curated Lucide set by name/keyword, then pull matches from all Lucide icons (GET /admin/icons?q=)
+  $$('[data-icon-search]').forEach(input => {
+    const grid = document.getElementById(input.getAttribute('aria-controls'));
+    if (!grid) return;
+    const name = input.dataset.name;
+    let timer = null, seq = 0;
+    const opts = () => $$('.icon-opt', grid);
+    const filter = q => opts().forEach(l => {
+      const hay = (l.title + ' ' + (l.dataset.tags || '')).toLowerCase();
+      l.hidden = !!q && !hay.includes(q) && !$('input', l).checked;
+    });
+    const more = async q => {
+      const my = ++seq;
+      try {
+        const r = await fetch('/admin/icons?q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+        if (!r.ok || my !== seq) return;
+        const have = new Set(opts().map(l => l.title));
+        (await r.json()).icons.filter(it => /^[a-z0-9-]+$/.test(it.name) && !have.has(it.name)).forEach(it => {
+          const label = document.createElement('label');
+          label.className = 'icon-opt'; label.title = it.name; label.dataset.tags = q;
+          const radio = document.createElement('input');
+          radio.type = 'radio'; radio.name = name; radio.value = it.name;
+          const sr = document.createElement('span');
+          sr.className = 'sr-only'; sr.textContent = it.name;
+          label.append(radio);
+          label.insertAdjacentHTML('beforeend', it.svg); // server-rendered Lucide SVG from our own endpoint
+          label.append(sr);
+          grid.append(label);
+        });
+        filter(q);
+      } catch (e) { /* offline */ }
+    };
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      filter(q);
+      clearTimeout(timer);
+      if (q.length >= 2) timer = setTimeout(() => more(q), 250);
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); }); // do not submit the form
+  });
+
+  // ---- member CSV import: keep committing batches until the job is done (member-import.php chunked commit)
+  const imp = $('[data-import-progress]');
+  if (imp) {
+    const id = imp.dataset.importProgress, bar = $('progress', imp), count = $('[data-import-count]', imp), err = $('[data-import-error]', imp);
+    let tries = 0;
+    const tick = async () => {
+      try {
+        const r = await fetch('/admin/members/import/' + encodeURIComponent(id) + '/commit', { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json', 'x-csrf-token': imp.dataset.csrf } });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'failed');
+        tries = 0;
+        bar.max = j.total || 1; bar.value = j.processed; count.textContent = j.processed + ' / ' + j.total;
+        if (j.status === 'done') return location.reload();
+        setTimeout(tick, 150);
+      } catch (e) {
+        err.hidden = false; err.textContent = e.message;
+        if (++tries < 5) setTimeout(tick, 2000 * tries); // retry with back-off; the Continue button resumes after that
+      }
+    };
+    tick();
+  }
 })();

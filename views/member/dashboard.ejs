@@ -3,10 +3,24 @@
 <% elections.forEach(e => { %><div class="alert alert-info"><%- icon('vote') %><span><%= f(e, 'title') %> — <a href="/member/elections/<%= e.id %>"><%= e.voted ? t('मतदान गरिसकियो', 'Already voted') : t('अनलाइन मतदान गर्नुहोस्', 'Vote online') %></a></span></div><% }) %>
 <div class="kpis">
   <div class="kpi"><div class="l"><%= t('सदस्यता नं.', 'Membership no.') %></div><div class="v" style="font-size:1.2rem"><%= member.sadasyata_number || '—' %></div></div>
-  <div class="kpi"><div class="l"><%= t('आवेदन', 'Applications') %></div><div class="v"><%= num(requests.length) %></div></div>
-  <div class="kpi"><div class="l"><%= t('नपढिएका सूचना', 'Unread') %></div><div class="v"><%= num(unread) %></div></div>
+  <a class="kpi card-link" href="/member/requests"><div class="l"><%= t('आवेदन', 'Applications') %></div><div class="v"><%= num(requests.length) %></div></a>
+  <% if (locals.counts) { %><a class="kpi card-link" href="/member/requests?status=pending"><div class="l"><%= t('प्रक्रियामा', 'Pending') %></div><div class="v"><%= num(counts.pending) %></div></a>
+  <a class="kpi card-link" href="/member/requests?status=approved"><div class="l"><%= t('स्वीकृत', 'Approved') %></div><div class="v"><%= num(counts.approved) %></div></a>
+  <a class="kpi card-link" href="#partner-services"><div class="l"><%= t('साझेदार सेवा', 'Partner services') %></div><div class="v"><%= num((locals.partnerHistory || []).length) %></div></a><% } %>
+  <a class="kpi card-link" href="/member/notifications"><div class="l"><%= t('नपढिएका सूचना', 'Unread') %></div><div class="v"><%= num(unread) %></div></a>
   <a class="kpi card-link" href="/member/id-card"><div class="l"><%= t('परिचयपत्र', 'ID card') %></div><div class="v" style="font-size:1.2rem"><%= card ? t('सक्रिय', 'Active') : t('छैन', 'None') %></div></a>
 </div>
+<% if (locals.quick && quick.length) { %>
+<div class="card mb-3"><h3><%= t('छिटो आवेदन', 'Quick apply') %></h3>
+  <div class="quick-grid"><% quick.forEach(q => { %><a class="quick-item" href="<%= q.href %>"><span class="icon-tile"><%- icon(q.icon) %></span><span><%= t(...q.label) %></span></a><% }) %></div>
+</div>
+<% } %>
+<% if (locals.digital && (digital.length || card)) { %>
+<div class="card mb-3"><h3><%= t('डिजिटल सेवा', 'Digital services') %></h3>
+  <div class="flex gap-1 wrap"><% digital.forEach(d => { %><a class="btn btn-outline btn-sm" href="<%= d.href %>" target="_blank" rel="noopener"><%- icon(d.icon) %><%= t(...d.label) %></a><% }) %>
+    <a class="btn btn-soft btn-sm" href="/member/id-card"><%- icon('id') %><%= t('परिचयपत्र: ', 'ID card: ') %><%= card ? t('सक्रिय', 'Active') : t('छैन', 'None') %></a></div>
+</div>
+<% } %>
 <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px">
   <div class="card" style="padding:0"><div class="flex justify-between items-center" style="padding:16px 20px;border-bottom:1px solid var(--line)"><h3 class="mb-0"><%= t('पछिल्ला आवेदन', 'Recent applications') %></h3><a class="small" href="/member/requests"><%= t('सबै', 'All') %></a></div>
     <% if (!requests.length) { %><div class="muted" style="padding:20px"><%= t('अहिलेसम्म आवेदन छैन।', 'No applications yet.') %> <a href="/apply"><%= t('आवेदन दिनुहोस्', 'Apply now') %></a></div><% } %>

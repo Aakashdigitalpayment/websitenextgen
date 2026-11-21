@@ -1,0 +1,36 @@
+<%- include('../partials/page-head', { crumbs: [['/apply', t('अनलाइन सेवा', 'Online services')]], lead: t('सहकारीको सदस्य सूचीमा दर्ता भएको सदस्यता नम्बर र मोबाइलबाट मात्र केवाइएम भर्न सकिन्छ।', 'The KYM can only be filled in with the Member ID and mobile registered with the cooperative.') }) %>
+<link rel="stylesheet" href="/static/css/forms.css">
+<section class="section"><div class="container maxw-md" style="margin-left:0">
+  <div class="path-grid">
+    <div class="card path-card is-active">
+      <span class="icon-tile"><%- icon('id') %></span>
+      <h3><%= t('म सदस्य हुँ (Online केवाइएम)', 'I am a member (online KYM)') %></h3>
+      <p class="small muted"><%= t('पहिले सदस्यता नम्बर र दर्ता मोबाइल प्रमाणित गर्नुहोस्। पहिले भरिएको विवरण लक रहन्छ; खाली विवरण मात्र भर्न मिल्छ।', 'Verify your Member ID and registered mobile first. Details already on file stay locked; only empty fields can be filled.') %></p>
+    </div>
+    <a class="card card-link path-card" href="/apply/membership">
+      <span class="icon-tile"><%- icon('users') %></span>
+      <h3><%= t('नयाँ सदस्य बन्नुस्', 'Become a new member') %></h3>
+      <p class="small muted"><%= t('Member ID छैन? सदस्यता आवेदन दिनुहोस्। स्वीकृत भएपछि पाएको सदस्यता नम्बरले केवाइएम भर्नुहोस्।', 'No Member ID yet? Apply for membership. Once approved, use the Member ID you receive to fill in the KYM.') %></p>
+    </a>
+    <a class="card card-link path-card" href="/member/login?next=%2Fapply%2Fkyc">
+      <span class="icon-tile"><%- icon('user') %></span>
+      <h3><%= t('पोर्टल लगइन', 'Portal login') %></h3>
+      <p class="small muted"><%= t('लगइन गरेर पूरा केवाइएम हेर्न र अद्यावधिक गर्न सक्नुहुन्छ।', 'Sign in to see and update your complete KYM.') %></p>
+    </a>
+  </div>
+  <form class="form-card mt-3" method="post" action="/apply/kyc/verify" novalidate>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>"><input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="form-section-title"><%- icon('shield') %> <%= t('Member ID + मोबाइल प्रमाणित', 'Verify Member ID + mobile') %></div>
+    <p class="small muted"><%= t('सहकारी सदस्य सूचीमा भएको मोबाइल नै प्रयोग गर्नुहोस्।', 'Use the mobile number on the cooperative members list.') %></p>
+    <% if (error) { %><div class="alert alert-error"><%- icon('alert') %><span><%= error %></span></div><% } %>
+    <div class="form-grid">
+      <div class="field"><label for="g_member_id"><%= t('सदस्यता नम्बर (Member ID)', 'Member ID') %><span class="req">*</span></label><input class="input" id="g_member_id" name="member_id" value="<%= values.member_id || '' %>" required autocomplete="off"></div>
+      <div class="field"><label for="g_mobile"><%= t('मोबाइल (१० अंक)', 'Mobile (10 digits)') %><span class="req">*</span></label><input class="input" id="g_mobile" name="mobile" type="tel" value="<%= values.mobile || '' %>" required inputmode="numeric" placeholder="98XXXXXXXX" autocomplete="tel"></div>
+    </div>
+    <%- include('../partials/turnstile') %>
+    <div class="form-actions">
+      <button class="btn btn-primary"><%- icon('check') %><%= t('प्रमाणित गरी अगाडि', 'Verify & continue') %></button>
+      <a class="btn btn-outline" href="/member/register"><%= t('पोर्टल लगइन अनुरोध', 'Request portal login') %></a>
+    </div>
+  </form>
+</div></section>

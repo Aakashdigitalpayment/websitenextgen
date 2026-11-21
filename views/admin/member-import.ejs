@@ -7,14 +7,15 @@
       <div class="field"><label><%= t('CSV फाइल (UTF-8)', 'CSV file (UTF-8)') %></label><input class="input" type="file" name="csv" accept=".csv,text/csv" required></div>
       <div class="field"><label><%= t('पहिले नै भएका सदस्य', 'Existing members') %></label>
         <div class="choices"><label class="choice"><input type="radio" name="mode" value="update" checked> <%= t('अद्यावधिक गर्ने', 'Update them') %></label><label class="choice"><input type="radio" name="mode" value="skip"> <%= t('छोड्ने', 'Skip them') %></label></div></div>
-      <button class="btn btn-primary"><%- icon('check') %><%= t('जाँच गर्नुहोस् (अझै सेभ हुँदैन)', 'Check file (nothing is saved yet)') %></button>
+      <button type="submit" class="btn btn-primary"><%- icon('check') %><%= t('जाँच गर्नुहोस् (अझै सेभ हुँदैन)', 'Check file (nothing is saved yet)') %></button>
     </div>
   </form>
   <div class="card">
     <h3><%= t('Column हरू', 'Columns') %></h3>
     <p class="small muted"><%= t('पहिलो row मा header चाहिन्छ। नाम र (सदस्यता नं. वा मोबाइल) अनिवार्य।', 'First row is the header. A name and (member no. or mobile) are required.') %></p>
-    <p class="small"><code>sadasyata_number</code> (member_no) · <code>full_name</code> (name) · <code>name_np</code> · <code>mobile</code> (phone) · <code>email</code> · <code>address</code> · <code>dob_bs</code> / <code>dob_ad</code> (YYYY-MM-DD) · <code>gender</code> · <code>branch</code> · <code>monthly_saving</code> (<%= t('नियमित / नियमित नभएको, खाली = नबदल्ने', 'regular / not regular, blank = keep') %>) · <code>password</code></p>
-    <p class="small faint mb-0"><%= t('पासवर्ड नदिएमा सदस्यले "पासवर्ड बिर्सनुभयो" बाट अनुरोध गर्न सक्छन्।', 'Without a password, members can use "Forgot password".') %></p>
+    <p class="small"><code>sadasyata_number</code> (member_no) · <code>full_name</code> (name) · <code>name_np</code> · <code>mobile</code> (phone) · <code>email</code> · <code>address</code> · <code>dob_bs</code> / <code>dob_ad</code> (YYYY-MM-DD) · <code>gender</code> · <code>branch</code> · <code>monthly_saving</code> (<%= t('नियमित / नियमित नभएको, खाली = नबदल्ने', 'regular / not regular, blank = keep') %>) · <code>father_name</code> · <code>citizenship_no</code> · <code>membership_date_bs</code> / <code>membership_date_ad</code> · <code>password</code></p>
+    <p class="small faint"><%= t('बुबाको नाम र नागरिकता नं. सदस्यको KYM मा खाली भए मात्र भरिन्छ (KYM नभए stub बन्छ)। ४०० वा कम row भएको आयातमा प्रत्येक सदस्यको KYM stub र डिजिटल परिचयपत्र स्वतः बन्छ।', 'Father name and citizenship no. only fill empty fields of the member’s KYM (a KYM stub is created when there is none). Imports of 400 rows or fewer also get a KYM stub and a digital ID card per member.') %></p>
+    <p class="small faint mb-0"><%= t('अस्थायी पासवर्ड बनाइँदैन: पासवर्ड नदिएमा सदस्यले Member ID र दर्ता भएको मोबाइलबाट खाता दाबी गर्छन् वा "पासवर्ड बिर्सनुभयो" प्रयोग गर्छन्।', 'No guessable temporary password is set: without a password column, members claim their account with their Member ID and registered mobile, or use "Forgot password".') %></p>
   </div>
 </div>
 <h2 class="mt-4" id="field-update"><%= t('मासिक बचत मात्र अपडेट (field update)', 'Update monthly saving only (field update)') %></h2>
@@ -23,7 +24,7 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <div class="stack">
       <div class="field"><label><%= t('CSV फाइल: member_id, monthly_saving', 'CSV file: member_id, monthly_saving') %></label><input class="input" type="file" name="fu_file" accept=".csv,text/csv" required></div>
-      <button class="btn btn-primary" data-confirm="<%= t('भएका सदस्यको मासिक बचत मात्र बदलिन्छ। जारी राख्ने?', 'Only the monthly saving of existing members changes. Continue?') %>"><%- icon('check') %><%= t('अपडेट गर्नुहोस्', 'Update') %></button>
+      <button type="submit" class="btn btn-primary" data-confirm="<%= t('भएका सदस्यको मासिक बचत मात्र बदलिन्छ। जारी राख्ने?', 'Only the monthly saving of existing members changes. Continue?') %>"><%- icon('check') %><%= t('अपडेट गर्नुहोस्', 'Update') %></button>
       <a class="small" href="/admin/members/import/field-sample.csv"><%- icon('download') %><%= t('नमूना CSV', 'Sample CSV') %></a>
     </div>
   </form>

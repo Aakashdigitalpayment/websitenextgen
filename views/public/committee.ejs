@@ -1,9 +1,14 @@
-<%- include('../partials/page-head', { crumbs: [['/committees', t('समितिहरू', 'Committees')]], lead: tenure ? f(tenure, 'tenure_name') : '' }) %>
+<%- include('../partials/page-head', { crumbs: [['/committees', t('समितिहरू', 'Committees')]], lead: tenure ? f(tenure, 'tenure_name') : t('हालको', 'Current') }) %>
 <section class="section"><div class="container">
-  <% if (tenures.length > 1) { %><div class="tabs"><% tenures.forEach(x => { %><a class="tab <%= tenure && x.id === tenure.id ? 'active' : '' %>" href="?tenure=<%= x.id %>"><%= f(x, 'tenure_name') %><%= x.is_current ? ' · ' + t('हालको', 'current') : '' %></a><% }) %></div><% } %>
+  <% if (tenures.length > 1) { %><div class="tabs"><% tenures.forEach(x => { %><a class="tab <%= tenure && x.id === tenure.id ? 'active' : '' %>" href="?tenure=<%= x.id %>"><%= f(x, 'tenure_name') %><%= Number(x.is_current) ? ' · ' + t('हालको', 'current') : '' %></a><% }) %></div><% } %>
   <% if (!members.length) { %><div class="empty"><%= t('सदस्य विवरण छैन।', 'No members listed.') %></div><% } %>
-  <div class="grid grid-4"><% members.forEach(p => { %>
-    <div class="card person"><div class="person-photo"><% if (p.photo) { %><img src="<%= mediaUrl(p.photo) %>"<%- srcset(p.photo, '240px') %> alt="" loading="lazy"><% } else { %><%= (f(p, 'name') || '?').charAt(0) %><% } %></div>
-      <div class="person-name"><%= f(p, 'name') %></div><div class="person-role"><%= f(p, 'position') %></div></div>
-  <% }) %></div>
+  <div class="org-chart mt-2"><% chart.forEach(([row, list]) => { %><div class="org-row org-row-<%= row %>"><% list.forEach(p => { %><%- include('../partials/person-card', { p }) %><% }) %></div><% }) %></div>
+  <% if (past.length) { %>
+    <h2 class="mt-4"><%= t('विगतका समितिहरू', 'Past committees') %></h2>
+    <% past.forEach(x => { %>
+      <details class="card card-flat mt-1"<%= openPast ? ' open' : '' %>><summary><b style="font-weight:500"><%= f(x.tenure, 'tenure_name') %></b> <span class="small muted">(<%= num(x.members.length) %>)</span></summary>
+        <ul class="list small mt-1"><% x.members.forEach(m => { %><li class="list-item"><span><%= f(m, 'name') %></span><span class="muted"><%= f(m, 'position') %></span></li><% }) %></ul>
+      </details>
+    <% }) %>
+  <% } %>
 </div></section>

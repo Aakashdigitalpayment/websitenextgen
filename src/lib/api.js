@@ -106,12 +106,15 @@ function idempotent(handler) {
       return res.status(prev.status).json(prev.response);
     }
     const json = res.json.bind(res);
+    // store the response BEFORE sending it: a client that retries as soon as it has the answer must get the replay,
+    // never a second execution of the same write
     res.json = body => {
-      if (res.statusCode < 500) {
-        db.query('INSERT INTO api_idempotency (client_id, idem_key, request_hash, status, response) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
-          [req.apiClient.id, key, hash, res.statusCode, JSON.stringify(body)]).catch(() => {});
-      }
-      return json(body);
+      if (res.statusCode >= 500) return json(body);
+      db.query('INSERT INTO api_idempotency (client_id, idem_key, request_hash, status, response) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING',
+        [req.apiClient.id, key, hash, res.statusCode, JSON.stringify(body)])
+        .catch(() => {})
+        .finally(() => json(body));
+      return res;
     };
     return handler(req, res, next);
   };

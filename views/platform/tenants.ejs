@@ -17,7 +17,11 @@
         </div>
         <form method="post" action="/platform/tenants/<%= tn.id %>/license" class="flex gap-1 wrap items-center mt-2">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <span class="small muted">Licence until</span><input class="input" type="date" name="until" value="<%= tn.license.until || '' %>" style="max-width:170px;padding:5px 10px">
+          <label class="small muted" for="lic_until_<%= tn.id %>">Licence until</label><input class="input" id="lic_until_<%= tn.id %>" type="date" name="until" value="<%= tn.license.until || '' %>" style="max-width:170px;padding:5px 10px">
+          <label class="small muted" for="lic_bs_<%= tn.id %>">or B.S.</label><input class="input" id="lic_bs_<%= tn.id %>" name="until_bs" placeholder="<%= tn.license.untilBs || '2083-04-01' %>" value="" style="max-width:130px;padding:5px 10px">
+          <label class="small muted" for="lic_amt_<%= tn.id %>">Rs.</label><input class="input" id="lic_amt_<%= tn.id %>" name="renewal_amount" placeholder="default" value="<%= (tn.stats.pay || {}).amount || '' %>" style="max-width:110px;padding:5px 10px">
+          <label class="small muted" for="lic_esewa_<%= tn.id %>">eSewa</label><input class="input" id="lic_esewa_<%= tn.id %>" name="esewa_id" placeholder="default" value="<%= (tn.stats.pay || {}).esewa || '' %>" style="max-width:140px;padding:5px 10px">
+          <label class="small muted" for="lic_khalti_<%= tn.id %>">Khalti</label><input class="input" id="lic_khalti_<%= tn.id %>" name="khalti_id" placeholder="default" value="<%= (tn.stats.pay || {}).khalti || '' %>" style="max-width:140px;padding:5px 10px">
           <span class="badge <%= !tn.license.configured ? '' : tn.license.expired ? 'badge-bad' : tn.license.daysLeft <= 30 ? 'badge-warn' : 'badge-ok' %>"><%= !tn.license.configured ? 'no expiry' : tn.license.expired ? 'expired' : tn.license.daysLeft + ' days left' %></span>
           <button class="btn btn-ghost btn-sm">Save</button>
         </form>

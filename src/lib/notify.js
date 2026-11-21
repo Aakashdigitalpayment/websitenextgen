@@ -180,6 +180,47 @@ async function notifyMember(memberId, title, message = null, link = null, type =
   later(() => push.sendToMember(memberId, { title, body: message || '', url: link || '/member/notifications' }));
 }
 
+/**
+ * The member a public-form request belongs to (createMemberStatusNotification / findMemberByContact):
+ * the portal account that submitted it, else its Member ID, else a unique match on the normalised mobile
+ * (and on the email when the request has one). null when unsure — never notify the wrong member.
+ */
+async function memberForRequest(mod, row) {
+  if (Number(row.member_portal_id) > 0) {
+    const m = await db.one('SELECT * FROM members WHERE id = $1 AND deleted_at IS NULL', [Number(row.member_portal_id)]);
+    if (m) return m;
+  }
+  const kym = require('./kym');
+  if (mod.memberCol && row[mod.memberCol]) {
+    const m = await kym.findMemberBySadasyata(row[mod.memberCol]);
+    if (m) return m;
+  }
+  const mob = kym.normalizeMobile(row[mod.phoneCol]);
+  if (!/^\d{10}$/.test(mob)) return null;
+  const { phoneDigitsSql } = require('./member-portal');
+  let list = await db.many(`SELECT * FROM members WHERE deleted_at IS NULL AND ${phoneDigitsSql('phone')} = $1 ORDER BY id LIMIT 5`, [mob]);
+  const email = String(row.email || '').trim().toLowerCase();
+  if (email && list.length) {
+    const same = list.filter(m => String(m.email || '').trim().toLowerCase() === email);
+    if (same.length || list.length > 1) list = same;
+  }
+  return list.length === 1 ? list[0] : null;
+}
+
+/** In-portal status notification for the member who owns a request (PHP createMemberStatusNotification wording). */
+async function memberStatusNotification(mod, row, status, remarks = '') {
+  const member = await memberForRequest(mod, row);
+  if (!member) return null;
+  const sText = require('./forms').statusLabel(status, 'np');
+  const svc = mod.title[0];
+  const firstName = String(row[mod.nameCol] || member.name_np || member.name || '').trim().split(/\s+/)[0] || 'सदस्य';
+  let msg = `${firstName} जी, तपाईंको ${svc} आवेदनको अवस्था «${sText}» भएको छ।`;
+  if (row.tracking_id) msg += `\nTracking ID: ${row.tracking_id}`;
+  if (remarks) msg += `\nAdmin टिप्पणी: ${remarks}`;
+  await notifyMember(member.id, `${svc} — ${sText}`, msg, `/member/requests/${mod.key}/${row.id}`, 'status');
+  return member;
+}
+
 // ---------------------------------------------------------------- templated events
 async function template(event, audience, channel) {
   return db.one('SELECT * FROM notification_templates WHERE event_type = $1 AND audience = $2 AND channel = $3 AND enabled = 1', [event, audience, channel]);
@@ -210,34 +251,57 @@ async function adminEvent(mod, vars, generic = 'submitted') {
     const s = await settings.all();
     const v = templateVars(s, { module: mod.title?.[0] || '', ...vars });
     const ev = (mod.adminEvent || mod.key || 'submitted') + ':admin';
-    if (s.notify_admin_emails) {
+    // per-module office alerts (Settings → SMS / email: notify_email_<module> / notify_sms_<module>, on unless '0')
+    const off = ch => mod.key && s[`notify_${ch}_${mod.key}`] === '0';
+    if (s.notify_admin_emails && !off('email')) {
       const adm = await moduleTemplate(mod.adminEvent, generic, 'admin', 'email');
       if (adm) await sendEmail(ev, s.notify_admin_emails, render(adm.subject, v) || 'New notification', render(adm.body, v));
     }
     const phones = String(s.notify_sms_recipients || '').split(/[,;\s]+/).map(normalizePhone).filter(Boolean);
-    if (phones.length) {
+    if (phones.length && !off('sms')) {
       const sms = await moduleTemplate(mod.adminEvent, generic, 'admin', 'sms');
       if (sms) for (const p of [...new Set(phones)]) await sendSms(ev, p, render(sms.body, v).slice(0, 320));
     }
   } catch (e) { console.error('notify admin:', e.message); }
 }
 
+/** sendSms/sendEmail result → per-channel outcome for request_status_history (legacy logRequestStatusHistory). */
+const outcome = (r, to) => (!r ? { status: 'not_attempted', reason: null, to: to || null }
+  : r.ok ? { status: 'sent', reason: null, to: to || null }
+    : r.skipped ? { status: 'skipped', reason: String(r.skipped).slice(0, 180), to: to || null }
+      : { status: 'failed', reason: String(r.error || 'failed').slice(0, 180), to: to || null });
+
 /**
  * Fire an application event. vars: name, tracking_id, module, status, remarks, amount, date, details.
  * contact: { phone, email }. mod: the application module (per-module templates). Runs detached (call without await).
+ * Returns { sms: {status, reason, to}, email: {…} } — status sent / failed / skipped / not_attempted.
  */
 async function applicationEvent(event, vars, contact = {}, mod = null) {
+  const out = { sms: outcome(null), email: outcome(null) };
   try {
     const s = await settings.all();
     const v = templateVars(s, vars);
     const own = event === 'status_changed' ? mod?.memberEvent : null;
     const memberAllowed = ch => event !== 'status_changed' || s['notify_member_' + ch] !== '0';
     const sms = memberAllowed('sms') && contact.phone ? await moduleTemplate(own, event, 'member', 'sms') : null;
-    if (sms) await sendSms(event, contact.phone, render(sms.body, v));
+    if (sms) out.sms = outcome(await sendSms(event, contact.phone, render(sms.body, v)), normalizePhone(contact.phone));
+    else if (contact.phone) out.sms.reason = memberAllowed('sms') ? 'no template' : 'turned off';
     const mail = memberAllowed('email') && contact.email ? await moduleTemplate(own, event, 'member', 'email') : null;
-    if (mail) await sendEmail(event, contact.email, render(mail.subject, v), render(mail.body, v));
+    if (mail) out.email = outcome(await sendEmail(event, contact.email, render(mail.subject, v), render(mail.body, v)), String(contact.email).slice(0, 180));
+    else if (contact.email) out.email.reason = memberAllowed('email') ? 'no template' : 'turned off';
+    if (!contact.phone) out.sms.reason = 'no phone';
+    if (!contact.email) out.email.reason = 'no email';
     if (event === 'submitted') await adminEvent(mod || {}, vars, 'submitted');
   } catch (e) { console.error('notify:', e.message); }
+  return out;
+}
+
+/** Store a status-change notification outcome on its request_status_history row. */
+async function recordOutcome(historyId, out) {
+  if (!historyId || !out) return;
+  await db.query(`UPDATE request_status_history SET admin_chose_to_notify = 1, notify_sent = $2,
+                    notify_email_status = $3, notify_email_reason = $4, notify_email_to = $5, notify_sms_status = $6, notify_sms_reason = $7, notify_sms_to = $8 WHERE id = $1`,
+  [historyId, out.sms.status === 'sent' || out.email.status === 'sent' ? 1 : 0, out.email.status, out.email.reason, out.email.to, out.sms.status, out.sms.reason, out.sms.to && String(out.sms.to).slice(0, 40)]);
 }
 
 /** Run fn after the response without losing the tenant schema context. */
@@ -247,4 +311,4 @@ function later(fn) {
   setImmediate(() => db.withSchema(schema, () => Promise.resolve().then(fn).catch(e => console.error('later:', e.message))));
 }
 
-module.exports = { sendSms, sendEmail, notifyMember, applicationEvent, adminEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };
+module.exports = { sendSms, sendEmail, notifyMember, memberForRequest, memberStatusNotification, applicationEvent, recordOutcome, adminEvent, render, later, safeHttpsUrl, normalizePhone, isPrivateIp, overLimit };

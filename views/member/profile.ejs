@@ -77,6 +77,20 @@
   <% } %>
 </div>
 
+<% if (locals.kycView) { const kv = kycView; %>
+<details class="card maxw-md mt-3" id="kyc-details"><summary style="cursor:pointer;font-weight:600"><%= t('घ. KYC विवरण (हेर्न मात्र)', 'D. KYC details (read only)') %></summary>
+  <div class="flex gap-2 items-center mt-2 wrap"><% if (kyc.photo) { %><img src="/member/profile/kyc-file/photo" alt="" style="width:72px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--line)"><% } %>
+    <div class="grow small"><% if (kyc.photo_quality_score) { %><div><%= t('फोटो गुणस्तर: ', 'Photo quality: ') %><%= num(kyc.photo_quality_score) %>/100</div><% } %>
+      <div class="flex gap-1 wrap mt-1"><a class="btn btn-outline btn-sm" href="/apply/kyc"><%- icon('edit') %><%= t('KYM अद्यावधिक गर्नुहोस्', 'Edit KYM') %></a><a class="btn btn-ghost btn-sm" href="/member/kyc-print" target="_blank" rel="noopener"><%- icon('file') %><%= t('प्रिन्ट', 'Print') %></a></div></div></div>
+  <% kv.mod.sections.forEach(sec => { const rows = sec.fields.filter(fl => !['image', 'file', 'heading', 'family', 'moneyitems', 'checkbox'].includes(fl.type) && fl.store !== 'none' && !fl.hiddenInput)
+       .map(fl => { let v = kv.display.value(fl); if (v === null || v === undefined || v === '') return null; const o = (kv.options[fl.name] || []).find(x => String(x[0]) === String(v)); return [t(fl.label[0], fl.label[1]), o ? t(o[1], o[2]) : v]; }).filter(Boolean);
+     if (!rows.length) return; %>
+    <h4 class="mt-2 mb-1"><%= t(...sec.title) %></h4><div class="kv small"><% rows.forEach(([k, v]) => { %><div><%= k %></div><div><%= v %></div><% }) %></div>
+  <% }) %>
+  <% if (kv.display.family.length) { %><h4 class="mt-2 mb-1"><%= t('परिवार', 'Family') %></h4><div class="kv small"><% kv.display.family.forEach(f => { %><div><%= f.relation %></div><div><%= f.name %><%= f.phone ? ' · ' + f.phone : '' %></div><% }) %></div><% } %>
+</details>
+<% } %>
+
 <!-- D. security: 2FA, Google, Facebook -->
 <div class="card maxw-md mt-3 flex justify-between items-center wrap gap-2">
   <div><h3 class="mb-0"><%= t('दुई-चरण प्रमाणीकरण (2FA)', 'Two-step sign-in (2FA)') %></h3><div class="small muted"><%= Number(member.twofa_enabled) ? t('सुरु छ — लगइनमा Authenticator कोड चाहिन्छ।', 'On — sign-in asks for your authenticator code.') : twofaRequired ? t('सहकारीले अनिवार्य गरेको छ — अर्को लगइनमा सेटअप हुन्छ।', 'Required by the cooperative — set up at your next sign-in.') : t('बन्द छ। Google Authenticator जस्तो एपले खाता थप सुरक्षित बनाउनुहोस्।', 'Off. Protect your account with an app such as Google Authenticator.') %></div></div>
