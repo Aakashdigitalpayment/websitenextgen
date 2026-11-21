@@ -5,7 +5,7 @@
   "description": "Aakash Cooperative web platform — Node.js + PostgreSQL rewrite (public site, admin panel, member portal)",
   "main": "src/server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.9"
   },
   "scripts": {
     "start": "node src/server.js",
@@ -40,7 +40,7 @@
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "sanitize-html": "^2.18.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.5",
     "undici": "^7.30.1",
     "web-push": "^3.6.7",
     "yauzl": "^3.4.0"
