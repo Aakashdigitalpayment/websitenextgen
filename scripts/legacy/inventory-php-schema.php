@@ -121,6 +121,16 @@ foreach ($phpFiles as $p) {
         }
     }
 }
+// 4. scripts/pii-encrypt.php widens the PII columns to VARCHAR(512) before encrypting (installs with PII_ENC_KEY)
+if (function_exists('pii_columns')) {
+    foreach (pii_columns() as $t => $cs) foreach ($cs as $c) {
+        $st = $db->prepare('SELECT IS_NULLABLE FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?');
+        $st->execute([$t, $c]);
+        $nullable = $st->fetchColumn();
+        if ($nullable === false) continue;
+        try { $db->exec("ALTER TABLE `$t` MODIFY `$c` VARCHAR(512) " . ($nullable === 'YES' ? 'NULL' : "NOT NULL DEFAULT ''")); $ran++; } catch (Throwable $e) {}
+    }
+}
 $tables = (int)$db->query('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()')->fetchColumn();
 $cols = (int)$db->query('SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE()')->fetchColumn();
 echo "ensure functions: " . count($fns) . ", DDL statements run: $ran → $tables tables, $cols columns\n";
