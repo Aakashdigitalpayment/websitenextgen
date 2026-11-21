@@ -9,6 +9,20 @@
     <%= job.dryRun ? 'Dry run finished' : 'Migration finished' %>: <%= job.summary.planned %> tables<%= job.dryRun ? ' planned' : ', ' + job.summary.rows + ' rows copied' %> · <%= job.summary.warnings %> warnings · <%= job.summary.errors %> row errors.
     <a href="/platform/tenants/<%= job.tenantId %>/reports/<%= job.id %>" target="_blank" rel="noopener"><b>Open the report</b></a>
   </div>
+  <% const T = job.summary.totals || {}; if (T.source_rows !== undefined) { %>
+  <div class="card"><h3>Rows · पङ्क्ति</h3>
+    <div class="table-wrap"><table class="table"><tbody>
+      <tr><td>In the old database · पुरानो डाटाबेसमा</td><td class="num"><%= T.source_rows %></td></tr>
+      <tr><td>Imported · आयात<%= job.dryRun ? ' (rehearsal)' : '' %></td><td class="num"><%= T.imported %></td></tr>
+      <tr><td>Repaired on the way · मिलाइएका</td><td class="num"><%= T.repaired %></td></tr>
+      <tr><td>Quarantined · क्वारेन्टाइन</td><td class="num"><%= T.quarantined %></td></tr>
+      <tr><td>Archived (no platform table) · अभिलेख</td><td class="num"><%= T.archived_rows %></td></tr>
+      <tr><td>Every row accounted for · सबै हिसाबमा</td><td class="num"><b><%= job.summary.accounted ? 'yes' : 'NO' %></b></td></tr>
+      <% if (job.summary.verify_tables) { %><tr><td>Verify: tables matching row by row</td><td class="num"><%= job.summary.verify_tables - job.summary.verify_bad %> / <%= job.summary.verify_tables %></td></tr><% } %>
+    </tbody></table></div>
+    <% if (T.quarantined) { %><p class="small muted">Quarantined rows are kept whole in the tenant's <code>import_quarantine</code> table. List and fix them: <code>npm run migrate:site -- --tenant=<%= job.tenant %> --quarantine</code> (docs/MIGRATION.md).</p><% } %>
+  </div>
+  <% } %>
   <% if (!job.dryRun && job.summary.verify) { %><div class="card"><div class="small">Now in the site: <b><%= job.summary.verify.members %></b> members (<%= job.summary.verify.members_with_password %> can sign in with their old password), <b><%= job.summary.verify.admins_active %></b> active admins, <b><%= job.summary.verify.notices %></b> notices.
     <% if (job.summary.snapshot) { %><br><span class="faint">Safety copy of the replaced tables: <code><%= job.summary.snapshot %></code> in the import folder's reports.</span><% } %></div></div><% } %>
   <% if (job.dryRun) { %><p class="small muted">Read the report. If it looks right, go back and run it again without "Dry run".</p><% } %>
