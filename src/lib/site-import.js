@@ -120,10 +120,23 @@ async function runImport(o) {
 
     // safety snapshot of the tables a real "fresh" run replaces
     let snapshotFile = null;
+    if (o.verifyOnly) {
+      log(`Comparing the export with "${o.tenant.slug}" row by row (nothing is written) …`);
+      const report = await mig.verifyOnly({ tenant: o.tenant.slug, source, piiKey: o.piiKey || site.piiKey || null, log });
+      report.job = jobId;
+      const reportFile = path.join(d.reports, `${jobId}.html`), jsonFile = path.join(d.reports, `${jobId}.json`);
+      fs.writeFileSync(reportFile, mig.htmlReport(report), { mode: 0o600 });
+      fs.writeFileSync(jsonFile, JSON.stringify(report, null, 2), { mode: 0o600 });
+      return { report, reportFile, jsonFile };
+    }
     if (!o.dryRun) {
       const existing = new Set((await db.many(`SELECT table_name FROM information_schema.tables WHERE table_schema = $1 AND table_type = 'BASE TABLE'`, [o.tenant.schema_name])).map(r => r.table_name));
       const touched = [];
       for (const t of await source.tables()) if (existing.has(t) && (await source.count(t)) > 0) touched.push(t);
+      // tables a TRUNCATE … CASCADE also empties (platform-only data linked to members), and the import's own records
+      const deps = await db.many(`SELECT DISTINCT c.relname AS child FROM pg_constraint k JOIN pg_class c ON c.oid = k.conrelid JOIN pg_class p ON p.oid = k.confrelid
+                                  WHERE k.contype = 'f' AND c.relnamespace = $1::regnamespace AND p.relname = ANY($2)`, [o.tenant.schema_name, touched]).catch(() => []);
+      for (const t of [...deps.map(r => r.child), 'import_quarantine', 'legacy_archive']) if (existing.has(t) && !touched.includes(t)) touched.push(t);
       snapshotFile = path.join(d.reports, `${jobId}-before.json.gz`);
       const n = await snapshot(o.tenant, touched, snapshotFile);
       log(`  ✓ safety copy of ${n} tables saved before importing (${path.basename(snapshotFile)})`);
@@ -131,8 +144,8 @@ async function runImport(o) {
 
     log(o.dryRun ? 'Checking (dry run — nothing is written) …' : `Importing into "${o.tenant.slug}" (mode ${o.mode}) …`);
     const report = await mig.migrate({
-      tenant: o.tenant.slug, source, uploads: site.uploads || null, credKey: site.credKey || null, piiKey: site.piiKey || null, vapid: site.vapid || null,
-      dryRun: !!o.dryRun, mode: o.mode === 'incremental' ? 'incremental' : 'fresh', log,
+      tenant: o.tenant.slug, source, uploads: site.uploads || null, credKey: o.credKey || site.credKey || null, piiKey: o.piiKey || site.piiKey || null, vapid: site.vapid || null,
+      dryRun: !!o.dryRun, mode: o.mode === 'incremental' ? 'incremental' : 'fresh', runId: jobId, log,
     });
     for (const w of source.parseWarnings || []) report.warnings.unshift('SQL file: ' + w);
     report.job = jobId;
@@ -169,8 +182,10 @@ function startJob({ tenant, zipPath, sqlPath, dryRun, mode, operator, cleanup = 
     try {
       const { report } = await runImport({ tenant, zipPath, sqlPath, dryRun, mode: job.mode, jobId: job.id, log });
       job.summary = { ok: report.ok, warnings: report.warnings.length, errors: report.errors.length, verify: report.verify, snapshot: report.snapshot || null,
-        rows: report.tables.reduce((a, t) => a + (t.copied || 0), 0), planned: report.tables.filter(t => t.status === 'planned' || t.status === 'copied').length };
-      job.status = report.ok ? 'done' : 'warnings';
+        rows: report.tables.reduce((a, t) => a + (t.imported || 0), 0), planned: report.tables.filter(t => t.status === 'planned' || t.status === 'copied').length,
+        totals: report.totals || {}, accounted: report.accounted, unmapped: (report.unmapped || []).length, text: mig.summary(report),
+        verify_bad: (report.verify_tables || []).filter(v => !v.ok).length, verify_tables: (report.verify_tables || []).length };
+      job.status = report.ok && !(report.totals && report.totals.quarantined) && report.accounted !== false ? 'done' : 'warnings';
       log(report.dry_run ? '✓ Dry run finished — open the report, then run it for real.' : '✓ Migration finished — open the report and check the site.');
     } catch (e) {
       job.status = 'failed';

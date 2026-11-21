@@ -181,7 +181,8 @@ const resources = {
     T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'), T('title', 'शीर्षक', 'Title (legacy)', { hidden: true }),
     REF('service_category_id', 'समूह', 'Group', 'service_categories', 'name_np', { list: true }), IMG('image'), ICON(),
     SEL('nav_group', 'मेनु समूह', 'Menu group', [['general', 'सामान्य', 'General'], ['social', 'सामाजिक', 'Social'], ['student', 'विद्यार्थी', 'Student'], ['financial', 'वित्तीय', 'Financial'], ['other', 'अन्य', 'Other']]),
-    RT('description_np', 'विवरण (नेपाली)', 'Description (Nepali)'), RT('description', 'विवरण (English)', 'Description (English)'), ORDER, ACTIVE] },
+    RT('description_np', 'विवरण (नेपाली)', 'Description (Nepali)'), RT('description', 'विवरण (English)', 'Description (English)'),
+    B('is_new', '"नयाँ" चिन्ह', '"New" chip'), D('new_until', '"नयाँ" चिन्ह कहिलेसम्म', '"New" chip until', { hint: 'खाली = सधैं / blank = no end date' }), ORDER, ACTIVE] },
   service_products: { group: 'services', icon: 'layers', title: ['सेवा योजना', 'Service products'], order: 'service_id, display_order, id', filters: [{ name: 'service_id', type: 'ref' }], fields: [
     REF('service_id', 'सेवा', 'Service', 'services', 'title_np', { required: true, list: true }), T('title_np', 'शीर्षक (नेपाली)', 'Title (Nepali)', { required: true, list: true }), T('title_en', 'शीर्षक (English)', 'Title (English)'),
     TA('description_np', 'विवरण (नेपाली)', 'Description (Nepali)'), TA('description_en', 'विवरण (English)', 'Description (English)'), ORDER, ACTIVE] },

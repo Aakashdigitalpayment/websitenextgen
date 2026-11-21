@@ -511,7 +511,7 @@ const EXTRA = {
     listOrder: "CASE status WHEN 'pending' THEN 1 WHEN 'shortlisted' THEN 2 WHEN 'interviewed' THEN 3 WHEN 'selected' THEN 4 ELSE 5 END, created_at DESC",
     buckets: { active: ['pending', 'shortlisted', 'interviewed'], done: ['selected', 'rejected'] },
     filters: [{ name: 'career', col: 'career_id', type: 'int', label: ['सबै पद', 'All positions'], optionsFromField: 'career_id' }] },
-  feedback: { noteCol: 'admin_note', filters: [{ name: 'type', col: 'type', label: ['सबै प्रकार', 'All types'], optionsFromField: 'type' }] },
+  feedback: { attachCol: 'admin_attachment', noteCol: 'admin_note', filters: [{ name: 'type', col: 'type', label: ['सबै प्रकार', 'All types'], optionsFromField: 'type' }] },
   honor: { adminEvent: 'honor_application', memberEvent: 'honor_application',
     filters: [{ name: 'program', col: 'program_id', type: 'int', label: ['सबै कार्यक्रम', 'All programmes'], optionsFromField: 'program_id' },
       { name: 'category', col: 'category_id', type: 'int', label: ['सबै विधा', 'All categories'], optionsFromField: 'category_id' }] },

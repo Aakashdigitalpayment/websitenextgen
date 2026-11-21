@@ -113,4 +113,7 @@ async function pick(table, data) {
   return Object.fromEntries(Object.entries(data).filter(([k, v]) => cols.has(k) && v !== undefined));
 }
 
-module.exports = { pool, query, many, one, value, insert, update, columns, pick, ident, withSchema, currentSchema, transaction };
+/** Forget cached column lists (after a migration added columns while the process was running). */
+function clearColumnCache() { colCache.clear(); }
+
+module.exports = { pool, query, many, one, value, insert, update, columns, clearColumnCache, pick, ident, withSchema, currentSchema, transaction };
