@@ -10,7 +10,7 @@
     <div class="grid grid-3 mt-2"><% g.items.forEach(s => { %>
       <a class="card card-link" href="/services/<%= s.id %>"<% const anchor = /^[a-z][a-z0-9_-]{1,40}$/i.test(s.nav_group || '') ? s.nav_group.toLowerCase() : ''; %><%- anchor && !usedAnchors.has(anchor) && usedAnchors.add(anchor) ? ' id="' + anchor + '"' : '' %>>
         <% if (s.image) { %><div class="card-media"><img src="<%= mediaUrl(s.image) %>"<%- srcset(s.image, '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 380px') %> alt="" loading="lazy"></div><% } else { %><span class="icon-tile"><%- icon(iconFor(s.icon, /loan|ऋण/i.test(s.title || '') ? 'banknote' : 'wallet')) %></span><% } %>
-        <h3><%= f(s, 'title') %></h3><p class="muted small"><%= util.excerpt(f(s, 'description'), 140) %></p>
+        <h3><%= f(s, 'title') %><% if (Number(s.is_new) && (!s.new_until || String(s.new_until) >= new Date().toISOString().slice(0, 10))) { %> <span class="badge badge-brand"><%= t('नयाँ', 'New') %></span><% } %></h3><p class="muted small"><%= util.excerpt(f(s, 'description'), 140) %></p>
       </a>
     <% }) %></div>
   <% }) %>
