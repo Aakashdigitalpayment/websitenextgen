@@ -732,10 +732,12 @@ router.get('/plan', ah(async (req, res) => {
 const ALL_ROLES = ['superadmin', 'admin', 'staff', 'editor'];
 const isSuperAdmin = req => auth.roleLevel(req.admin.role) >= 4;
 const grantableRoles = req => (isSuperAdmin(req) ? ALL_ROLES : ALL_ROLES.slice(1));
+/** May this admin act on that account? A superadmin: anyone. Others: only roles strictly below their own. */
+const canManage = (req, target) => isSuperAdmin(req) || auth.roleLevel(target.role) < auth.roleLevel(req.admin.role);
 async function usersPage(req, res, { errors = {}, values = { role: 'staff' }, status = 200 } = {}) {
   const rows = await db.many('SELECT id, username, full_name, email, role, is_active, last_login, created_at, twofa_enabled, custom_role_id FROM admin_users WHERE deleted_at IS NULL ORDER BY id');
   const customRoles = await db.many('SELECT id, name FROM admin_roles ORDER BY name');
-  res.status(status).render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, customRoles, errors, values, roles: grantableRoles(req), isSuper: isSuperAdmin(req) });
+  res.status(status).render('admin/users', { title: res.locals.t('प्रशासक प्रयोगकर्ता', 'Admin users'), rows, customRoles, errors, values, roles: grantableRoles(req), isSuper: isSuperAdmin(req), canManage: u => canManage(req, u), meId: req.admin.id });
 }
 router.get('/users', requireAdmin('admin'), ah((req, res) => usersPage(req, res)));
 
@@ -771,6 +773,9 @@ router.post('/users/:id', requireAdmin('admin'), ah(async (req, res) => {
   const deny = msg => { flash(req, 'error', msg); return res.redirect('/admin/users'); };
   if (id === req.admin.id && ['disable', 'delete', 'role'].includes(action)) return deny(t('आफ्नै खाताको भूमिका बदल्न वा निष्क्रिय गर्न मिल्दैन।', 'You cannot change the role of, or disable, your own account.'));
   if (!isSuperAdmin(req) && (auth.roleLevel(target.role) >= 4 || action === 'reset2fa')) return deny(t('सुपर प्रशासकले मात्र यो गर्न सक्छन्।', 'Only a superadmin can do this.'));
+  // a non-superadmin manages only accounts below their own level: never a peer admin (no password reset / disable / role
+  // change of another admin, which would hand over that account). Their own account is handled by the rules above.
+  if (!isSuperAdmin(req) && id !== req.admin.id && !canManage(req, target)) return deny(t('आफूभन्दा तल्लो भूमिकाका प्रयोगकर्ता मात्र व्यवस्थापन गर्न मिल्छ।', 'You can only manage users below your own role.'));
   if (action === 'role') {
     if (!grantableRoles(req).includes(req.body.role)) return deny(t('यो भूमिका दिन मिल्दैन।', 'You cannot grant that role.'));
     await db.query('UPDATE admin_users SET role = $1 WHERE id = $2', [req.body.role, id]);

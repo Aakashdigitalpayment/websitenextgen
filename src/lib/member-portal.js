@@ -315,6 +315,11 @@ async function issueCard(member, adminId, tenant) {
 }
 
 const CARD_LOCK_AFTER = 5;
+/** A lock from wrong tries lapses on its own after this many minutes, so nobody can disable a member's card for good. */
+const CARD_LOCK_MINUTES = 30;
+/** Lift card locks older than CARD_LOCK_MINUTES (wrong-try counter reset). The office can still unlock at once. */
+const releaseExpiredCardLocks = () => db.query(`UPDATE member_id_cards SET locked_at = NULL, failed_verify_count = 0, unlock_requested = 0, unlock_requested_at = NULL
+                                               WHERE locked_at IS NOT NULL AND locked_at < now() - make_interval(mins => $1)`, [CARD_LOCK_MINUTES]);
 
 // ---------------------------------------------------------------- card verification by name + Member ID + mobile (card-verify-helpers.php)
 /** normalizeMemberNameForMatch: lower case, single spaces, honorifics dropped. */
@@ -419,11 +424,12 @@ async function cardFailure(card) {
  * @returns {Promise<{ok:true, member, card, kyc} | {ok:false, error:[np,en]}>}
  */
 async function verifyByNameIdMobile({ name, memberId, mobile, cvv = '' }) {
+  await releaseExpiredCardLocks();
   name = String(name || '').trim().slice(0, 120);
   const id = normalizeId(memberId), mob = normalizeMobile(mobile);
   cvv = normalizeCvv(cvv);
   const mismatch = left => ({ ok: false, error: left === 0
-    ? ['यो कार्ड ५ पटक गलत प्रयासका कारण LOCK भएको छ। कृपया कार्यालय/Admin सँग unlock अनुरोध गर्नुहोस्।', 'This card is now locked after 5 wrong tries. Please ask the office to unlock it.']
+    ? ['५ पटक गलत प्रयासका कारण यो कार्ड ३० मिनेटका लागि LOCK भयो। पछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for 30 minutes after 5 wrong tries. Try again later or ask the office to unlock it.']
     : [`नाम / सदस्यता नं. / मोबाइल मेल खाएन।${left ? ' बाँकी प्रयास: ' + left : ''}`, `Name / Member ID / mobile did not match.${left ? ' Tries left: ' + left : ''}`] });
   if (!name || !id || !mob) return { ok: false, error: ['कृपया नाम, सदस्यता नं. र मोबाइल नम्बर तीनै प्रविष्ट गर्नुहोस्।', 'Please enter the name, Member ID and mobile number.'] };
   if (mob.length < 10) return { ok: false, error: ['कृपया सही मोबाइल नम्बर प्रविष्ट गर्नुहोस्।', 'Please enter a valid mobile number.'] };
@@ -440,13 +446,10 @@ async function verifyByNameIdMobile({ name, memberId, mobile, cvv = '' }) {
     hit = { member: m, kyc };
     break;
   }
-  const first = await cardOf(members[0].id);
-  if (!hit) {
-    if (first?.locked_at) return mismatch(0);
-    return mismatch(await cardFailure(first));
-  }
+  // a wrong name / mobile is not counted against the card: knowing a Member ID must not let anyone lock it
+  if (!hit) return mismatch(null);
   const card = await cardOf(hit.member.id);
-  if (card?.locked_at) return { ok: false, error: ['यो कार्ड हाल LOCK छ। कृपया कार्यालय/Admin सँग unlock गर्नुहोस्।', 'This card is locked. Please ask the office to unlock it.'] };
+  if (card?.locked_at) return { ok: false, error: ['यो कार्ड केही समयका लागि LOCK छ। ३० मिनेटपछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for now. Try again in 30 minutes or ask the office to unlock it.'] };
   if (cvv && !cvvMatches(cvv, card?.cvv, derivedCvvs(hit.member, hit.kyc))) {
     const left = await cardFailure(card);
     return left === 0 ? mismatch(0) : { ok: false, error: [`CVV मेल खाएन।${left ? ' बाँकी प्रयास: ' + left : ''}`, `CVV did not match.${left ? ' Tries left: ' + left : ''}`] };
@@ -624,7 +627,7 @@ module.exports = {
   normalizeId, idVariants, normalizeMobile, phonesMatch, phoneDigitsSql, findBySadasyata, findKycByMemberId, linkedKyc, phoneOwnedByOther,
   passwordPolicyError, register, eligibilityError, checkCardExpiry, approve, reject, alertOffice,
   createOtp, verifyOtp, dispatchOtp, otpChannels, findForReset, maskPhone, maskEmail,
-  cardPrefix, issueCard, CARD_LOCK_AFTER, signCardLink, checkCardLink, normalizeName, namesMatch, similarPct, verifyByNameIdMobile, cardOf,
+  cardPrefix, issueCard, CARD_LOCK_AFTER, CARD_LOCK_MINUTES, releaseExpiredCardLocks, signCardLink, checkCardLink, normalizeName, namesMatch, similarPct, verifyByNameIdMobile, cardOf,
   deriveCardCvv, pickNameForCardCvv, derivedCvvs, cvvMatches, normalizeCvv,
   parseMonthlySaving, msFromDb, msLabel, monthlySavingFieldUpdate,
   duplicateReport, uniqueGuardExists, tryUniqueGuard, sadasyataTaken, activities,

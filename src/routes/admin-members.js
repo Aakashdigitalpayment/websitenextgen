@@ -264,6 +264,7 @@ const renderMemberForm = async (res, item, values, errors = {}, status = 200) =>
 
 router.get('/members/new', requireAdmin('staff'), ah((req, res) => renderMemberForm(res, null, { approval_status: 'approved', is_active: 1 })));
 router.get('/members/:id', requireAdmin('staff'), ah(async (req, res, next) => {
+  await require('../lib/member-portal').releaseExpiredCardLocks();
   const item = await memberById(req.params.id);
   if (!item) return next();
   await renderMemberForm(res, item, item);
@@ -474,6 +475,7 @@ router.post('/members/:id/card/unlock', requireAdmin('admin'), ah(async (req, re
 
 // ---------------------------------------------------------------- member portal queue (admin/member-online-portal.php)
 router.get('/member-portal', requireAdmin('staff'), ah(async (req, res) => {
+  await require('../lib/member-portal').releaseExpiredCardLocks();
   const tab = ['pending', 'changes', 'cards', 'settings'].includes(req.query.tab) ? req.query.tab : 'pending';
   const [pending, changes, locked, counts] = await Promise.all([
     db.many("SELECT m.*, k.status AS kyc_status, k.full_name AS kyc_name FROM members m LEFT JOIN kyc_applications k ON k.id = m.kyc_application_id WHERE m.deleted_at IS NULL AND m.approval_status = 'pending' ORDER BY m.created_at DESC NULLS LAST, m.id DESC LIMIT 200"),

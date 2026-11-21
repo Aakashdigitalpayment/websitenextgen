@@ -180,6 +180,7 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
   const cvv = portal.normalizeCvv(req.body.cvv);
   // normalizeCardLookupKey (card-verify-helpers.php): the code as printed, without dashes, or the card number without dashes
   const key = code.replace(/[^A-Z0-9]/g, '');
+  await portal.releaseExpiredCardLocks();
   const card = code.length >= 8 || key.length >= 8 ? await db.one(`SELECT *, (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) AS is_expired
                                                 FROM member_id_cards
                                                 WHERE upper(verification_code) = $1
@@ -190,7 +191,7 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
   if (!card) { await log(false); return verifyView(res, { mode: 'code', result: false, code }); }
   if (card.locked_at) {
     await log(false);
-    return verifyView(res, { mode: 'code', result: false, code, message: t('यो कार्ड हाल LOCK छ। कृपया कार्यालय/Admin सँग unlock गर्नुहोस्।', 'This card is locked. Please ask the office to unlock it.') });
+    return verifyView(res, { mode: 'code', result: false, code, message: t('यो कार्ड केही समयका लागि LOCK छ। ३० मिनेटपछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for now. Try again in 30 minutes or ask the office to unlock it.') });
   }
   // cards store the member's id; legacy cards may store a membership/card number — prefer the id match
   const member = await db.one(`SELECT * FROM members
@@ -207,7 +208,7 @@ router.post('/verify', verifyLimiter, ah(async (req, res) => {
     return verifyView(res, {
       mode: 'code', result: false, code,
       message: left ? t(`Card Code वा CVV मेल खाएन। बाँकी प्रयास: ${left}`, `Card code or CVV did not match. Tries left: ${left}`)
-        : t('यो कार्ड ५ पटक गलत प्रयासका कारण LOCK भएको छ। कृपया कार्यालय/Admin सँग unlock अनुरोध गर्नुहोस्।', 'This card is now locked after 5 wrong tries. Please ask the office to unlock it.'),
+        : t('५ पटक गलत प्रयासका कारण यो कार्ड ३० मिनेटका लागि LOCK भयो। पछि फेरि प्रयास गर्नुहोस् वा कार्यालयसँग unlock गराउनुहोस्।', 'This card is locked for 30 minutes after 5 wrong tries. Try again later or ask the office to unlock it.'),
     });
   }
   if (card.is_expired && card.status === 'active') card.status = 'expired';

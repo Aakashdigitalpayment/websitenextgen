@@ -27,3 +27,11 @@ tables, Node files to change) and a priority (P1 users notice, P2, P3).
 | PHP default VAPID key pair in `includes/push-vapid-config.php` | That private key is public in the PHP repository; only a site's own `push-vapid.local.php` pair is imported. |
 | Platform operator TOTP replay guard in the database | The operator console keeps its in-process guard; tenant admins and members use `twofa_last_step` (SM-21). |
 
+
+## Ported, but made stricter than PHP (security)
+
+| PHP behaviour | Node behaviour |
+|---|---|
+| Member portal listed and opened every application filed with the member's phone number | Full detail, remarks and files only for applications proven to be the member's (filed while signed in, or member number + phone). Phone-only matches (a shared family phone) appear in the list as a summary only; rows naming another member's number are left out. |
+| A non-superadmin could reset another admin's password and see the temporary one (`manage-admins.php`) | A non-superadmin manages only roles below their own (staff, editor); peer admins and superadmins are read-only to them. |
+| Five wrong tries (including a wrong name with a known Member ID) locked the ID card until the office unlocked it | A wrong name / mobile never counts against the card; five wrong CVVs lock it for 30 minutes, after which it unlocks by itself (the office can still unlock at once). |

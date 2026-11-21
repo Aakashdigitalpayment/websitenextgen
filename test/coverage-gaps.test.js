@@ -632,8 +632,10 @@ test('SM-20: a member opens the documents of their own application (comma lists 
   fs.writeFileSync(path.join(dir, 'own2.pdf'), '%PDF-1.4 two');
   await seedMember('OW-1000', '9841600012');
   const ids = await inA(async () => ({
-    mine: await db.value("INSERT INTO loan_applications (full_name, mobile, documents, tracking_id) VALUES ('Own', '9841600012', '_private/loan/own1.pdf,_private/loan/own2.pdf', 'LN-OWN1') RETURNING id"),
+    mine: await db.value("INSERT INTO loan_applications (full_name, mobile, member_id, documents, tracking_id) VALUES ('Own', '9841600012', 'OW-1000', '_private/loan/own1.pdf,_private/loan/own2.pdf', 'LN-OWN1') RETURNING id"),
     other: await db.value("INSERT INTO loan_applications (full_name, mobile, documents, tracking_id) VALUES ('Other', '9841699999', '_private/loan/own1.pdf', 'LN-OTH1') RETURNING id"),
+    // same (family) phone, no member number: listed as a summary only, never opened
+    shared: await db.value("INSERT INTO loan_applications (full_name, mobile, documents, tracking_id) VALUES ('Sibling', '9841600012', '_private/loan/own1.pdf', 'LN-SIB1') RETURNING id"),
   }));
   const m = await memberClient('OW-1000');
   const page = await m.get(`/member/requests/loan/${ids.mine}`);
@@ -643,6 +645,11 @@ test('SM-20: a member opens the documents of their own application (comma lists 
   assert.match(String(r.body || r.text), /two/);
   assert.equal((await m.get(`/member/requests/loan/${ids.other}/file/documents`)).status, 404, 'not their application');
   assert.equal((await m.get(`/member/requests/loan/${ids.mine}/file/full_name`)).status, 404, 'only file fields');
+  assert.equal((await m.get(`/member/requests/loan/${ids.shared}`)).status, 404, 'phone-only match: no detail page');
+  assert.equal((await m.get(`/member/requests/loan/${ids.shared}/file/documents`)).status, 404, 'phone-only match: no files');
+  const list = await m.get('/member/requests');
+  assert.match(list.text, /LN-SIB1/, 'phone-only match still listed as a summary');
+  assert.doesNotMatch(list.text, new RegExp(`/member/requests/loan/${ids.shared}"`), 'but not linked');
 });
 
 // ---------------------------------------------------------------- SM-21 TOTP replay guard in the database

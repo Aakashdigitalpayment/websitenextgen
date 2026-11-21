@@ -78,6 +78,7 @@ p { margin: 0 0 1em; }
 small, .small { font-size: .875rem; }
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
+.fw-500 { font-weight: 500; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

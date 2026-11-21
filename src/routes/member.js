@@ -105,28 +105,40 @@ router.use('/marketplace', require('./marketplace').member);
 router.use(require('./member-self')); // profile details / KYC documents / 2FA / Facebook link / QR scanner / card unlock
 
 /** All submissions that belong to this member (matched by member number or phone). */
+/**
+ * The member's applications. `strong` = proven theirs: filed while signed in (member_portal_id), or their member number
+ * together with their phone. Rows matched by phone alone (a shared family phone) only show a summary in the list,
+ * never the full detail, remarks or files; rows carrying another member's number are left out entirely.
+ */
 async function myRequests(member) {
   const keys = [member.sadasyata_number, member.member_card_no].filter(Boolean).flatMap(portal.idVariants);
   const out = [];
   for (const m of Object.values(modules)) {
     if (m.key === 'contact') continue;
     const cols = await db.columns(m.table);
-    const conds = [], params = [];
+    const params = [], strong = [];
+    let phoneCond = null;
     const phone = portal.normalizeMobile(member.phone);
     const phoneOk = phone.length >= 10 && cols.has(m.phoneCol);
-    if (phoneOk) { params.push(phone.slice(-10)); conds.push(`${portal.phoneDigitsSql(m.phoneCol)} = $${params.length}`); }
-    // member numbers typed into public forms are not verified — only match them together with the member's phone
-    if (m.memberCol && cols.has(m.memberCol) && keys.length && phoneOk) {
-      params.push(keys); params.push(phone.slice(-10));
-      conds.push(`(upper(trim(${m.memberCol})) = ANY($${params.length - 1}) AND ${portal.phoneDigitsSql(m.phoneCol)} = $${params.length})`);
-    }
+    if (phoneOk) { params.push(phone.slice(-10)); phoneCond = `${portal.phoneDigitsSql(m.phoneCol)} = $${params.length}`; }
+    const memberColOk = !!(m.memberCol && cols.has(m.memberCol));
+    // member numbers typed into public forms are not verified: only trust them together with the member's phone
+    if (memberColOk && keys.length && phoneOk) { params.push(keys); strong.push(`(upper(trim(${m.memberCol})) = ANY($${params.length}) AND ${phoneCond})`); }
     // filed while signed in: stays linked when the phone changes later
-    if (cols.has('member_portal_id')) { params.push(member.id); conds.push(`member_portal_id = $${params.length}`); }
-    if (!conds.length) continue;
-    const rows = await db.many(`SELECT * FROM ${m.table} WHERE (${conds.join(' OR ')}) ${cols.has('deleted_at') ? 'AND deleted_at IS NULL' : ''} ORDER BY created_at DESC LIMIT 20`, params);
-    rows.forEach(row => out.push({ mod: m, row }));
+    if (cols.has('member_portal_id')) { params.push(member.id); strong.push(`member_portal_id = $${params.length}`); }
+    const strongSql = strong.length ? `(${strong.join(' OR ')})` : 'false';
+    // phone only: never when the row names a (different) member number
+    const weakSql = !phoneCond ? 'false' : memberColOk ? `(${phoneCond} AND COALESCE(trim(${m.memberCol}), '') = '')` : phoneCond;
+    if (strongSql === 'false' && weakSql === 'false') continue;
+    const rows = await db.many(`SELECT *, ${strongSql} AS _strong FROM ${m.table} WHERE (${strongSql} OR ${weakSql}) ${cols.has('deleted_at') ? 'AND deleted_at IS NULL' : ''} ORDER BY created_at DESC LIMIT 20`, params);
+    rows.forEach(({ _strong, ...row }) => out.push({ mod: m, row, strong: !!_strong }));
   }
   return out.sort((a, b) => new Date(b.row.created_at) - new Date(a.row.created_at));
+}
+
+/** One of the member's own applications, only when it is proven theirs (see myRequests). */
+async function myRequest(member, mod, id) {
+  return (await myRequests(member)).find(r => r.strong && r.mod.key === mod.key && String(r.row.id) === String(id)) || null;
 }
 
 // ---------------------------------------------------------------- web push
@@ -202,7 +214,7 @@ router.get('/requests', ah(async (req, res) => {
 router.get('/requests/:module/:id', ah(async (req, res, next) => {
   const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
   if (!m) return next();
-  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  const mine = await myRequest(req.member, m, req.params.id);
   if (!mine) return next();
   const forms = require('../lib/forms'), submissions = require('../lib/submissions');
   const options = await forms.resolveOptions(m);
@@ -218,7 +230,7 @@ router.get('/requests/:module/:id', ah(async (req, res, next) => {
 router.get('/requests/:module/:id/attachment', ah(async (req, res, next) => {
   const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
   if (!m || !m.attachCol) return next();
-  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  const mine = await myRequest(req.member, m, req.params.id);
   if (!mine || !mine.row[m.attachCol]) return next();
   require('../lib/uploads').sendStored(req, res, next, mine.row[m.attachCol]);
 }));
@@ -231,7 +243,7 @@ router.get('/requests/:module/:id/file/:field', ah(async (req, res, next) => {
   const m = Object.hasOwn(modules, req.params.module) ? modules[req.params.module] : null;
   const field = m && m.fileFields.find(f => f.name === req.params.field);
   if (!field) return next();
-  const mine = (await myRequests(req.member)).find(r => r.mod.key === m.key && String(r.row.id) === String(req.params.id));
+  const mine = await myRequest(req.member, m, req.params.id);
   const files = mine ? String(mine.row[field.name] || '').split(',').map(x => x.trim()).filter(Boolean) : [];
   const stored = files[util.int(req.query.i, 0)] || null;
   if (!stored || /^https?:/i.test(stored)) return next();
@@ -373,6 +385,7 @@ router.get('/documents/:id', ah(async (req, res, next) => {
 }));
 
 router.get('/id-card', ah(async (req, res) => {
+  await portal.releaseExpiredCardLocks();
   const card = await db.one("SELECT * FROM member_id_cards WHERE member_id = $1 AND status = 'active' ORDER BY id DESC LIMIT 1", [String(req.member.id)]);
   const kyc = await portal.linkedKyc(req.member, true);
   // member/id-card.php: expired → renewal notice; 60 days or less → warning

@@ -260,9 +260,19 @@ test('card verify: name + Member ID + mobile (Devanagari or English name), photo
   assert.equal(await inA(() => db.value("SELECT verify_count FROM member_id_cards WHERE card_no = 'V-100-AAA'")), 1);
   r = await c.form('/verify', { mode: 'name', name: 'केवाइसी', member_no: 'V-100', mobile: '9841800001', cvv: '9999' });
   assert.match(r.text, /CVV/, 'optional CVV is checked when given');
+  // knowing a Member ID is not enough to lock someone's card: a wrong name / mobile never counts against it
   for (let i = 0; i < 4; i++) r = await c.form('/verify', { mode: 'name', name: 'Someone Else', member_no: 'V-100', mobile: '9841800001' });
+  assert.doesNotMatch(r.text, /LOCK/);
+  assert.equal(await inA(() => db.value("SELECT locked_at FROM member_id_cards WHERE card_no = 'V-100-AAA'")), null, 'wrong names do not lock');
+  // five wrong CVVs (with the right name + ID + mobile) lock it …
+  for (let i = 0; i < 4; i++) r = await c.form('/verify', { mode: 'name', name: 'केवाइसी', member_no: 'V-100', mobile: '9841800001', cvv: '9999' });
   assert.match(r.text, /LOCK/);
   assert.ok(await inA(() => db.value("SELECT locked_at FROM member_id_cards WHERE card_no = 'V-100-AAA'")));
+  // … for 30 minutes only: then the card verifies again with the right details
+  await inA(() => db.query("UPDATE member_id_cards SET locked_at = now() - interval '31 minutes' WHERE card_no = 'V-100-AAA'"));
+  r = await c.form('/verify', { mode: 'name', name: 'KYC V-100', member_no: 'V-100', mobile: '9841800001' });
+  assert.match(r.text, /badge-ok/, 'a lapsed lock is lifted');
+  assert.equal(await inA(() => db.value("SELECT failed_verify_count FROM member_id_cards WHERE card_no = 'V-100-AAA'")), 0);
 });
 
 // ---------------------------------------------------------------- P2-2 / P2-3 / G1 spam scan, 10-digit mobile, guest email
@@ -353,8 +363,8 @@ test('appointment: 30-minute slots from office hours, PHP purpose keys, server c
 test('tracker details grid + stages; welfare approved amount; member request detail page with filters', async () => {
   const { m } = await seedMember('T-100', '9841930001', { password: 'Member@12345' });
   await inB(() => db.query(`INSERT INTO members (name, phone, sadasyata_number, approval_status, is_active) VALUES ('x', '9841930001', 'T-100', 'approved', 1)`)); // other tenant: no leak
-  const loan = await inA(() => db.one(`INSERT INTO loan_applications (tracking_id, full_name, mobile, address, loan_type, loan_amount, loan_purpose, citizenship_no, status, repayment_method)
-                                      VALUES ('LN-TRK-0001', 'Track Me', '9841930001', 'Ktm', 'home', 250000, 'House repair', '55-66-777', 'processing', 'monthly') RETURNING id`));
+  const loan = await inA(() => db.one(`INSERT INTO loan_applications (tracking_id, full_name, mobile, member_id, address, loan_type, loan_amount, loan_purpose, citizenship_no, status, repayment_method)
+                                      VALUES ('LN-TRK-0001', 'Track Me', '9841930001', 'T-100', 'Ktm', 'home', 250000, 'House repair', '55-66-777', 'processing', 'monthly') RETURNING id`));
   await inA(() => db.query(`INSERT INTO request_status_history (module, request_id, old_status, new_status, admin_comment, created_at) VALUES ('loan', $1, 'pending', 'processing', 'Documents checked', now())`, [loan.id]));
   await inA(() => db.query(`INSERT INTO member_welfare_claims (tracking_id, member_name, member_id, phone, claim_type, claim_amount, approved_amount, description, status)
                             VALUES ('WC-TRK-0001', 'Track Me', 'T-100', '9841930001', 'medical', 50000, 30000, 'd', 'approved')`));

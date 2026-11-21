@@ -326,6 +326,24 @@ test('admin users: an admin manages admin/staff/editor, never superadmins; edit 
   assert.equal(Number(await inA(() => db.value('SELECT is_active FROM admin_users WHERE id = $1', [superId]))), 1);
   await c.form(`/admin/users/${staffId}`, { action: 'reset2fa' }, '/admin/users');
   assert.ok(!(await inA(() => db.value("SELECT 1 FROM audit_log WHERE action = 'user_reset2fa'"))));
+  // a peer admin cannot be taken over: no password reset, disable, role or name change by another (non-super) admin
+  r = await c.form('/admin/users', { username: 'peer9', password: 'LongPassword1', role: 'admin', full_name: 'Peer Nine' }, '/admin/users');
+  assert.equal(r.status, 302);
+  const peer = await inA(() => db.one("SELECT id, password FROM admin_users WHERE username = 'peer9'"));
+  for (const body of [{ action: 'reset' }, { action: 'disable' }, { action: 'role', role: 'staff' }, { action: 'edit', full_name: 'Hijacked', email: 'x@x.np' }]) {
+    await c.form(`/admin/users/${peer.id}`, body, '/admin/users');
+  }
+  const after = await inA(() => db.one('SELECT password, is_active, role, full_name FROM admin_users WHERE id = $1', [peer.id]));
+  assert.equal(after.password, peer.password, 'peer password unchanged');
+  assert.equal(Number(after.is_active), 1);
+  assert.equal(after.role, 'admin');
+  assert.equal(after.full_name, 'Peer Nine');
+  r = await c.get('/admin/users');
+  assert.doesNotMatch(r.text, new RegExp(`/admin/users/${peer.id}"><input type="hidden" name="_csrf" value="[^"]+"><input type="hidden" name="action" value="reset"`), 'no reset button for a peer');
+  // staff below the admin can still be reset
+  const staffPw = await inA(() => db.value('SELECT password FROM admin_users WHERE id = $1', [staffId]));
+  await c.form(`/admin/users/${staffId}`, { action: 'reset' }, '/admin/users');
+  assert.notEqual(await inA(() => db.value('SELECT password FROM admin_users WHERE id = $1', [staffId])), staffPw);
   // an editor still cannot open it
   const ed = client();
   await ed.form('/admin/login', { username: 'staff9', password: 'LongPassword1' }, '/admin/login');
