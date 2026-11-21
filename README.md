@@ -51,8 +51,15 @@ npm start                       # http://aakash.localhost:3000  (admin: /admin)
 
 ## Moving an existing PHP site over
 
-The recommended way is the migration tool: Platform console → **Demo data & old site import** (upload the public_html .zip and the phpMyAdmin .sql — no MySQL server needed), or `npm run migrate:site -- --tenant=<slug> --zip=<public_html.zip> --sql=<dump.sql> --dry-run` / `--php-root=<old public_html>`. See docs/DEPLOY.md §4. The lower-level importer below still works.
+The recommended way is the migration tool: Platform console → **Demo data & old site import** (upload the public_html .zip and the phpMyAdmin .sql — no MySQL server needed), or `npm run migrate:site -- --tenant=<slug> --zip=<public_html.zip> --sql=<dump.sql> --dry-run` / `--php-root=<old public_html>`. Operator guide (Nepali + English): **[docs/MIGRATION.md](docs/MIGRATION.md)**; deployment: docs/DEPLOY.md §4.
 
+- Every row of the old database is **imported**, **repaired** (zero / BS / impossible dates, mojibake, legacy statuses and roles, PHP-encrypted citizenship numbers, duplicate tracking ids …), **quarantined** (kept whole in `import_quarantine` until fixed: `--quarantine`, `--retry-quarantine`) or **archived** (`legacy_archive`: retired HRM tables, a cooperative's own tables and columns). The report says *Every row accounted for: yes*.
+- The map from PHP to platform tables and columns lives in one place, `src/lib/legacy-map.js`; the PHP schema it covers (install.sql plus everything the PHP app adds at runtime) is `db/legacy/php-runtime-schema.sql`.
+- `--dry-run` rehearses the whole import in a rolled-back transaction; the real run is one transaction and writes a safety copy first; `--verify` compares old and new row by row at any time.
+- PHP `password_hash()` ($2y$) hashes keep working, so admins and members sign in with their old passwords. 2FA secrets, settings under their old names, VAPID keys and the credentials vault are carried over.
+- Old stored paths like `assets/uploads/news/x.jpg` keep resolving; confidential folders move to private storage. Executable files (`.php`, `.html`, `.js`) are **not** copied from the old uploads folder.
+
+The older entry point does the same import from a live MySQL server:
 
 ```bash
 npm run tenant:create -- --slug=aakash --name="आकाश सहकारी" --domain=www.aakashsaccos.com.np --password='Temp@12345678'
@@ -60,13 +67,10 @@ npm run db:import-mysql -- --tenant=aakash --mysql=mysql://user:pass@host:3306/o
      --uploads=/path/to/old-site/assets/uploads --truncate
 ```
 
-- Every table and column that exists on both sides is copied. MySQL zero dates become `NULL`, and id sequences are reset.
-- PHP `password_hash()` ($2y$) hashes keep working, so admins and members sign in with their old passwords.
-- Old stored paths like `assets/uploads/news/x.jpg` keep resolving. Executable files (`.php`, `.html`, `.js`) are **not** copied from the old uploads folder.
-- `--truncate` only empties tables that have rows in the source.
+- `--truncate` = mode fresh (replaces the tenant's rows for tables that have rows in the source); without it only new rows are added.
 - If the tenant ends up with no active admin, run `npm run tenant:admin -- --tenant=aakash --username=admin --password=…`.
 
-Tested against the legacy `install.sql` loaded into MariaDB.
+Tested end to end (`test/legacy-migration.test.js`) with a synthetic dump of every PHP table and dirty legacy data, a real mysqldump of a fresh PHP install, and against MariaDB.
 
 ## What is included
 
